@@ -1,0 +1,10 @@
+dist/
+output/
+.playwright-cli/
+.cache/
+node_modules/
+__pycache__/
+*.pyc
+.env
+.env.*
+AGENTS.local.md

@@ -1,0 +1,423 @@
+[
+  {
+    "id": "start-here",
+    "order": 0,
+    "part": "阅读路线与岗位",
+    "title": "用一条工程主线组织面试",
+    "subtitle": "从 JD 能力矩阵，到三种长度的项目叙述。",
+    "lead": "目标不是记住所有名词，而是在模型、算子、编译器和硬件之间建立可追溯的因果链。你的优势是从指令设计走到真实模型部署；准备时应围绕这条链复习，并把个人责任与实验事实分开。",
+    "sections": [
+      {
+        "id": "jd-map",
+        "title": "两份 JD，实际在考什么",
+        "html": "<p>算子岗位更关注你是否能把模型计算变成正确、高效、可调优的 kernel；编译器岗位更关注你能否把这些经验编码成可扩展的分析、变换、资源规划与验证机制。两者共同要求理解模型语义、硬件瓶颈和数值行为。</p><div class=\"table-wrap\"><table><thead><tr><th>JD 关键词</th><th>应展示的推理</th><th>可连接的真实工作</th></tr></thead><tbody><tr><td>模型算子分析</td><td>写出 shape、FLOPs、bytes、状态量与阶段差异</td><td>GLM5Next 的 KDA/DSA 与四类 FFN 算子</td></tr><tr><td>后端代码生成</td><td>说明每层 IR 保留什么语义、何时落实资源</td><td>Triton→共享中间层→Zeus 指令</td></tr><tr><td>存储规划和 DMA</td><td>生命周期、异步在途、地址重叠、同步成本</td><td>AddressAllocation 与 InjectSync</td></tr><tr><td>软硬件协同</td><td>用可编译性、利用率和验证成本评价 ISA 方案</td><td>518 流片前指令设计到编译器完善</td></tr><tr><td>精度与回归</td><td>区分实现、量化、参考与容差的问题</td><td>FP8 MoE、BF16 舍入与 CPU reference</td></tr><tr><td>Auto-tuning</td><td>先筛合法配置，再优化有意义的业务分布</td><td>tile、并行度、token merge 与流水深度</td></tr></tbody></table></div><p>本章的岗位拆解来自用户提供的两张 JD 截图，是准备路线的设计依据；不是雇主对个人经历的认可或独立背书。</p>"
+      },
+      {
+        "id": "narrative",
+        "title": "把经历讲成一条闭环",
+        "html": "<div class=\"flow\"><div>模型需求<br>算术 / 状态 / 通信</div><b>→</b><div>硬件契约<br>ISA / 资源 / 可见性</div><b>→</b><div>编译实现<br>分析 / 映射 / 同步</div><b>→</b><div>业务交付<br>正确性 / 性能 / 回归</div></div><p>一个适合你的叙事起点是：“我主要参与 518 从指令与编译约束设计到模型落地的闭环，之后承担 GLM5Next FFN 路径的适配与优化。我的工作不只在 kernel 局部，而是持续把模型暴露出来的资源和同步问题反馈到编译器。”这段是根据本人陈述组织的表达模板，细节需要用实际负责的 MR、评审记录和测试补齐。</p><p>接着选一条可以深入的因果链：小 batch MoE 触发权重与控制成本 → 设计专家分组与融合 → 编译器的地址复用又引入串行化 → 分析物理依赖和在途访问 → 通过真实输入与分层验证交付。只讲你确实完成且能提供证据的环节。</p><aside class=\"callout\">“25% 以上 MR 由我贡献”目前是本人提供的经历描述，本站不将它展示成独立核验的统计。正式使用前，应固定仓库、时间范围、merged MR 分母、作者身份归一化与排除规则。提交数、代码行数和 MR 数不是同一指标。</aside>"
+      },
+      {
+        "id": "three-lengths",
+        "title": "准备 90 秒、5 分钟、20 分钟三种版本",
+        "html": "<h3>90 秒：让面试官知道你解决哪类难题</h3><p>第一句定位职责，第二句给一个跨层难题，第三句解释核心取舍，第四句说明结果的证据范围。例如：“我把不规则 MoE 的模型语义落到显式管理片上资源的芯片上，难点是权重复用、异步并行与数值边界同时成立。我负责算子路径，并推动地址和同步机制处理真实 workload 暴露的问题。性能结果按指定 batch、版本与模拟层级报告。”</p><h3>5 分钟：选一个关键决策讲透</h3><p>给出具体输入及瓶颈，用一张数据流图解释基线，再介绍两个候选方案和为何选择其中一个。最后说明正例、负例、回归和未覆盖范围。不要把十个优化名词按时间顺序念一遍。</p><h3>20 分钟：进入源码与证据</h3><p>准备最小 IR、依赖 DAG、地址时间线、关键实现位置、失效反例和最终实验表。面试官追问时可以逐层下钻：先看语义，再看约束，再看实现，最后看验证。</p>"
+      },
+      {
+        "id": "learning-paths",
+        "title": "三条阅读路线，服务不同阶段",
+        "html": "<ol><li><strong>基础恢复：</strong>Transformer → MHA/GQA/KV → FlashAttention → MLA/DSA/KDA → SwiGLU/MoE。每次阅读都写下输入、输出、中间状态和计算复杂度。</li><li><strong>岗位主线：</strong>518 资源图 → Triton 接入 → IR 与分析 → 调度、地址、同步 → 后端验证。每个 pass 都要能说出前置条件、改变的语义与不变量。</li><li><strong>冲刺叙事：</strong>GLM5Next 真实配置 → 四算子 ABI → 真实优化案例 → 数值定位 → 性能归因 → 模拟问答。用自己能证明的经历替换通用模板。</li></ol><p>不要一开始试图背全站。先用 20 分钟定位一个薄弱环节，再用图与算例建立理解，最后合上页面口述两分钟。只有能解释“为什么”，才算从阅读变成了自己的能力。</p>"
+      },
+      {
+        "id": "evidence-contract",
+        "title": "给每个结论配一张证据卡",
+        "html": "<pre><code>Claim: a specific transformation reduces one measured bottleneck\nIdentity: repository / commit / build / kernel key\nWorkload: phase / shape / dtype / routing / real-input provenance\nMetric: per-core duration / kernel sum / end-to-end latency\nValidation: numerical / graph / simulator / RTL / silicon\nBoundary: omitted communication / compilation / host / allocation\nComparison: same input, same accounting, controlled A/B</code></pre><p>“快了 20%”无法单独回答任何工程问题。需要解释是延时降低 20%，还是吞吐提高 20%；是否在同一输入、同一核心数量、同一频率和同一阶段上比较。两个指标之间不是简单同义：若延时变为 0.8 倍，在其余条件相同的串行迭代里吞吐变为 1.25 倍。</p><p>如果结果来自历史报告而没有本次重跑，就明确说历史结果；如果通过加载字节、入口、常量和 ABI 等价证明复用旧结果，应说明证明链与抽样边界，而不能称为全量重测。</p>"
+      },
+      {
+        "id": "coverage",
+        "title": "第一版的边界与后续深化",
+        "html": "<p>这是一套围绕你实际工作构建的系统教材，不宣称覆盖整个 AI compiler 学科。第一版优先建立 Transformer/Attention、MoE、518、Triton 后端和验证归因的完整主线。传统编译基础、常用算子、系统部署与 C++ 工程另有连接章节。</p><p>更深入的训练侧自动微分与反向图、卷积的完整算法搜索、CPU SIMD 向量化、分布式训练优化、形式化 ISA 证明、完整 LLVM 后端移植，并不因为这里有概览就算已经掌握。第二轮可以围绕目标岗位选择专题；本版的练习题会暴露应该深化的地方。</p><p>内容遇到证据不足时会明确留下边界，不用丰富排版掩盖缺失。例如个人贡献比例、硅上 E2E 提升和生产 scheduler 行为都需要各自来源，不能从一个算子 PR 推导出来。</p>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "你和一个只写 kernel 的工程师有什么区别？",
+        "a": "先用具体责任回答：我既理解算子输入输出与数值契约，也处理它落到硬件后的资源、依赖和同步问题；必要时把局部经验变成编译器的通用规则。然后给出一个实际例子，展示跨层诊断和验证，而不是只说“全栈”。",
+        "followup": "如果不允许修改编译器，你会如何规避同一问题？代价是什么？"
+      },
+      {
+        "q": "怎样证明 25% MR 的贡献？",
+        "a": "固定仓库与统计区间，枚举该区间 merged MR，按作者账号与历史别名归一化，排除机器人或镜像重复，给出分子分母及查询方法。同时用代表性机制与交付说明影响，避免把数量等同于技术价值。",
+        "followup": "评审、设计和共同作者的贡献如何另外表达？"
+      },
+      {
+        "q": "哪个项目最能代表你的架构能力？",
+        "a": "选一个需求变动影响芯片价值判断的例子：如 Attention 状态由大 KV 扫描转向压缩/递归，改变容量、带宽与计算平衡。给出模型配置、可复算估计、实际观测及对编译或 ISA 的反馈，区分推导与测量。",
+        "followup": "如果下一代模型又变了，哪些设计仍有价值？"
+      },
+      {
+        "q": "不熟悉算法细节时怎么回答？",
+        "a": "先明确自己已经核验的计算路径与工程边界，再用 shape、运算和数据量推导可以确认的部分。对于训练动机或未查明的模型变体直接说明需要核对，避免把相似名字当成同一算法。",
+        "followup": "现场给你一个新公式，如何推导它的主要硬件瓶颈？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "jd",
+        "label": "两份用户提供的岗位 JD",
+        "url": "evidence/README.md",
+        "note": "2026-10-23 提供；仅用于能力矩阵，不发布截图原件。",
+        "kind": "用户材料"
+      },
+      {
+        "id": "method",
+        "label": "本仓库证据与版本约定",
+        "url": "evidence/README.md",
+        "note": "第一版来源类型、归属和验证范围。",
+        "kind": "工程约定"
+      }
+    ],
+    "takeaways": [
+      "能用三种时长组织同一个真实案例。",
+      "每个结果同时说明版本、工作负载、计时范围与证据层级。",
+      "将本人陈述、源码事实与历史实测分开。"
+    ],
+    "tags": [
+      "JD",
+      "职业叙事",
+      "证据"
+    ],
+    "minutes": 20,
+    "level": "进阶"
+  },
+  {
+    "id": "performance-model",
+    "order": 40,
+    "part": "性能、系统与面试",
+    "title": "并发、容量墙与模型演进",
+    "subtitle": "从 Roofline 到低 batch 的真实归因。",
+    "lead": "“低并发带宽主导，高并发算力先饱和”是一个有价值的起点，但必须拆开固定开销、权重复用、并行度、KV 容量和通信。这个章节给你一套能解释曲线，也能知道何时曲线不适用的分析方法。",
+    "sections": [
+      {
+        "id": "metrics",
+        "title": "先定义你画的是哪条曲线",
+        "html": "<p>一次 decode 迭代服务 B 条序列，每条生成一个 token。设设备迭代时间为 t(B)，则这次迭代的聚合吞吐是 B/t(B)，而单条序列的相邻 token 间隔接近 t(B)，不是 t(B)/B。后一项是设备平均每 token 成本，不能冒充用户感受到的延时。</p><div class=\"formula\">Aggregate throughput = B / t_step<br>Per-sequence inter-token latency ≈ t_step<br>Amortized device time / token = t_step / B</div><p>TTFT 还包含排队、tokenization、prefill 和首步输出；线上 TPOT 可能受 scheduler、网络和不均匀批次影响。离线固定 B 曲线描述可控负载，不直接给出线上尾延时。要报告 P50/P95/P99，必须说明到达过程、输入输出长度和负载条件。</p>"
+      },
+      {
+        "id": "roofline",
+        "title": "从算术与数据量推导下界",
+        "html": "<p>考虑教学用 GEMM：A[B,K] × W[K,N] → Y[B,N]，FLOPs≈2BKN。如果 W 在一批内只读取一次，而 A 和 Y 各传一次，bytes≈s(KN+BK+BN)，s 是元素字节数。B 很小时权重占主导，算术强度随 B 近似线性增加；B 大到输入输出也重要后，该近似不能无限延伸。</p><div class=\"formula\">AI(B) = 2BKN / [s(KN + BK + BN)]<br>t_compute ≥ FLOPs / P_effective<br>t_memory ≥ bytes / BW_effective<br>t_kernel ≥ max(t_compute, t_memory)</div><p>最后一行是理想重叠的下界。若数据搬运和计算必须串行，实际时间更接近相加；若还有依赖链、同步、配置、bank 冲突或队列容量约束，单一 Roofline 会过于乐观。需要对 PE、VP、DMA、网络分别建立资源下界，再判断关键路径。</p><p>经典 Roofline 将运算强度与资源上限联系起来，适合提出可证伪的瓶颈假设。它不是一条能替代 profiling 的经验曲线。<a href=\"https://escholarship.org/uc/item/5tz795vq\">原始 Roofline 论文</a>。</p>"
+      },
+      {
+        "id": "gpu-idle",
+        "title": "为什么“GPU SM 空转”需要拆成几种现象",
+        "html": "<table><tr><th>现象</th><th>可能原因</th><th>需要什么证据</th></tr><tr><td>很多 SM 没分到 block</td><td>grid 太小、拆分策略限制</td><td>grid size、每 SM active cycles</td></tr><tr><td>SM 有活跃 warp 但发射不足</td><td>依赖、内存等待、分支或可用 warp 不够</td><td>eligible warps、stall、issue 指标</td></tr><tr><td>计算单元不忙，内存已接近上限</td><td>真实带宽瓶颈</td><td>实际流量、带宽和访存效率</td></tr><tr><td>设备时间线上有空隙</td><td>host launch、同步、CPU 或调度器</td><td>系统时间线与事件边界</td></tr></table><p>Occupancy 是活跃 warp 比例，不是“用了多少 SM”；更不是有效 Tensor Core FLOPs。高 occupancy 仍可能被内存或依赖限制，较低 occupancy 的 kernel 也可能已经接近目标资源上限。GPU 同样能通过 batch 内权重复用获得收益，518 同样有利用率问题，两者不能作排他的解释。</p><p>因此更准确的表述是：“在我们当前低并发 shape 与 kernel 映射下，GPU 的有效计算吞吐没有充分发挥；我会用 grid 覆盖、warp 发射、带宽和系统时间线区分原因。”<a href=\"https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html\">CUDA 指南</a>与 <a href=\"https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html\">Nsight Compute 指标说明</a>可作为指标语义的依据。</p>"
+      },
+      {
+        "id": "capacity-wall",
+        "title": "GQA 时代，为什么容量墙可能先出现",
+        "html": "<p>标准缓存的逻辑大小约为 2LBSDh<sub>kv</sub>s，其中 2 表示 K 与 V，L 为层数，S 为上下文长度，D 为 head dimension。教学例子：L=32、h<sub>kv</sub>=8、D=128、S=32768、BF16，单请求 KV=4 GiB。若扣除权重与运行时后仅余 40 GiB，理想上限约 10 条请求；实际还可能被碎片、额外缓存和安全余量压低。</p><p>标准 dense decode 还必须逻辑访问可见历史 KV，其流量随 B×S 增长。若 KV 不驻留更近的缓存层，B 增大可能让访存时间一起上升；不是所有访存都像共享权重一样能被不同请求摊销。这解释了为什么有时提高并发尚未填满算力，先撞上容量或 KV 带宽限制。</p><p>这个教学例子没有 TP。实际部署中要区分逻辑总量、单 rank 分片、复制的 heads 与运行时布局。也要检查是否有共享前缀、滑窗和不同层类型，不能将公式直接套到每种模型。</p>"
+      },
+      {
+        "id": "moving-walls",
+        "title": "MLA、DSA、KDA 分别移动哪一堵墙",
+        "html": "<table><tr><th>算法方向</th><th>主要改变</th><th>不能直接推出的结论</th></tr><tr><td>MQA/GQA</td><td>减少 KV heads，降低缓存与相应读量</td><td>算力需求按同样比例下降</td></tr><tr><td>MLA</td><td>压缩缓存表示，改变投影与矩阵乘路径</td><td>成本只剩更小 KV 读取</td></tr><tr><td>DSA</td><td>重 Attention 选择历史子集</td><td>索引免费、完整历史缓存可全部删除</td></tr><tr><td>KDA</td><td>使用固定尺寸递归状态，改变随 S 增长的模式</td><td>状态读写免费、计算也固定到几乎没有</td></tr><tr><td>MoE</td><td>稀疏激活参数，增加路由与不规则专家访问</td><td>峰值算力或总参数量能单独预测延时</td></tr></table><p>混合模型把这些成本叠加。随着大部分层由全历史扫描转向状态更新，设计立项时最突出的 KV 容量优势可能弱化；向量单元、状态搬运、稀疏 gather、索引和控制开销可能变得更重要。架构师应追踪成本份额的变化，再讨论新 ISA、片上存储与互联的预算。</p><p>用户观察到的“518 大约从并发 2 起较快饱和”在本指南保留为特定实现下的经验假设，不升格为硬件常数。它需要模型、序列长度、核心配置、精度、kernel 版本和测量曲线支持。</p>"
+      },
+      {
+        "id": "amortization",
+        "title": "并发收益到底来自哪儿",
+        "html": "<p>至少有四种来源：固定 launch/config 成本摊销；同一专家或矩阵权重跨 token 复用；更多独立工作填充空闲执行槽；更好的 GEMM 形状提高计算单元效率。它们可能同时存在，也可能彼此冲突。MoE 的更大 batch 不保证每个专家都有足够 token；路由分布决定局部 M。</p><p>一个有用的受控实验是固定总 token 数，改变分组方式与路由；另一个是固定每个专家的 token 数，仅改变同时执行的专家数。前者更接近复用，后者更接近任务并行。若实现同时改变 tile、融合和编译调度，就不能将全部增益归到单一因素。</p><div class=\"formula\">t(B) ≈ t_fixed + critical_path[compute(B), memory(B), communication(B), control(B)]</div><p>实验室使用更简单的 max(compute,memory) 模型，目的在于让你观察变量，而不是拟合真实芯片。要形成产品判断，必须替换为测量校准的资源效率与实际 DAG。</p>"
+      },
+      {
+        "id": "comparison",
+        "title": "CUDA 与 518，如何做可信比较",
+        "html": "<ol><li>先对齐数学与数值：相同投影、激活、scale、路由权重、归约与 dtype。</li><li>再对齐 ownership：每一方的 TP/EP、各 rank 持有的参数、collective 边界是否一致。</li><li>对齐计时：是裸 kernel、多个 launch 之和、Graph replay，还是完整模型 decode。</li><li>再解释架构差异：动态线程调度与显式资源编排、缓存与 scratchpad、warp 隐藏延时与静态流水。</li><li>最后讨论适用区间：小 batch/长上下文/不同路由/通信比例的变化，而不是只挑一处最优点。</li></ol><p>不能只看两边名字叫 Reduce 就认定工作相同。某一路径可能已经做了路由加权、去量化或局部合成，另一路径可能把这些工作放在 Routed 或 collective 里。边界没对齐时，比较组件之和通常比比较同名函数更可靠。</p>"
+      },
+      {
+        "id": "practice-lab",
+        "title": "用实验室做三个可验证预测",
+        "html": "<ol><li>在并发实验里只提高有效计算吞吐。低 B 时若仍由权重带宽主导，总时间应变化不大；高 B 时平台吞吐上升。</li><li>在 KV 实验里将 KV heads 从 8 改到 1。保持其他参数时缓存与完整逻辑扫描字节缩小到 1/8，理想容量并发提高约 8 倍；这不代表完整模型速度提高 8 倍。</li><li>把固定开销设为零，再与原曲线比较。你看到的是去掉此项的理想收益上界，不是任意 Graph 或 fusion 技术保证达到的结果。</li></ol><p><a href=\"#lab\">进入交互实验室 →</a>。面试时可以先口头预测变化方向，再推导公式，最后解释哪些未建模因素会推翻这个预测。</p>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "低并发 GPU 慢，所以 SM 都空转吗？",
+        "a": "不能从延时或低算力利用率直接推出。先区分 grid 覆盖不足、活跃 warp 等待、带宽已饱和和 host 提交空隙；分别用映射信息、发射/访存指标和系统时间线验证。",
+        "followup": "如果所有 SM 都有 block，但吞吐仍低，下一步测什么？"
+      },
+      {
+        "q": "GPU 并发收益来自更多 SM，518 来自摊销，这样说准确吗？",
+        "a": "可以描述某个已验证实验中的主导因素，不能作为两类硬件互斥的定义。两者都可能同时受权重复用、固定开销、独立任务数量和 tile 效率影响。要做消融实验才能分离贡献。",
+        "followup": "设计一个能区分专家权重复用和专家间并行的实验。"
+      },
+      {
+        "q": "为什么容量足够仍可能没有高吞吐？",
+        "a": "容量只回答放不放得下。实际还可能被计算、带宽、互联、同步、专家负载不均或调度限制。需要检查每一步真正搬了多少数据、做了多少工作，以及是否并行。",
+        "followup": "稀疏访问字节减少但变慢，可能是哪几种原因？"
+      },
+      {
+        "q": "KDA 让长上下文成本不增长了吗？",
+        "a": "单步递归状态大小可不随历史长度增长，但模型还有 full-attention 层、投影、FFN、缓存和系统开销；prefill 也仍要处理全部输入。只能对准确的子路径作复杂度判断。",
+        "followup": "混合模型从 4K 到 128K，怎样建立逐层成本表？"
+      },
+      {
+        "q": "带宽与算力下界可以直接相加吗？",
+        "a": "是否相加由执行依赖决定。完全重叠时 max 是更合理的下界，完全串行时接近相加；真实流水要建立关键路径并考虑共享资源、在途和启动/排空。",
+        "followup": "双缓冲增加后仍不能重叠，应检查哪些契约？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "roofline",
+        "label": "Roofline 原始论文",
+        "url": "https://escholarship.org/uc/item/5tz795vq",
+        "note": "用于资源上界思想；本站算例为独立教学推导。",
+        "kind": "论文"
+      },
+      {
+        "id": "cuda",
+        "label": "CUDA C++ Best Practices",
+        "url": "https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html",
+        "note": "2026-10-23 核验；有效带宽与 occupancy 定义。",
+        "kind": "官方文档"
+      },
+      {
+        "id": "nsight",
+        "label": "Nsight Compute Profiling Guide",
+        "url": "https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html",
+        "note": "2026-10-23 核验；指标采集与解释边界。",
+        "kind": "官方文档"
+      }
+    ],
+    "takeaways": [
+      "区分迭代延时、单请求延时与平均 token 成本。",
+      "解释模型演进如何改变容量、带宽与计算约束。",
+      "在公平口径上比较组件与系统性能。"
+    ],
+    "tags": [
+      "Roofline",
+      "GPU vs 518",
+      "性能归因"
+    ],
+    "minutes": 45,
+    "level": "进阶"
+  },
+  {
+    "id": "serving-runtime",
+    "order": 41,
+    "part": "性能、系统与面试",
+    "title": "从 kernel 到模型服务",
+    "subtitle": "把缓存、图回放、通信和调度放回总账。",
+    "lead": "模型部署不是把所有单算子延时相加。状态、请求调度、并行拓扑、内存管理和通信共同决定端到端结果；编译器的 ABI 与 shape 策略必须在这些运行时约束中成立。",
+    "sections": [
+      {
+        "id": "stack",
+        "title": "部署链路的责任边界",
+        "html": "<div class=\"flow\"><div>请求与 tokenizer</div><b>→</b><div>scheduler<br>prefill / decode</div><b>→</b><div>模型图<br>状态 / collective</div><b>→</b><div>runtime<br>launch / graph / ABI</div><b>→</b><div>kernel / ISA</div></div><p>算法工程给出模型语义，框架负责张量和算子图，编译器生成可执行程序，runtime 管理地址、流、图回放及资源，服务层组织请求。实际团队可能合并角色，但诊断时仍应按责任边界拆开。</p><p>假设同一个 kernel 单测正确，长序列第二轮 replay 错误：第一假设不应是算术突然不稳定。先排查输入指针是否更新、状态池 row 是否复用、捕获时形状是否被固化、写回是否在下一步可见。反过来，图回放成功也不能证明模型通信和调度正确。</p>"
+      },
+      {
+        "id": "batching",
+        "title": "动态批处理：延时与吞吐的交换",
+        "html": "<p>固定批次等待全体完成容易浪费资源；按迭代调度可以让完成的请求退出、新请求进入。它提高设备利用率的同时，改变每步 batch、序列长度分布和 KV 占用。kernel 适配必须覆盖非满块、尾部 mask 和各请求不同位置。</p><p>Prefill 的长任务可能影响已有 decode 的 token 间隔。Chunked prefill 将其拆成受预算控制的块，减少一次性占用，但会改变 Attention 分块、调度频率及中间状态管理。仅在一个固定 shape 做最优并不保证线上最优。</p><p>衡量 batching 时记录到达率、并发、token budget、输入输出长度分布与 SLO。拒绝一个只报总 token/s 却完全不提响应时间的比较。排队等待也不能通过从计时起点删除来“优化”。</p>"
+      },
+      {
+        "id": "paged",
+        "title": "PagedAttention：布局方案与数学语义",
+        "html": "<p>逻辑序列拥有连续的 token 位置，不要求物理 KV 内存是一块同样连续的巨大 buffer。页表把逻辑 block 映射到物理 block，可以减少预分配浪费和碎片，并支持共享。Attention kernel 需要按 block table 找地址，再正确处理最后一个未填满 block。</p><pre><code>logical token position s\n  block_id = s // block_size\n  offset   = s % block_size\n  physical = block_table[request, block_id]\n  address  = cache_base + layout(physical, head, offset, dim)</code></pre><p>这是一段示意寻址，不是某一运行时的真实 ABI。block_size、head layout、量化 scale 和数据交织都可能不同。页表错误会看起来像随机数值问题；state pool row reuse 也可能把另一条请求的历史引入当前请求。</p><p>PagedAttention 本身不改变 dense Attention 必须访问的逻辑历史集合。内存效率提升与稀疏选择历史是不同层面的优化。参考 <a href=\"https://arxiv.org/abs/2309.06180\">PagedAttention 原论文</a> 与 <a href=\"https://docs.vllm.ai/en/latest/design/paged_attention/\">vLLM kernel 布局说明</a>。</p>"
+      },
+      {
+        "id": "dynamic-shape",
+        "title": "编译特化与动态 shape 的取舍",
+        "html": "<p>完全按 shape 特化容易获得常量传播、边界消除与更佳 tile，但会扩大编译数量、缓存与首次使用开销。完全动态可以减少版本，却让循环边界、资源上界和描述符配置更复杂。常见折中是按 bucket 选择程序，运行时传有效长度并使用 mask。</p><p>JIT cache key 需要覆盖会影响程序语义与生成代码的变量：源码、编译器版本、目标、dtype、布局、constexpr、资源配置以及必要的 ABI 版本。漏掉字段可能错误复用二进制；把无关字段放进去则导致缓存失效和重编译。</p><p>形状桶带来的 padding 不是免费。B=17 使用 B=32 程序可能增加计算或访存，具体看 mask、tile 和实际指令是否跳过无效部分。性能报告必须写实际逻辑 B 与编译桶，不能只报其中一个。</p>"
+      },
+      {
+        "id": "graph",
+        "title": "Graph replay 的三个层次",
+        "html": "<ol><li><strong>一次 capture 可执行：</strong>只说明图能够捕获并运行。</li><li><strong>改变输入后正确：</strong>验证动态地址或内容真正更新，避免重复读第一轮数据。</li><li><strong>跨步状态正确：</strong>验证 KV/递归状态写回、position 更新、slot reuse 和不同请求生命周期。</li></ol><p>多次 replay 的输出若完全一样，可能是稳定，也可能是输入根本没被更新。应设计可区分的业务输入，并追踪状态 row 与有效长度。对随机性算法还要控制 seed 与随机状态，避免把非确定性误判为 bug。</p><p>计时时分别报告首次编译/初始化、暖机、eager 与 graph 稳态。不把冷启动成本藏在“推理支持”之外，也不把它混入稳定 kernel 延时。</p>"
+      },
+      {
+        "id": "collectives",
+        "title": "通信与融合：先对齐总账",
+        "html": "<p>TP 拆矩阵后得到的 partial 需要归约；EP 拆专家后需要把路由贡献归到目标 token。这里既涉及通信，也涉及路由权重和局部合成的归属。只有沿实际代码追踪每个 tensor 的生产者、消费者和 collective，才能知道本地核输出意味着什么。</p><div class=\"formula\">T_end_to_end ≠ Σ isolated kernel timings, in general<br>T_end_to_end = duration(actual scheduled graph, including communication)</div><p>某些局部执行可以与通信重叠，某些依赖必须等待；不同 rank 的最长路径决定同步阶段完成时间。简单加和可能高估重叠成本，也可能漏掉 host、等待和数据交换。小 tensor 通信常受延时主导，大 tensor 才更接近带宽模型。</p><p>Prefill/decode 分离与 Attention/FFN 分离是不同切分轴。前者按阶段分配资源并需要转移历史状态；后者按层内模块分配资源并引入中间激活通信。两者的利弊需要用实际服务拓扑、链路与复用收益评估，不能仅用某个局部算子快来论证。</p>"
+      },
+      {
+        "id": "diagnostic",
+        "title": "一条可执行的故障定位顺序",
+        "html": "<table><tr><th>检查层</th><th>固定什么</th><th>观察什么</th></tr><tr><td>模型 reference</td><td>输入、权重、路由与状态</td><td>数学语义、精度、shape</td></tr><tr><td>单 kernel</td><td>ABI、layout、scale、有效区</td><td>每个输出与中间量</td></tr><tr><td>编译产物</td><td>IR、pass配置、二进制身份</td><td>哪里首次偏离不变量</td></tr><tr><td>模拟 / RTL</td><td>相同二进制与输入</td><td>指令、内存、同步与时间线</td></tr><tr><td>图与多 rank</td><td>依赖、collective、状态生命周期</td><td>不同步数和rank之间的差异</td></tr><tr><td>服务</td><td>到达率、长度分布、并发与SLO</td><td>TTFT、TPOT、吞吐与尾延时</td></tr></table><p>找到第一个分歧层，而不是先给“编译器问题”“kernel 问题”贴标签。最小复现应尽量保留触发条件，却去掉无关规模；缩到错误消失时，要识别被移除的是循环、别名、并行还是数据分布。</p>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "单测正确，模型跑错，先检查什么？",
+        "a": "固定实际模型输入与状态，对齐单核与模型路径的ABI、layout、scale、路由、有效长度和输出所有权；再核对图回放的指针更新、状态slot与collective。通过中间张量找第一次分歧，避免先归因。",
+        "followup": "如果第一步正确、第二步错误，优先检查什么？"
+      },
+      {
+        "q": "为什么 PagedAttention 不是稀疏 Attention？",
+        "a": "它主要改变KV物理存储与逻辑地址映射，dense Attention仍可遍历全部可见历史。稀疏Attention改变参与计算的位置集合，两者可以结合但收益来源不同。",
+        "followup": "页表映射对访存连续性和 DMA 描述符有什么影响？"
+      },
+      {
+        "q": "如何设计 JIT 缓存键？",
+        "a": "覆盖所有影响生成程序语义或资源映射的因素，并给ABI和编译器版本建立失效机制。用同语义键复用、变更关键字段必须失效的正负例验证；不要只按Python函数名或shape缓存。",
+        "followup": "编译时间戳变化但加载字节相同，怎样做等价判断？"
+      },
+      {
+        "q": "做完 FFN 优化能宣称模型同比例加速吗？",
+        "a": "不能。模型还包含Attention、通信、调度和其他算子；可用Amdahl定律估计理想收益，再用真实调度图测量。局部优化还可能改变重叠关系或资源争用。",
+        "followup": "如果FFN原占50%，加速2倍，理想总加速是多少？答：1/(0.5+0.5/2)=1.333倍。"
+      },
+      {
+        "q": "图回放正确需要哪些测试？",
+        "a": "至少验证不同输入、有效长度、状态跨步写回与slot复用，而不只是重复同一输入。核对地址、更新时序、布局和随机状态；对错误使用旧输入的实现应有能抓出的反例。",
+        "followup": "如何验证一个mask掉的输出行没有被后续错误读取？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "paged",
+        "label": "PagedAttention 原论文",
+        "url": "https://arxiv.org/abs/2309.06180",
+        "note": "缓存分配与共享机制；不照搬论文性能作为本项目收益。",
+        "kind": "论文"
+      },
+      {
+        "id": "vllm",
+        "label": "vLLM Paged Attention 设计",
+        "url": "https://docs.vllm.ai/en/latest/design/paged_attention/",
+        "note": "2026-10-23 核验；该文档描述的具体布局不自动等于Zeus ABI。",
+        "kind": "官方文档"
+      },
+      {
+        "id": "runtime-contract",
+        "label": "GLM5Next FFN 证据索引",
+        "url": "evidence/moe-sources.md",
+        "note": "rank-local与collective的源码边界。",
+        "kind": "源码"
+      }
+    ],
+    "takeaways": [
+      "分清 kernel、Graph、多 rank 与服务的验证层次。",
+      "说明缓存、动态 shape 和状态生命周期如何约束编译器。",
+      "不能用局部优化率替代端到端收益。"
+    ],
+    "tags": [
+      "Runtime",
+      "KV paging",
+      "Graph replay"
+    ],
+    "minutes": 35,
+    "level": "进阶"
+  },
+  {
+    "id": "engineering-drills",
+    "order": 42,
+    "part": "性能、系统与面试",
+    "title": "工程基本功与现场推导",
+    "subtitle": "把常见算子、传统编译和调优方法补齐。",
+    "lead": "深入 518 的同时，仍要能回答通用编译器岗位的基础问题。这里把常用算子、编译分析、C++ 工程和实验方法连接起来，让你的项目经验能迁移到新框架、新模型与新硬件。",
+    "sections": [
+      {
+        "id": "operators",
+        "title": "不止 GEMM：常用算子的共同约束",
+        "html": "<table><tr><th>算子</th><th>核心计算</th><th>主要关注</th></tr><tr><td>RMSNorm</td><td>x / sqrt(mean(x²)+ε) × γ</td><td>规约精度、两遍读取、尾部mask、向量效率</td></tr><tr><td>LayerNorm</td><td>(x−mean)/sqrt(var+ε) × γ + β</td><td>方差计算稳定性、均值与平方和、融合</td></tr><tr><td>Softmax</td><td>exp(x−max) / sum(exp(x−max))</td><td>稳定性、屏蔽全行、exp近似、规约通信</td></tr><tr><td>Embedding / Gather</td><td>按索引收集行或块</td><td>随机访存、越界、重复索引、布局</td></tr><tr><td>Scatter / Reduce</td><td>多个源写向目标位置</td><td>冲突、确定性、原子或分阶段归约</td></tr><tr><td>Conv2D</td><td>空间滑窗与通道归约</td><td>直接计算、implicit GEMM、布局与halo复用</td></tr></table><p>不要把每个算子都按一个固定瓶颈背诵。RMSNorm 在隐藏维很小且 batch 很低时可能受启动与规约控制限制；在足够大规模时才更接近带宽限制。Gather 流量小也可能因随机访问、低在途数或事务放大而慢。</p><p>卷积可映射成 GEMM，M≈batch×Hout×Wout、N=Cout、K=Cin×Kh×Kw。显式 im2col 产生额外存储，implicit GEMM 在寻址中构造逻辑矩阵。这个映射解释了矩阵单元如何复用，但没有自动解决 padding、stride、dilation 和数据布局。</p>"
+      },
+      {
+        "id": "layout",
+        "title": "布局：逻辑 shape 相同，物理成本不同",
+        "html": "<p>一个 [M,N] 张量可能是 row-major、列主序、分块、交织或带 padding 的物理存储。访问地址通常由 base、stride、tile index 和 lane mapping 共同决定。shape 只给元素集合，layout 才告诉执行单元如何找到它们。</p><p>向量合并访存、SRAM bank、矩阵 minitile、量化 group 和 DMA descriptor 都对布局有要求。改变布局能提高带宽或计算效率，但如果引入昂贵 transpose/pack，必须看它被多少次后续执行摊销。常驻权重的离线 pack 与每次 token 的在线 activation transform 代价不能混算。</p><pre><code># Conceptual affine address, not a hardware descriptor ABI\naddr(m, n) = base + m * stride_m + n * stride_n\n# Blocking introduces extra division/modulo or an equivalent mapping\nphysical(m, n) = tile(m // TM, n // TN) + lane(m % TM, n % TN)</code></pre><p>量化布局还要对齐 scale 的索引规则。数值 buffer 与 scale 分组错位会造成看似“精度波动”的确定性错误。调试时先用可辨认的小矩阵和唯一位置值核对映射，再跑随机大矩阵。</p>"
+      },
+      {
+        "id": "classical",
+        "title": "传统编译基础如何连接 AI 后端",
+        "html": "<p><strong>SSA</strong>让每个值只定义一次，便于 def-use 推理；<strong>dominance</strong>判断一个定义是否必经于使用点；<strong>CFG</strong>描述可发生的控制流。循环携带值、分支合流和内存副作用仍需要专门处理，不会因为使用 SSA 自动消失。</p><p>数据流分析可用固定点求解。例如 live-in = use ∪ (live-out − def)，live-out 是后继 live-in 的并集。对循环反复传播直到不再变化。实现上通常依靠有限高度的格与单调转移共同保证迭代收敛；无限高度域可能还需要 widening 等机制，并管理分析失效：改变 CFG 后旧 dominance/liveness 可能不再可信。</p><p>常量传播、CSE、DCE、LICM 的核心都是合法性。具有 volatile、原子、可见副作用或潜在别名的 load/store 不能仅因“看起来相同”而移动或删除。AI IR 中的 DMA、同步和状态写回更不能当成普通纯算子。</p><p>MLIR 的 dialect、interface 与 conversion 提供组织这些契约的机制；它不会替你设计资源模型。<a href=\"https://mlir.llvm.org/docs/Tutorials/Toy/\">官方 Toy 教程</a>展示了从高层语义经部分 lowering 到代码生成的组织方式。</p>"
+      },
+      {
+        "id": "legality",
+        "title": "现场给一个 pass：先讲合法，再讲收益",
+        "html": "<p>假设把一个 load 从循环体提到循环外。要先证明地址和索引对循环不变、循环内没有可能修改该内存的 store、没有必须保留的时序副作用；还要检查零次循环时，提前执行 load 是否引入原本不存在的越界或异常。最后才讨论减少加载次数的收益。</p><p>假设消掉一次 copy。需要证明源和目标布局兼容、目标后续观察允许 alias、源生命周期足够长、没有写后读或读后写破坏。对于异步硬件，SSA最后使用不代表设备已经读完，必须把在途访问纳入判断。</p><p>一个好的回答结构是：pattern → precondition → rewrite → preserved invariants → verifier → positive/negative tests → performance evidence。若无法证明，就保守拒绝该优化，并让诊断解释拒绝原因。</p>"
+      },
+      {
+        "id": "tuning",
+        "title": "Auto-tuning：搜索的是合法方案，不是幸运数字",
+        "html": "<ol><li>建立候选空间：tile、split、并行执行单元、prefetch深度、布局和融合开关。</li><li>用硬约束预筛：容量、alignment、minitile、寄存器与描述符、目标指令合法性。</li><li>编译并验证：对有效区、尾部、数值门槛和状态回放做必要检查。</li><li>测量有代表性的业务分布：包含不同层、rank、路由密度和极端边界。</li><li>用保留样本验证：避免选择只对一个随机种子或最热shape有利的方案。</li><li>记录拒绝原因与回退：失败候选提供了编译器和硬件模型不足的线索。</li></ol><p>搜索 objective 可以是特定 SLO 下的吞吐、加权延时或最坏退化约束，而不是一律追求平均最快。要考虑编译成本、代码大小和稳定性，尤其当新配置触发不同资源映射时。</p><p>真实路由分布不应被独立均匀随机替代。后者适合边界与正确性，但无法证明 token merge 在业务输入上的收益。多个 token 命中同一专家只说明有潜在复用，不证明实现真的少读权重。</p>"
+      },
+      {
+        "id": "cpp",
+        "title": "C++ 与 Python：面试中的工程落点",
+        "html": "<p>C++ 要能解释所有权、RAII、move、引用失效、iterator invalidation 与容器复杂度。以编译 IR 改写为例：迭代 use-list 时删除节点可能使迭代器失效；跨 pass 缓存裸指针可能指向已删除 operation；并行编译共享可变状态可能造成数据竞争。</p><p>引用计数解决部分生命周期问题，不自动解决循环引用、并发同步或逻辑失效。用 unique_ptr 表达唯一所有权，用显式 borrowed reference 表达非拥有访问；将锁保护范围与数据不变量联系起来，不只说“加 mutex”。</p><p>Python 侧要重视 import 路径、环境变量、进程隔离、数据类型与缓存键。一个 JIT 子进程导入了旧 checkout，可能产生完全不同二进制；它不是数值优化的正常波动。可复现实验首先固定实际加载的模块与工具链身份。</p><p>性能工程中不要把 Python 墙钟、异步 launch 返回时间与设备完成时间混在一起。使用正确同步点或设备事件，并明确事件的覆盖范围。</p>"
+      },
+      {
+        "id": "tests",
+        "title": "设计能抓住错误的测试",
+        "html": "<p>一个测试若只重复实现逻辑，常会与实现一起犯错。更有价值的是：负例检验不能优化的场景、变形测试检验等价变换、差分测试比较独立实现、最小反例稳定复现一个机制错误。</p><p>同步 pass 的正例要能验证合法并行，负例要覆盖同地址 RAW/WAR/WAW、零次循环、分支、跨迭代、多生产者和通道容量。仅在一个数值样本上“没有死锁”不能证明 FIFO 协议正确；结构验证、token余额与硬件重放各有作用。</p><p>性能回归也需要控制噪声：固定编译产物、输入、资源配置与运行条件，进行适当重复并保留分布。测量工具自身可能改变执行；应区分 profiler 观测与干净的计时运行。</p>"
+      },
+      {
+        "id": "whiteboard",
+        "title": "六道白板推导题",
+        "html": "<ol><li>从 GEMM 的 M/N/K 推出 FLOPs、最小流量、tile SRAM 预算，并解释 double buffer 如何改变预算。</li><li>给定三条指令和两个物理 buffer，画出地址复用前后的 RAW/WAR/WAW 边。</li><li>推导分块 softmax 合并需要保存哪些统计量，为什么直接平均两块结果不对。</li><li>给定 MoE top-k、专家数和 token 分布，估计非空专家数，再说明真实路由可能如何偏离均匀模型。</li><li>把 TP/EP 的逻辑张量画出来，逐步标记每一次 collective 前后 shape 与 ownership。</li><li>解释为什么一个算子数值错误可能来自 reference，并提出不放宽阈值的诊断顺序。</li></ol><p>这些题的共同点是先定义对象和边界，再写推导，而不是凭记忆报答案。最终应能用自己的518经历为每一题提供一个具体例子。</p>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "SSA 能解决内存依赖吗？",
+        "a": "SSA直接描述值的定义与使用，但两个不同SSA指针可以别名，内存也有副作用。还需要alias、effect、范围与控制流分析；显式硬件资源更需要在途和物理地址分析。",
+        "followup": "把两个逻辑buffer分到同一地址会新增什么边？"
+      },
+      {
+        "q": "循环不变 load 一定能提到循环外吗？",
+        "a": "不一定。除地址不变外，还要证明循环内没有可能写同一内存的操作，且提前执行不会在零次循环时引入越界、异常或可见副作用。",
+        "followup": "如果只能证明多数路径安全，怎样处理剩余路径？"
+      },
+      {
+        "q": "融合总是更快吗？",
+        "a": "不一定。它可减少中间流量和launch，但可能增加SRAM、寄存器、描述符及代码压力，降低并发或使关键路径更长。应比较完整资源预算与实际测量，并保留不融合回退。",
+        "followup": "如何把fusion的收益和tile变化的收益分开？"
+      },
+      {
+        "q": "如何判断 autotuning 结果可靠？",
+        "a": "先验证合法性与数值，再在固定身份和计时边界下测量；覆盖业务分布与边界，并用保留输入验证。报告平均、尾部或最坏退化等目标，不能只选一次最快值。",
+        "followup": "真实路由变化后怎样识别配置失效？"
+      },
+      {
+        "q": "最有价值的回归测试是什么？",
+        "a": "能稳定捕获被修复机制、且不会仅镜像实现的最小反例。配合能阻止过度优化的负例与结构不变量，必要时增加相同二进制的模拟或RTL验证。",
+        "followup": "怎样证明这个测试在删除修复后确实失败？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "mlir-toy",
+        "label": "MLIR Toy Tutorial",
+        "url": "https://mlir.llvm.org/docs/Tutorials/Toy/",
+        "note": "2026-10-23 核验；多层IR与conversion组织。",
+        "kind": "官方文档"
+      },
+      {
+        "id": "compiler-evidence",
+        "label": "518 编译器源码证据",
+        "url": "evidence/compiler-sources.md",
+        "note": "真实pass机制请以对应章节的固定版本为准。",
+        "kind": "源码"
+      },
+      {
+        "id": "numerics-evidence",
+        "label": "MoE 数值与性能证据",
+        "url": "evidence/moe-sources.md",
+        "note": "真实输入、reference与分层验证案例。",
+        "kind": "源码"
+      }
+    ],
+    "takeaways": [
+      "能从公式推导常见算子的计算、访存和数值约束。",
+      "描述一个优化的合法性、不变量和失效反例。",
+      "把C++生命周期、运行环境与测试方法放进编译器工程。"
+    ],
+    "tags": [
+      "SSA",
+      "算子基本功",
+      "Auto-tuning"
+    ],
+    "minutes": 40,
+    "level": "进阶"
+  }
+]

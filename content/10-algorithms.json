@@ -1,0 +1,765 @@
+[
+  {
+    "id": "transformer",
+    "part": "算法与 Attention",
+    "order": 10,
+    "title": "从一个 token 看完整 Transformer",
+    "subtitle": "把模型公式、张量形状、数据搬运与编译任务放到同一张图上",
+    "minutes": 45,
+    "level": "基础",
+    "tags": [
+      "Transformer",
+      "Prefill",
+      "Decode",
+      "算子计算图",
+      "RMSNorm"
+    ],
+    "lead": "面试里最有用的算法理解，是从一个输入 token 追踪到下一个 token，并能说明每一步读什么、算什么、保存什么、为什么慢。先建立这条主线，再讨论 Attention 的不同实现。以下基础算例为教学推导，不代表 518 的实测性能。",
+    "sections": [
+      {
+        "id": "graph",
+        "title": "一张图认清：模型结构不是一串 GEMM",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 760 260\" role=\"img\" aria-label=\"Decoder Transformer 从输入到输出的计算图\"><rect width=\"760\" height=\"260\" rx=\"16\" fill=\"#111d32\"/><g font-family=\"sans-serif\" font-size=\"15\" text-anchor=\"middle\" fill=\"#ecf1ff\"><rect x=\"20\" y=\"30\" width=\"130\" height=\"56\" rx=\"8\" fill=\"#255b66\"/><text x=\"85\" y=\"54\">Token IDs</text><text x=\"85\" y=\"74\">Embedding</text><rect x=\"183\" y=\"30\" width=\"158\" height=\"56\" rx=\"8\" fill=\"#324b82\"/><text x=\"262\" y=\"54\">Norm → Attention</text><text x=\"262\" y=\"74\">历史交互</text><rect x=\"376\" y=\"30\" width=\"158\" height=\"56\" rx=\"8\" fill=\"#324b82\"/><text x=\"455\" y=\"54\">Norm → FFN / MoE</text><text x=\"455\" y=\"74\">通道变换</text><rect x=\"568\" y=\"30\" width=\"172\" height=\"56\" rx=\"8\" fill=\"#73572b\"/><text x=\"654\" y=\"54\">Final Norm → LM Head</text><text x=\"654\" y=\"74\">采样下一 token</text><text x=\"165\" y=\"64\">→</text><text x=\"359\" y=\"64\">→</text><text x=\"552\" y=\"64\">→</text><path d=\"M190 111H530M190 104V118M530 104V118\" stroke=\"#73d7b0\" fill=\"none\"/><text x=\"360\" y=\"140\">重复 N 层；每个子层还有残差连接</text><rect x=\"181\" y=\"170\" width=\"354\" height=\"58\" rx=\"8\" fill=\"#203b42\"/><text x=\"358\" y=\"195\">Attention 持久状态：KV cache 或递归 state</text><text x=\"358\" y=\"216\">下一步 decode 继续使用</text><path d=\"M260 88V166\" stroke=\"#73d7b0\" stroke-width=\"2\"/></g></svg><figcaption>现代 decoder-only 模型的概念图。原始 Transformer 同时包含 encoder 与 decoder；这里针对生成式大模型画出常用主干，不把两者说成完全相同。</figcaption></figure><p>输入文本先被 tokenizer 变为整数 ID，再查 embedding 表得到向量。Attention 负责在不同位置之间交换信息；FFN 在每个位置上对通道做非线性变换。两者都包含线性投影，但依赖结构不同：Attention 要访问别的位置或历史状态，FFN 的本地数学计算通常不需要其他 token 的激活。</p><p>经过多层变换，LM Head 把 hidden 映射成词表 logits；采样策略决定下一 token。采样得到的是离散 ID，不能直接当下一层的 hidden。下一步仍从这个 ID 的 embedding 开始。这解释了为何 decode 每步必须穿过所有层，也解释了跨层依赖为什么限制单请求延迟。结构起点参见 <a href=\"https://arxiv.org/abs/1706.03762\">Transformer 原论文</a>。</p>"
+      },
+      {
+        "id": "notation",
+        "title": "用 shape 描述算法，避免把模型维度混成一个数",
+        "html": "<p>约定 B 为独立请求数，S 为本次处理的新 token 数，L 为已缓存的历史长度，H 为模型 hidden size，h 为 query head 数，h<sub>kv</sub> 为 KV head 数，d 为每 head 的 key/query 维度。常把输入展平为 X∈R<sup>T×H</sup>，T=B×S；只有在每个请求长度相同的教学例子里这个乘法才直接适用。实际服务常是 packed/ragged tokens，需要 offset 与 sequence length 元数据。</p><div class=\"formula\">Q = XWq : [T,H] × [H,h·d] → [T,h·d]<br>K = XWk : [T,H] × [H,hkv·d] → [T,hkv·d]<br>V = XWv : [T,H] × [H,hkv·dv] → [T,hkv·dv]</div><p>不要默认 h·d=H。很多模型的 attention 投影维度可以大于 hidden，MLA 又引入额外 latent 维度。内部 GLM5Next 配置就是 H4096 与 attention 64×256 并存；KDA 则是 64×128。只有从权重形状和 forward 中读出维度，才能正确估算 FLOPs、打包布局和 TP 切分。</p><p>GEMM 的数学记号 W[H,N] 与 PyTorch linear 实际存储 weight[N,H] 也要区分。面试展示图时应标清逻辑矩阵与物理 stride，尤其不能凭一个 reshape 就认为转置已经真实发生。</p>"
+      },
+      {
+        "id": "attention",
+        "title": "Attention 的四步：相关性、约束、归一化、汇总",
+        "html": "<div class=\"formula\">A = QKᵀ / √d + mask<br>P = softmax(A, axis=keys)<br>O = PV</div><p>把 query 想成“当前要找的信息”，key 想成“每个历史条目的检索标签”，value 是真正被汇总的内容。QKᵀ 产生匹配分数；causal mask 排除未来 token；softmax 把合法位置的分数归一化；最后按权重加权 value。这个类比帮助记忆，但 Q/K/V 都由模型学习得到，并不是人为指定的数据库字段。</p><p>教学例：一行分数为 [0,ln2,ln3]，softmax 权重恰好是 [1/6,2/6,3/6]。若对应 value 为标量 [2,5,8]，输出为 (2+10+24)/6=6。若第三项被 mask，输出变成 (2+10)/3=4；不能先算原 softmax，再把第三项的贡献清零，因为分母也必须改变。</p><p>1/√d 抑制点积随维度增长而放大的尺度，但实际模型还可能有 QK norm、额外缩放和不同位置编码。编译器若把两个乘法融合，必须确认 scale 应用位置、精度和 mask 语义；“代数上看起来相同”不保证低精度逐位相同。</p>"
+      },
+      {
+        "id": "prefill-decode",
+        "title": "Prefill 与 decode：同一层，截然不同的执行形状",
+        "html": "<table><thead><tr><th>维度</th><th>Prefill</th><th>单步 decode</th></tr></thead><tbody><tr><td>每请求新 token</td><td>S 通常较大</td><td>S=1；投机验证等路径例外</td></tr><tr><td>投影输入</td><td>[B·S,H]</td><td>[B,H]</td></tr><tr><td>Attention 查询</td><td>多个 query 可并行</td><td>每请求一个 query 查历史</td></tr><tr><td>典型压力</td><td>矩阵计算、长序列 attention IO</td><td>权重读取、KV/state 读取、小算子开销</td></tr></tbody></table><p>没有 prefix cache 时，一段 S 长的 prompt 做 causal attention，大约访问 S(S+1)/2 个合法 query-key 对。单步 decode 则只新增一个 query，但它可能要关注 L+1 个位置。KV cache 省掉的是重复计算旧 token 的 K/V 投影，并不自动省掉当前 query 对旧 K/V 的读取。</p><p>从 roofline 看，一个 [B,H]×[H,N] 线性层的乘加量约 2BHN，若权重每步搬一次，权重流量约 HN·b 字节，忽略激活后的算术强度约 2B/b。B 增大，权重被更多 token 摊销，即使核心数量完全不变，也可能提升吞吐。这个推导适用于复用真实发生的执行计划；MoE 的专家权重只会被命中同一专家的 token 共享。</p>"
+      },
+      {
+        "id": "norm-residual",
+        "title": "Norm、残差与 gated FFN：小算子有关键依赖",
+        "html": "<div class=\"formula\">RMSNorm(x) = x · rsqrt(mean(x²)+ε) · γ<br>x₁ = x + Attention(Norm(x))<br>x₂ = x₁ + FFN(Norm(x₁))</div><p>RMSNorm 沿 hidden 维度计算平方和，通常用较高精度累加，再缩放输出；它与 LayerNorm 的区别是没有减均值。公式来源参见 <a href=\"https://arxiv.org/abs/1910.07467\">RMSNorm 论文</a>。归约、rsqrt、逐元素乘法都不是大 GEMM，却可能在小 batch 下暴露固定延迟。把 residual add 与 norm 融合，可以少一次中间激活写回，但必须保留 residual 分支需要的正确值。</p><p>常见 SwiGLU 写作 FFN(x)=(SiLU(xWg)⊙xWu)Wd，其中 SiLU(z)=z·sigmoid(z)。gate/up 两条路都从同一个 x 出发，因此可合成一次更宽投影，也可为了内存约束分块执行。down 消费门控后的中间结果。内部模型还有 clamp 等细节，需要跟随实际 forward，不能拿标准 SwiGLU 公式替代真实数值合同。</p><p>现代模型可能用 mHC 等多流残差机制。这里的两条加法只用来建立基础概念；GLM5Next 的四路 residual stream 要在真实计算图章节单独展开。面试时主动说明“这是简化图”，比画一张好看但错误的统一图更可靠。</p>"
+      },
+      {
+        "id": "cost",
+        "title": "一层的成本表：先数计算与字节，再谈优化",
+        "html": "<p>以普通 attention、d<sub>v</sub>=d 为例，令 N=L+S 为历史加本次新 token 的总长度上界，QK 与 PV 两次矩阵乘的矩形上界约 4B·S·N·h·d FLOPs；prefill 的 causal 三角会减少合法元素数量，投影成本还要单独计入。dense FFN 的 gated 三矩阵成本约 6T·H·I。这里把一次乘加记作两次浮点运算，写报告时应明确这一约定。</p><table><thead><tr><th>对象</th><th>为什么大</th><th>优化入口</th></tr></thead><tbody><tr><td>权重</td><td>随 H、I、专家数增长</td><td>量化、分片、跨 token 复用</td></tr><tr><td>历史 KV</td><td>随请求数与长度增长</td><td>GQA、MLA、分页、量化</td></tr><tr><td>score 矩阵</td><td>prefill 随序列长度平方增长</td><td>FlashAttention 在线归约</td></tr><tr><td>中间激活</td><td>分阶段落地产生读写</td><td>融合、buffer reuse、layout</td></tr><tr><td>通信</td><td>跨 rank 合并与交换</td><td>切分策略、重叠、减少同步点</td></tr></tbody></table><p>不能简单把这些成本各自相除再相加当最终耗时。计算与搬运可能重叠；某些阶段有严格串行依赖；cache 命中会改变实际字节数。下界模型适合找方向，trace 才能判断瓶颈是否真的在该资源上。</p>"
+      },
+      {
+        "id": "compiler-view",
+        "title": "把一层交给编译器：哪些是语义，哪些是计划",
+        "html": "<p>模型层定义的是数学与状态语义：哪些位置可见、何时更新 cache、输出 dtype、哪些请求共享权重。编译器选择的是执行计划：tile 多大、张量放哪里、数据先搬哪块、哪条流水线执行、如何同步。优秀的 AI compiler 工程师能把二者分开，并准确指出某个优化修改的是哪一层。</p><p>例如把 QK 和 softmax/PV 融合，是改变中间结果的存活位置；把 GQA 的 K/V 在同组 query heads 间复用，是利用模型天然共享；把 dense attention 改成 top-k 稀疏 attention，则改变模型计算定义，通常需要模型训练或明确算法授权。它们不能全部归为“编译优化”。</p><p>到 518 的落点可以这样叙述：先由 shape 与 dtype 决定矩阵/向量计算，再根据片上空间放置 Q tile、KV tile 和归约状态；编译器完成依赖、地址分配与同步；最终检查生成指令和硬件 trace 是否实现了计划。CUDA 的 warp/block 与 Zeus 的执行单元并不一一同构，移植的应是数据复用意图和数值合同。</p>"
+      },
+      {
+        "id": "study-route",
+        "title": "从算法弱项补到能白板推导",
+        "html": "<p>第一遍只练五件事：画 decoder block；说清 prefill/decode；写 QK-softmax-PV；算一份 KV cache；解释 FFN 三次投影。第二遍把每个公式加上 shape 和 dtype。第三遍才加入 GQA、MLA、DSA、KDA，比较它们究竟改变“头共享、表示维度、选取位置、历史状态”中的哪一项。</p><p>一次好的白板讲解应该能接受任意追问：输入 B 从 1 变 8，哪个张量变大？上下文从 8K 变 128K，哪些权重不变？为什么 MoE 激活参数少但总权重仍然大？一个 fused kernel 的收益来自省搬运还是新增并行？回答时先列维度，再列依赖，最后才给硬件判断。</p><aside class=\"callout\">练习：不看本文，画出一个 [B=2,S=1,H=4096] decode token 的完整路径；用三种颜色区分只读权重、跨步持久状态、当前步临时结果。能够画对这张图，后续编译器面试问题就有了共同坐标系。</aside>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "Attention 为什么需要 Q、K、V 三种投影？",
+        "a": "Q/K 决定匹配关系，V 决定被聚合的信息。分离投影让模型可以在某个空间检索、在另一个空间传递内容。实现上 K/V 可以共享头或被联合压缩，但不能因此认为 QK 与 PV 的维度、权重或数值语义相同。",
+        "followup": "如果 d_k 与 d_v 不同，QK、PV、输出投影分别是什么 shape？"
+      },
+      {
+        "q": "为什么 decode 不容易吃满 Tensor 算力？",
+        "a": "单请求每步只有一个新 token，投影常退化为小 M 的矩阵运算，权重摊销少，attention 还有长历史读取和归约。并行不足、内存延迟、launch 与通信均可能限制利用率；具体是否带宽瓶颈要看 trace。",
+        "followup": "怎样区分低 occupancy 与高 occupancy 但 memory stall？"
+      },
+      {
+        "q": "KV cache 省掉了什么？",
+        "a": "它保存各层历史 K/V，避免每一步重算历史 token 的整层投影与中间 hidden。当前 query 仍需按 attention 定义检索历史，dense full attention 的读量通常随 L 增长。",
+        "followup": "如果有 sliding window、prefix sharing 或 DSA，这句话如何改写？"
+      },
+      {
+        "q": "融合两个算子一定更快吗？",
+        "a": "融合可以省中间读写和 launch，但可能拉长 live range、提高片上空间需求、导致 spill，或让两类计算单元无法并行。必须比较最终执行计划，而非只数 kernel 数。",
+        "followup": "请用 norm→GEMM 或 attention 的 score tile 举一个反例。"
+      },
+      {
+        "q": "怎样证明自己理解了算法而不是背了名词？",
+        "a": "给出带维度的公式、可手算的小例子、状态更新顺序和复杂度，再把一个真实性能瓶颈映射回公式。最后说明数值、模型质量和硬件正确性各自需要什么证据。",
+        "followup": "请用一个真实 PR 重述这条链条。"
+      }
+    ],
+    "sources": [
+      {
+        "id": "transformer-original",
+        "label": "Attention Is All You Need",
+        "url": "https://arxiv.org/abs/1706.03762",
+        "note": "",
+        "kind": "论文"
+      },
+      {
+        "id": "rmsnorm",
+        "label": "RMSNorm",
+        "url": "https://arxiv.org/abs/1910.07467",
+        "note": "",
+        "kind": "论文"
+      },
+      {
+        "id": "cuda-guide",
+        "label": "CUDA Programming Guide",
+        "url": "https://docs.nvidia.com/cuda/cuda-programming-guide/index.html",
+        "note": "2026-10-23 访问；用于概念对照",
+        "kind": "官方文档"
+      }
+    ],
+    "takeaways": [
+      "先画计算图与状态，再说 kernel 优化。",
+      "H 不必等于 heads×head_dim；物理布局不等于逻辑 shape。",
+      "Prefill 与 decode 的瓶颈来自形状和复用方式变化。",
+      "编译计划改变与模型算法改变需要不同验收合同。"
+    ]
+  },
+  {
+    "id": "kv-cache",
+    "part": "算法与 Attention",
+    "order": 11,
+    "title": "MHA、MQA、GQA 与 KV cache",
+    "subtitle": "看懂“每步读完整 KV”究竟在什么前提下成立，以及容量墙从何而来",
+    "minutes": 45,
+    "level": "进阶",
+    "tags": [
+      "MHA",
+      "MQA",
+      "GQA",
+      "KV cache",
+      "PagedAttention",
+      "RoPE"
+    ],
+    "lead": "Attention 演化可以先沿两条轴理解：每个历史 token 要保存多少数据，以及当前 query 要读取哪些历史位置。MHA→MQA/GQA 主要改变第一条轴；它本身没有把全历史检索变成稀疏检索。",
+    "sections": [
+      {
+        "id": "heads",
+        "title": "共享的是 K/V，不是 query 输出",
+        "html": "<div class=\"flow\"><div>MHA<br>8 Q → 8 KV</div><b>→</b><div>GQA<br>8 Q → 2 KV<br>每组 4 Q 共享</div><b>→</b><div>MQA<br>8 Q → 1 KV</div></div><p>MHA 每个 query head 有对应 K/V head；MQA 让全部 query heads 共享一套 K/V；GQA 在两者之间分组共享。query heads 与最终输出仍可保持多个。设 g=h/h<sub>kv</sub>，同一 KV head 服务 g 个 query heads；只有算法实现把这种共享落实到 cache 或片上 tile 的复用，物理流量才会接近理论节省。</p><p>MQA 与 GQA 的原始动机和训练方法分别参见 <a href=\"https://arxiv.org/abs/1911.02150\">MQA</a>、<a href=\"https://arxiv.org/abs/2305.13245\">GQA</a>。面试中可用一句话定位它们：减少独立 KV 表示的数量，在表达能力与 decode 资源之间选择一个折中点。不要说“GQA 的 attention 计算量按组数等比例减少”，因为每个 query head 仍需形成自己的 scores 与输出。</p>"
+      },
+      {
+        "id": "capacity",
+        "title": "手算容量：先单层、单请求，再乘全模型",
+        "html": "<div class=\"formula\">KV bytes = B · Nlayers · L · hkv · (dk+dv) · bytes_per_element</div><p>教学模型取 80 层、h=64、h<sub>kv</sub>=8、d<sub>k</sub>=d<sub>v</sub>=128、BF16、L=32768。单层单请求 KV 为 32768×8×256×2=128 MiB；80 层就是 10 GiB。换成 64 个 KV heads 的 MHA，变成 80 GiB；换成一个 KV head 的 MQA，变成 1.25 GiB。这里只比较同样层数与 head 维度，不声称这三种架构质量等价。</p><p>在实际系统里，还要加页面碎片、分配器保留、scale、索引、临时工作区，以及被 TP 复制而非分片的 KV。权重和运行时先占掉一部分容量，剩余空间才可容纳活动请求。若“可用于 KV 的内存”为 C，则在等长请求、无共享的理想情况下 B≤floor(C/KV_per_request)。这是容量上界，而不是吞吐保证。</p><p>因为 L 随生成变长，能接收请求不代表可以无限生成。服务调度要预留增长空间或有可恢复的抢占策略，否则 benchmark 在短样本上不 OOM，却可能在长输出时突然撞墙。</p>"
+      },
+      {
+        "id": "reads",
+        "title": "“每步完整读 KV”必须加上四个限定",
+        "html": "<p><strong>第一，限定模型语义。</strong>全历史 dense causal attention 的当前 query 需要对所有合法历史位置形成影响；GQA 只共享头，不减少这些位置。窗口 attention、稀疏选择、递归线性 attention 有不同访问集合。</p><p><strong>第二，限定逻辑访问与物理流量。</strong>逻辑上所有相关 K/V 参与计算，不代表每个元素每步一定从 HBM/DDR 读取一次。cache 命中、片上驻留、跨 query 复用和具体 kernel 分块都影响外部流量；错误实现反而可能重复读多次。</p><p><strong>第三，限定请求之间的共享。</strong>两个独立请求即使上下文长度一样，KV 内容也不同。增加 batch 通常增加 KV 流量；不会像相同权重那样天然共享。相同前缀可以通过 prefix cache 共享存储与 prefill 成果，但 decode 时各自 query 的计算仍需要正确处理。</p><p><strong>第四，限定多芯片切分。</strong>CP 可以把历史分布到多卡，每卡只读自己那部分，再合并局部 softmax 结果。不能把“每卡读取下降”报告成“全系统总字节同幅下降”。这四句话能把泛泛的“带宽瓶颈”变成有边界的工程判断。</p>"
+      },
+      {
+        "id": "ai",
+        "title": "GQA 复用为什么能改变 arithmetic intensity",
+        "html": "<p>只看单步 attention 核心、忽略投影与 softmax，一个请求大约有 4Lhd FLOPs，唯一 KV 数据量约 2Lh<sub>kv</sub>db 字节。因此理想算术强度约 2h/(h<sub>kv</sub>b) FLOPs/byte。BF16 下是 g FLOPs/byte：MHA 为约 1，8:1 GQA 为约 8。这个计算直接说明共享 KV 为什么有利于 bandwidth-bound decode。</p><p>但如果每个 query head 独立启动一个程序且各自从外存重新载入同一 KV，实际流量会变大，理论优势未完全兑现。可以把同组多个 queries 放进同一个 tile，一次读取 K/V 后形成多个 scores。代价是同时保存更多 score、输出累加和归约状态，可能挤占 SRAM 或寄存器。</p><p>在 CUDA 上，线程块划分与 cache 行为决定这种复用的落点；在显式片上存储的 NPU 上，编译器要让 KV tile 的生命周期覆盖多个 query 消费者，并保证读取与重用期间不被覆盖。理想公式提供方向，真实 trace 验证计划。</p>"
+      },
+      {
+        "id": "paging",
+        "title": "PagedAttention：解决分配与共享，不自动改变公式",
+        "html": "<p>连续分配一整段最大长度 KV 会造成大量保留空间；不同请求长度不一，又使外部碎片与动态扩容难处理。PagedAttention 用固定大小的物理块配合逻辑到物理映射，让请求的连续 token 可以分散在不同页面，并在合适条件下共享前缀块。机制背景参见 <a href=\"https://arxiv.org/abs/2309.06180\">PagedAttention 论文</a>。</p><div class=\"flow\"><div>请求 A 逻辑块<br>0 · 1 · 2</div><b>→</b><div>block table<br>7 · 2 · 11</div><b>→</b><div>物理 KV pages<br>page7 · page2 · page11</div></div><p>编译实现需要区分 token position、logical block、physical page、page 内 offset。页表中的整数不是 KV 本身的地址；必须明确单位是 token、元素还是字节。跨页边界和最后一个不足页的 tail，是最容易被规则尺寸测试掩盖的地方。</p><p>分页降低碎片，可能让可驻留 batch 变大，从而间接提高吞吐；它也带来额外索引与不连续读取。如果 kernel 只能处理连续 K/V，框架需要 gather 或专门的 paged kernel，而不能把 block table 填进去就假定获得同样性能。</p>"
+      },
+      {
+        "id": "rope",
+        "title": "RoPE 与 cache：位置语义必须跟着数据走",
+        "html": "<p>RoPE 对 Q/K 的二维坐标对施加随位置变化的旋转。旋转后的点积包含相对位置信息；基础推导见 <a href=\"https://arxiv.org/abs/2104.09864\">RoFormer 论文</a>。对于已经应用固定位置变换并缓存的历史 K，在位置编号与变换规则不变时，下一步通常可以直接复用，不需要重新旋转全部旧 K。</p><p>实现却有很多可见于 ABI 的细节：旋转是 interleaved 还是 half-split；只旋转部分维度还是全部；position IDs 是否考虑 prefix；是否有缩放；cache 存的是旋转前还是旋转后的 K。不同布局若刚好有相同 shape，仍然会产生错误结果。</p><p>不要把所有 MLA 都画成带一条 RoPE 分支。内部 GLM5Next 本次核实的配置是 <code>mla_nope=true</code>、<code>qk_rope_head_dim=0</code>，它的主 MLA 分支与公开 GLM-5 的配置不同；indexer 自己的位置信号也要单独检查。模型名相似不能替代源码合同。</p>"
+      },
+      {
+        "id": "tp-cp",
+        "title": "TP、CP 和 KV 复制：为什么除以卡数经常算错",
+        "html": "<p>TP 常把 attention heads 或投影通道分给不同 rank；CP 则把历史位置分给不同 rank。若 KV heads 数足够且布局允许，TP 可以分片 K/V；当 h<sub>kv</sub> 小于 TP 数或实现选择复制时，某些 rank 可能持有重复 KV。MQA 的一个 KV head 尤其不能不加条件地除以 TP。</p><p>CP 能增加总可容纳历史，但需要合并各片的归一化结果。不同 CP 上 attention 输出的 softmax 分母不一样，所以不能简单平均各卡局部输出。正确合并应带上各片 log-sum-exp 或等价的 max/sum 状态。后文 FlashAttention 的合并公式恰好解释这件事。</p><p>做部署分析时画两张图：逻辑上谁拥有哪些 head/历史，以及物理上哪些 bytes 存在哪张卡。前者帮助理解数学切分，后者决定容量与通信。把世界大小写成 16，并不能直接推出 TP16 或每个张量切 16 份。</p>"
+      },
+      {
+        "id": "model-history",
+        "title": "从主流模型看演化：它们在解决不同问题",
+        "html": "<table><thead><tr><th>设计方向</th><th>代表来源</th><th>主要改变</th></tr></thead><tbody><tr><td>MQA / GQA</td><td>Shazeer；GQA；Llama 2 大模型等</td><td>减少 KV heads</td></tr><tr><td>MLA</td><td>DeepSeek-V2</td><td>压缩每 token 的联合 KV 表示</td></tr><tr><td>DSA</td><td>DeepSeek-V3.2；公开 GLM-5</td><td>为主 attention 选择少量历史项</td></tr><tr><td>KDA 混合</td><td>Kimi Linear；内部 GLM5Next 配置</td><td>部分层用有限递归状态替代全历史缓存</td></tr></tbody></table><p>这不是“所有模型按年份统一替换”的路线。GQA 依然可用于重视实现成熟度和质量的模型；MLA、DSA、KDA 可以在不同轴上组合。Llama 2 的具体设计以 <a href=\"https://arxiv.org/abs/2307.09288\">官方论文</a>为准，不能把一个尺寸的配置推广到整个家族。</p><p>资深架构师应把演化翻译成需求变化：更少 KV 字节可能缓解容量墙；稀疏选择增加 TopK 和随机访问；递归状态增加读改写与稳定性要求。某种硬件原本为了连续大流量读取而设计，面对这些变化时需要重新检查 vector、索引、片上空间和同步能力。</p>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "GQA 相对 MHA 把哪些量缩小了？",
+        "a": "K/V 投影输出和缓存的 head 数下降，理论唯一 KV 字节下降；Q heads 和每个 query head 的相关性计算仍然存在。是否获得理想物理流量取决于共享 K/V 在 kernel 内或 cache 中的复用。",
+        "followup": "如果每个 Q head 单独执行，理论优势还能兑现多少？"
+      },
+      {
+        "q": "一个 32K 请求为什么可能占 10 GiB KV？",
+        "a": "因为单 token 的缓存要乘层数、KV heads 和 K/V 双份。以 80 层、8 KV heads、每 head 128 维、BF16 为例，单 token 全层是 320 KiB，乘 32768 即 10 GiB。",
+        "followup": "如果 TP8 但 KV 被复制，怎样修正每卡容量？"
+      },
+      {
+        "q": "PagedAttention 是否减少 dense attention 的 FLOPs？",
+        "a": "它首先改变缓存分配与地址映射，减少浪费并支持共享；在模型语义相同的情况下，不能把分页本身说成减少所有 query-key 计算。吞吐收益可能来自可驻留更多请求。",
+        "followup": "页大小如何影响碎片、索引开销和连续访存？"
+      },
+      {
+        "q": "为什么增加 batch 不能同样摊销每个请求的 KV？",
+        "a": "所有请求通常使用同一模型权重，但不同请求的历史 K/V 值不同，所以 KV 流量大体随请求数增长。只有真实共享前缀等特殊情形可以共享存储，而且查询计算仍有区别。",
+        "followup": "前缀共享怎样影响 prefill 和 decode 的收益边界？"
+      },
+      {
+        "q": "如何严谨表述“GPU 的容量墙阻止并发上升”？",
+        "a": "先固定模型、精度、TP/CP、上下文与输出长度，计算可用于状态的剩余容量，再确认实际页分配和保留策略。得到的是这个配置下的容量上限，不能推广成所有 GPU 的固有限制。",
+        "followup": "权重量化后，容量墙与带宽墙会如何移动？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "mqa",
+        "label": "Fast Transformer Decoding / MQA",
+        "url": "https://arxiv.org/abs/1911.02150",
+        "note": "",
+        "kind": "论文"
+      },
+      {
+        "id": "gqa",
+        "label": "GQA",
+        "url": "https://arxiv.org/abs/2305.13245",
+        "note": "",
+        "kind": "论文"
+      },
+      {
+        "id": "paged-attention",
+        "label": "PagedAttention",
+        "url": "https://arxiv.org/abs/2309.06180",
+        "note": "",
+        "kind": "论文"
+      },
+      {
+        "id": "rope",
+        "label": "RoFormer / RoPE",
+        "url": "https://arxiv.org/abs/2104.09864",
+        "note": "",
+        "kind": "论文"
+      },
+      {
+        "id": "llama2",
+        "label": "Llama 2",
+        "url": "https://arxiv.org/abs/2307.09288",
+        "note": "",
+        "kind": "论文"
+      }
+    ],
+    "takeaways": [
+      "GQA 共享头，不自动减少历史位置。",
+      "KV 容量计算必须包含层数、dtype、复制与元数据。",
+      "逻辑全读、每卡读、全系统外存流量是三个不同概念。",
+      "分页是内存管理机制，稀疏是计算语义。"
+    ]
+  },
+  {
+    "id": "flash-attention",
+    "part": "算法与 Attention",
+    "order": 12,
+    "title": "FlashAttention：从在线 softmax 到分布式合并",
+    "subtitle": "一次推导，同时理解 IO 优化、split-K、CP 合并与编译调度",
+    "minutes": 55,
+    "level": "深入",
+    "tags": [
+      "FlashAttention",
+      "Online softmax",
+      "Tiling",
+      "数值稳定",
+      "Split-K",
+      "CP"
+    ],
+    "lead": "FlashAttention 的核心价值不是背下一段 CUDA 代码，而是学会改变中间结果的表示和存活位置。在数学意义上保留 attention 定义，通过分块与在线归约，避免把巨大的 score/probability 矩阵写到外部内存。以下推导和数值例子可直接用于白板。",
+    "sections": [
+      {
+        "id": "io-problem",
+        "title": "问题的起点：为什么算两次 GEMM 还会很慢",
+        "html": "<p>朴素实现先生成 A=QKᵀ，再把 A 写到外存；softmax 读 A、写 P；PV 再读 P。对单 head、S=32768 的 full attention，完整方阵有 2³⁰ 个元素，BF16 仅一份就是 2 GiB。即使 causal mask 让约一半位置无效，若仍分配完整矩阵，容量也没有相应减半。</p><p>score 矩阵只是为了得到最终 O 的中间量，不是模型必须跨步保留的状态。FlashAttention 利用这个事实，把 Q/K/V 分成片上可容纳的 tiles，只保留当前输出的归约状态；主要思想见 <a href=\"https://arxiv.org/abs/2205.14135\">FlashAttention 论文</a>。它不是把一般 attention 的二次计算量神奇变成线性，而是避免二次规模的中间矩阵外存落地。</p><div class=\"flow\"><div>朴素<br>QK → 写 A → softmax → 写 P → PV</div><b>↓</b><div>分块<br>读 KV tile → 更新小状态 → 丢弃 tile</div><b>→</b><div>最终只写 O<br>以及必要统计量</div></div><p>编译器视角的突破是 live range：A/P 从“整个 kernel 链的全局张量”变成“一个 tile 内短暂存在的值”。这改变了 bufferization、地址分配和调度可优化的空间。</p>"
+      },
+      {
+        "id": "online-state",
+        "title": "推导在线 softmax：维护 m、l 和 u",
+        "html": "<p>对一行 scores x<sub>j</sub> 和 values v<sub>j</sub>，输出为 Σexp(x<sub>j</sub>)v<sub>j</sub>/Σexp(x<sub>j</sub>)。直接求 exp 可能溢出，所以减去最大值。处理完一个前缀后维护 m=max(x)、l=Σexp(x−m)、u=Σexp(x−m)v。这里 u 是未归一化的向量，最后才计算 O=u/l。</p><div class=\"formula\">新 tile 的状态：(mᵦ,lᵦ,uᵦ)<br>m′ = max(m,mᵦ)<br>l′ = exp(m−m′)·l + exp(mᵦ−m′)·lᵦ<br>u′ = exp(m−m′)·u + exp(mᵦ−m′)·uᵦ<br>O = u′ / l′</div><p>为什么必须缩放旧 u 和旧 l？因为它们原来以 exp(m) 为共同因子，现在要统一到 exp(m′)。分子分母一起缩放，比例才不变。只更新最大值、不重标定旧累加量，是一个很典型的“看起来稳定、结果却错”的实现错误。</p><p>初始化可以用 m=−∞、l=0、u=0，但全 mask tile 需要专门处理，避免 −∞−(−∞) 产生 NaN。公式描述合法非空集合时很简洁；工程实现还必须定义空集合、无效 lane 和 padding 的行为。</p>"
+      },
+      {
+        "id": "worked-example",
+        "title": "完整手算：两个 tile 怎样得到同一个答案",
+        "html": "<p>仍用 scores [0,ln2,ln3]、values [2,5,8]。tile A 包含前两项：m<sub>A</sub>=ln2，l<sub>A</sub>=1/2+1=3/2，u<sub>A</sub>=2×1/2+5=6；局部输出 O<sub>A</sub>=4。tile B 只有第三项：m<sub>B</sub>=ln3，l<sub>B</sub>=1，u<sub>B</sub>=8，局部输出 O<sub>B</sub>=8。</p><div class=\"formula\">m = ln3<br>exp(mA−m)=2/3，exp(mB−m)=1<br>l = (2/3)×(3/2)+1 = 2<br>u = (2/3)×6+8 = 12<br>O = 12/2 = 6</div><p>直接平均局部输出得到 (4+8)/2=6，这个例子恰巧相等，因为两个集合的原始权重和都是 3。为了看清陷阱，把第三项 score 改成 ln6：真实输出变为 (2+10+48)/(1+2+6)=20/3，局部输出仍是 4 和 8，简单平均却仍为 6。正确加权必须考虑各 tile 的 softmax 质量，而不是 token 个数或分片个数。</p><p>这是面试里很好的反问点：局部结果“已经归一化”并不意味着可以直接求和。归一化丢失了各片的相对分母，所以还要携带 LSE 或 (m,l)。</p>"
+      },
+      {
+        "id": "merge",
+        "title": "由同一个公式推导 split-K 与 CP",
+        "html": "<p>令每片 r 已经算好归一化输出 O<sub>r</sub>，以及 z<sub>r</sub>=log Σ<sub>j∈r</sub>exp(x<sub>j</sub>)。全局输出可写成以下形式：</p><div class=\"formula\">zmax = maxᵣ zᵣ<br>wᵣ = exp(zᵣ−zmax)<br>O = Σᵣ wᵣ Oᵣ / Σᵣ wᵣ</div><p>单芯片 split-K 把历史切给多个执行块，增加低 batch 下的并行度；跨芯片 CP 把历史切给多个 rank，增加总容量或读取带宽。两者都需要合并局部输出与归一化统计量，因此数学基础相同，但通信成本不同。</p><p>假设一个 query 只有很少 heads，而历史非常长。单块顺序扫完可能不能利用全部硬件；拆成 R 片可以缩短每片扫描，但增加 R 份局部输出、统计量写回和最终合并。如果上下文短，合并成本可能大于并行收益。选择 R 应由 workload 和硬件决定，不能写成“split 越多越好”。</p><p>当前 GLM5Next DSA 的 CP 路径在 P2 后交换 O/LSE，再由 P3 合并，正是这个数学结构的真实工程实例。它也说明为什么单 kernel 的本地 cycle 不包含完整 attention 的跨 rank 延迟。</p>"
+      },
+      {
+        "id": "tiling",
+        "title": "Tile 怎么选：空间、复用和并行是三个约束",
+        "html": "<p>考虑 Q tile 为 B<sub>q</sub>×d、KV tile 为 B<sub>k</sub>×d。片上至少要容纳 Q、K/V、score 子块、输出累加和 m/l；若做双缓冲，还会同时存在下一块 K/V。一个粗略空间估计必须区分 BF16 输入与 FP32 累加，不能把所有元素乘同一个字节数。</p><p>B<sub>q</sub> 变大，一份 KV 可服务更多 queries，IO 复用变好；但输出累加与 score 空间也变大，可能降低可并发程序数量。B<sub>k</sub> 变大，循环与 DMA 启动更少；但归约跨度变长、局部空间增加，并且边界浪费可能变多。prefill 常有足够多 Q 行可并行；decode 的 S=1 则需要在 batch、head 或历史切片上寻找并行度。</p><p>FlashAttention-2 研究了工作分配与非矩阵开销，FlashAttention-3 进一步利用新 GPU 的异步能力，见 <a href=\"https://arxiv.org/abs/2307.08691\">FA2</a>、<a href=\"https://arxiv.org/abs/2407.08608\">FA3</a>。可迁移到 518 的是“让矩阵计算、向量归约和数据搬运形成正确流水”，具体 warp 数、shared-memory swizzle 或指令序列不能直接照抄。</p>"
+      },
+      {
+        "id": "numerics",
+        "title": "Exact 的准确含义：语义一致不代表逐位相同",
+        "html": "<p>FlashAttention 所谓 exact，主要指没有用稀疏化或低秩近似改变标准 attention 定义。分块改变求和顺序，exp/exp2、FP32 累加、输入量化以及输出舍入都可能让结果与另一个实现不逐位一致。<a href=\"https://triton-lang.org/main/getting-started/tutorials/06-fused-attention.html\">Triton 官方 fused-attention 教程</a>可作为实现阅读入口，但某个版本的算子精度不能代替本项目的验证。</p><p>测试应包括：极端分数差、大量相等分数、全 mask 行、最后一个不足 tile、不同历史长度、跨 CP 空片、scale 改变和多步 cache 更新。先用独立高精度数学参考隔离误差，再比较部署允许的容差。只用另一个融合实现作 reference，有可能把共同的错误保留下来。</p><p>如果目标要求 byte equality，就必须固定舍入位置与累加顺序，优化空间会比一般数值容差合同小。若允许误差，也要说明指标是绝对误差、相对误差、归一化误差还是输出 token 一致性；它们回答不同问题。一次 greedy token 相同不足以证明中间状态长期稳定。</p>"
+      },
+      {
+        "id": "compiler-proof",
+        "title": "把在线 softmax 变成一次编译器复盘",
+        "html": "<p>可以沿着一个具体依赖图讲优化：异步搬入 K/V tile → 等待数据可读 → QK → max/sum/exp → PV → 更新输出状态 → 释放旧 tile。下一块的搬运可以提前，但同一块不能在最后一个消费者结束前被覆盖。双缓冲地址轮转与 barrier placement 因此不是普通代码风格问题，而是算法状态的正确性条件。</p><p>检查生成代码时，先看是否意外落地了 score tile，再看是否重载了 Q 或同组 KV，最后看是否把可重叠的搬运和计算串行化。一个 lowering pass 的“更少 copy”可能提高性能，也可能让 alias 更复杂；调度与地址分配必须使用相同的 buffer identity 和生命周期解释。</p><aside class=\"callout\">白板挑战：给你片上空间上限和两个 DMA buffer，画出连续三个 KV tile 的时间线，标清每个 buffer 最早可被覆盖的时刻。再加入跨核消费，指出原来的单核 barrier 为什么可能不再足够。</aside>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "FlashAttention 为什么不需要保存整个 P？",
+        "a": "最终只需要每行的加权和及归一化分母。在线维护 max、缩放分母和缩放分子，能够逐块吸收 K/V 并丢弃本块 scores；这利用了可合并的归约结构。",
+        "followup": "反向传播为什么还会需要重计算或保存额外统计？"
+      },
+      {
+        "q": "为什么更新最大值时必须重标定旧累加量？",
+        "a": "旧 l/u 都在旧 m 的指数基准下，新块可能带来更大最大值。乘 exp(m_old−m_new) 把旧状态转换到同一基准，才能正确相加并避免溢出。",
+        "followup": "如果一个分片完全为空，初始化和合并应如何处理？"
+      },
+      {
+        "q": "CP 的 attention 输出为什么不能直接 all-reduce 求和？",
+        "a": "各片输出在各自 softmax 分母下归一化。必须带 LSE 或等价 max/sum，用全局分母重新加权；直接求和会让分片权重被错误设定。",
+        "followup": "局部已经算好 O 和 LSE，请写出全局合并公式。"
+      },
+      {
+        "q": "FlashAttention 会不会降低模型计算复杂度阶数？",
+        "a": "对一般 dense full attention，QK 与 PV 仍有二次规模的 query-key 交互。主要减少的是外部存储 IO 和中间矩阵占用；不能把 memory-efficient 误说成线性算力复杂度。",
+        "followup": "prefill 与 decode 的 FLOPs 阶数分别如何写？"
+      },
+      {
+        "q": "从 GPU 移植到 518，什么值得复用？",
+        "a": "在线归约公式、分块依赖、数值合同与数据复用结构值得复用；warp/block 映射和指令选择需要重做。最终用本硬件的地址、同步和 trace 证明计划成立。",
+        "followup": "如何证明一个双缓冲改动没有覆盖尚未消费的 KV？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "flash1",
+        "label": "FlashAttention",
+        "url": "https://arxiv.org/abs/2205.14135",
+        "note": "",
+        "kind": "论文"
+      },
+      {
+        "id": "flash2",
+        "label": "FlashAttention-2",
+        "url": "https://arxiv.org/abs/2307.08691",
+        "note": "",
+        "kind": "论文"
+      },
+      {
+        "id": "flash3",
+        "label": "FlashAttention-3",
+        "url": "https://arxiv.org/abs/2407.08608",
+        "note": "",
+        "kind": "论文"
+      },
+      {
+        "id": "triton-attn",
+        "label": "Triton fused-attention tutorial",
+        "url": "https://triton-lang.org/main/getting-started/tutorials/06-fused-attention.html",
+        "note": "2026-10-23 访问",
+        "kind": "官方文档"
+      }
+    ],
+    "takeaways": [
+      "核心归约状态是 max、分母和未归一化输出。",
+      "在线 softmax、split-K 与 CP 合并共享同一数学结构。",
+      "优化收益来自 IO、空间与并行组织，不能只数 GEMM。",
+      "Exact attention 与 bitwise equality 是不同合同。"
+    ]
+  },
+  {
+    "id": "mla-dsa",
+    "part": "算法与 Attention",
+    "order": 13,
+    "title": "MLA 与 DSA：压缩表示，再选择历史",
+    "subtitle": "从低秩吸收到 indexer、TopK、分页 gather 与跨 CP attention",
+    "minutes": 60,
+    "level": "深入",
+    "tags": [
+      "MLA",
+      "DSA",
+      "Indexer",
+      "TopK",
+      "GLM5Next",
+      "CP"
+    ],
+    "lead": "MLA 解决每个历史条目存多少，DSA 解决主 attention 精读哪些条目。把两个问题分开，才能准确解释为什么主 attention 的访问减少了，模型仍然需要保留随长度增长的历史，而且 indexer 也可能成为新的瓶颈。",
+    "sections": [
+      {
+        "id": "latent",
+        "title": "MLA：把大 KV 表示压到一个联合 latent",
+        "html": "<p>设输入 h<sub>t</sub>∈R<sup>H</sup>，先投影出 c<sub>t</sub>∈R<sup>r</sup>，再由不同 head 的升维矩阵产生 K/V。缓存里保留低维 c，而不是所有 heads 展开后的 K/V。低秩联合压缩和位置编码处理见 <a href=\"https://arxiv.org/abs/2405.04434\">DeepSeek-V2 论文</a>；以下用省略 norm 与位置项的教学式子推导吸收。</p><div class=\"formula\">c = Wdown·h<br>kᵢ = Wkᵢ·c，vᵢ = Wvᵢ·c<br>qᵢᵀkᵢ = qᵢᵀWkᵢc = (Wkᵢᵀqᵢ)ᵀc</div><p>因此可先把 query 变换到 latent 空间，再与缓存 c 点积；不必为了每步 decode 把所有历史 c 展开为巨大的 K。类似地，Σp<sub>t</sub>Wv·c<sub>t</sub>=Wv·Σp<sub>t</sub>c<sub>t</sub>，可先在 latent 空间聚合，再做 value 升维。关键是 Wv 对这些历史位置相同且是线性变换。</p><p>如果升维与求和之间夹有不能交换的非线性、位置相关变换或不同量化舍入，不能仅凭这个等式移动计算。数学吸收与实际 kernel 数值合同要同时成立。</p>"
+      },
+      {
+        "id": "tradeoff",
+        "title": "缓存缩小，不等于所有计算都变少",
+        "html": "<p>教学比较：64 个 heads，每 head K/V 都为 128 维，完整 MHA 每 token 为 16384 个元素；若联合 latent 为 512 维且没有额外位置分支，缓存元素数为原来的 1/32。这里没有计 scale、page table 和其他状态。与 GQA 比较时，分母应换成真实 KV heads，不能拿最昂贵 MHA 当所有模型的统一 baseline。</p><p>latent 维度可能大于单 head 的原始 d。吸收后单个 query 与 latent 的点积可能更宽，query 变换与输出升维也有成本。因此 MLA 常体现为“更多结构化计算换更少历史字节”，而不是每项资源都一起下降。短上下文和高 batch 时，最佳执行方式可能与长上下文 decode 不同。</p><p>芯片评估需要至少两条曲线：固定 batch，扫描 context；固定 context，扫描 batch。若只看一个长上下文点，很容易把压缩缓存带来的优势误判成所有场景的绝对优势。编译器也可能需要分别为 prefill 和 decode 选择展开模式、吸收模式或不同 tile。</p>"
+      },
+      {
+        "id": "position",
+        "title": "RoPE 为什么给权重吸收增加麻烦",
+        "html": "<p>如果 k<sub>t</sub>=R<sub>t</sub>Wk·c<sub>t</sub>，R<sub>t</sub> 随历史位置变化，那么 qᵀR<sub>t</sub>Wk 不能一般地吸收到一个对所有 t 都相同的 query 变换中。相对位置的旋转结构可以利用，但不能当成普通常量矩阵随意交换。</p><p>DeepSeek MLA 的设计包含解耦位置分支，以便保留主要 latent 路径的压缩与吸收。内部 GLM5Next 这次读取的 <code>config_next.json</code> 则标明 <code>mla_nope=true</code>、<code>qk_rope_head_dim=0</code>。公开 GLM-5 配置还有非零 RoPE 维度。这意味着画架构图、算 cache 大小时必须明确是哪一个模型版本。</p><p>面试可用这一点展示从公式追到 ABI 的能力：看到“MLA”先询问 latent rank、非位置维度、位置维度、Q 低秩参数、cache dtype，再检查展开/吸收发生的位置。一个名字只定义一类思路，并不定义所有张量。</p>"
+      },
+      {
+        "id": "indexer",
+        "title": "DSA：先廉价检索，再精确计算所选集合",
+        "html": "<div class=\"flow\"><div>当前 hidden</div><b>→</b><div>Indexer Q / 权重<br>与历史 index keys 打分</div><b>→</b><div>TopK 选择<br>逻辑 ID → 物理 slot</div><b>→</b><div>Gather latent KV<br>所选集合上的 attention</div></div><p>DeepSeek DSA 的 lightning indexer 用较轻的表示给历史条目打分，再让主 attention 只处理选出的条目；公开方法定义见 <a href=\"https://arxiv.org/html/2512.02556v1#S2.SS1\">DeepSeek-V3.2 架构</a>。教学形式为 I(t,s)=Σ<sub>j</sub>w<sub>tj</sub>·ReLU(q<sub>tj</sub>·k<sub>s</sub>)，选择集合 J<sub>t</sub>=TopK(I(t,:))，然后在 J<sub>t</sub> 上重新做主 attention 的 softmax。</p><p>indexer 分数并不是主 attention 概率，也不能直接拿它作为最后的 value 加权。它承担的是选择任务。稀疏集合之外的主 attention 贡献被排除，这是模型算法的一部分，不能对任意 dense checkpoint 随意打开 TopK 就声称保持原模型等价。</p><p>内部 GLM5Next 还含 kpool 压缩、尾部处理和特定量化布局。公开 DSA 论文能帮助理解思想，但不能代替这些本地实现的索引合同。</p>"
+      },
+      {
+        "id": "complexity",
+        "title": "DSA 的复杂度：不要把 indexer 从账本里删掉",
+        "html": "<p>主 attention 每个 query 只处理 k 个历史条目时，主路径从 O(L·d) 变成 O(k·d)。但是若 indexer 仍扫描所有历史 index keys，它仍有随 L 增长的工作。若 prefill 的每个 query 都做全历史 indexer，累计检索打分仍可能包含二次项；只是维度、精度与常数比主 attention 小。</p><div class=\"formula\">T_DSA ≈ T_projection + T_index_scan(L) + T_topk(L,k)<br>　　　 + T_gather(k) + T_main_attention(k) + T_merge</div><p>存储也要区分“保留量”和“本步读取量”：为将来 query 的不同选择，通常仍需保留全历史 latent 与 index keys；不能因为本步选择 2048 项，就把长期缓存算成固定 2048 项。缓存何时可淘汰必须有额外算法或系统语义。</p><p>对于 518，这会把优化重点从连续大块读写部分转向 TopK、比较/归约、页表解析、gather、精度转换和跨 CP 候选合并。若 tensor 算力很强但这些辅助路径弱，压缩主计算后反而会暴露长尾。应观察各阶段实际占比，而不是只比较 main-attention FLOPs。</p>"
+      },
+      {
+        "id": "actual-pipeline",
+        "title": "本机真实路径：三计算阶段，三次 collective",
+        "html": "<p>在本次固定 SHA 的 <code>dev_dsa_deepfused_cp4_dp4.py</code> 中，<code>RankLocalDSA.forward_zeus()</code> 明确执行如下序列。该结论来自当前源码读取，不是本轮重新跑出的性能结果。</p><table><thead><tr><th>步骤</th><th>职责</th><th>必须保留的信息</th></tr></thead><tbody><tr><td>P1</td><td>投影、KV/index 更新、局部 TopK</td><td>query、候选 score/ID、当前请求状态</td></tr><tr><td>CP all-gather</td><td>汇总 query/候选</td><td>布局与各 CP 来源</td></tr><tr><td>P2</td><td>TopK 合并、gather、局部 attention</td><td>物理 slots、局部 O/LSE</td></tr><tr><td>CP all-gather</td><td>交换 O/LSE</td><td>归一化统计，不能只有 O</td></tr><tr><td>P3</td><td>合并 attention、V/O 投影</td><td>最终 hidden 分片</td></tr><tr><td>world all-gather</td><td>形成调用方所需输出布局</td><td>DP/CP 对应关系</td></tr></tbody></table><p>“三个 kernel”只计计算 launch，不表示没有通信。源文件是 <code>sgl_dsa_proj_indexer_topk1.py</code>、<code>sgl_dsa_topk2_gather_attn.py</code>、<code>sgl_dsa_absorb_proj.py</code>。历史拆分入口和其他模型的 CSA 路径不能混入这条当前 recipe。</p><p>准备阶段打包权重并分配持久 buffers；capture/replay 期间地址稳定，batch/history/request 元数据通过固定地址更新。空 DP 仍要参加匹配的 collective，否则某些 rank 提前退出可能造成死锁。这是模型状态、分布式运行时和 Graph 约束交汇的地方。</p>"
+      },
+      {
+        "id": "cache-layout",
+        "title": "真实 cache 例子：512 个 FP8 值不是 512 字节总账",
+        "html": "<p>本地 <code>TokenPool</code> 的示例绑定把每个 512 维 latent 分成 4 组 128 元素，每组有 FP32 scale，形成 512+4×4=528 字节的 packed row；P1 源码的 cache stride 也可见 528。这个数字描述当前这条 packed KV ABI，不能拿来代表 index cache 或所有 GLM 版本。</p><p>由于 kpool=4，TopK 的候选单位、最终展开 token 数以及不足组的尾部必须分别解释。当前 runner 的独立 CPU 检查从全局 pooled scores 选至多 512 个完整组，每组展开 4 token，再加入不足 4 token 的 live tail；因此配置 <code>index_topk=2048</code> 不代表始终恰好读取 2048 个 token，长历史下还可能有额外 1–3 个 tail token。发布性能表时要附实际选取集合与 tail 语义，不要只把参数名贴成最终 attention 长度。</p><p>验证最好拆为三个独立问题：选出的逻辑集合对不对；逻辑 ID 映射到物理 slots 对不对；这些 slots 对应的数据和 scale 是否被正确解码。若只对最终输出做一次 allclose，索引错误有时会被随机小权重或重复数据掩盖。真实请求重排、跨页、满组与未满 tail 是必要边界。</p>"
+      },
+      {
+        "id": "interview-story",
+        "title": "将 DSA 讲成一个架构判断，而不是缩写清单",
+        "html": "<p>可按这个顺序讲：“旧 full-attention 的主要压力是历史读取；MLA 减少每条历史数据；DSA 又减少主 attention 精读的条目，但引入 indexer、TopK 和不规则地址；因此硬件不能只加强大矩阵吞吐，还需要足够向量归约、索引与可编程数据搬运能力。”这是一条因果链，而不是把模型名串起来。</p><p>随后指出实际工程边界：公开 GLM-5 和内部 GLM5Next 不同；CP4 的本地 attention 必须携带 LSE；packed cache 的 scale 与 slot 映射是 ABI；Graph 的静态地址与动态请求通过元数据解耦。最后给出自己真正负责过的编译或 FFN 案例，明确 attention 哪些是本人实现、哪些是协作理解，不替同事认领贡献。</p><aside class=\"callout\">深入练习：假设 indexer 已占 40% 时间，把主 attention 加速两倍，整体上限是什么？若其他部分占 60%，其中主 attention 只有 30%，总速度仅 1/(0.7+0.3/2)≈1.176 倍。先定义分母，再讨论“加速”。</aside>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "MLA 和 GQA 的本质区别是什么？",
+        "a": "GQA 减少独立 KV heads；MLA 用联合低秩表示存储历史，并通过线性变换恢复或吸收 K/V。二者的缓存结构、query 计算维度和实现成本不同，不能只比较 heads 数。",
+        "followup": "r=512、单 head d=128 时，吸收模式有什么计算代价？"
+      },
+      {
+        "q": "为什么 value 升维可以移到 attention 加权之后？",
+        "a": "因为同一 Wv 是线性映射，Σp_jWvc_j=WvΣp_jc_j。若中间存在位置相关变换、非线性或需要保持特定量化舍入点，则必须重新验证是否能交换。",
+        "followup": "为什么 RoPE 会使 key 路径吸收更复杂？"
+      },
+      {
+        "q": "DSA 是 O(k) decode 吗？",
+        "a": "只对选中集合执行的主 attention 可写成 O(kd)，但整个 decode 还包括随历史增长的 indexer 扫描、TopK、投影、gather 与通信。不能省略这些成本把整个模型称为长度无关。",
+        "followup": "当 L 翻倍但 k 不变时，哪些阶段仍可能变慢？"
+      },
+      {
+        "q": "DSA 只取 top-k，是不是可以只保存这 k 项？",
+        "a": "通常不能。下一 query 可能选择不同历史项，所以完整 latent/index 历史仍可能需要保留。固定 k 降低本步主 attention 读取与计算，不自动把长期存储变为常量。",
+        "followup": "若要淘汰历史，需要增加什么模型或系统假设？"
+      },
+      {
+        "q": "本机 DSA 三 kernel 的完整边界是什么？",
+        "a": "当前 runner 的计算为 P1 投影/index/TopK、P2 合并/gather/局部 attention、P3 合并与输出投影；中间及末尾有三次 collective。kernel 计时和完整子层延迟不能混用。",
+        "followup": "为什么需要 O/LSE；为什么空 DP 仍然参与通信？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "deepseek-v2",
+        "label": "DeepSeek-V2 / MLA",
+        "url": "https://arxiv.org/abs/2405.04434",
+        "note": "",
+        "kind": "论文"
+      },
+      {
+        "id": "deepseek-dsa",
+        "label": "DeepSeek-V3.2 / DSA",
+        "url": "https://arxiv.org/html/2512.02556v1",
+        "note": "",
+        "kind": "论文"
+      },
+      {
+        "id": "local-dsa-runner",
+        "label": "GLM5Next 当前 DSA runner",
+        "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_dsa_deepfused_cp4_dp4.py",
+        "note": "2026-10-23 本地读取；原仓库访问权限独立",
+        "kind": "源码"
+      },
+      {
+        "id": "local-dsa-kernels",
+        "label": "当前 DSA 三阶段实现",
+        "url": "https://github.com/DarronTam/torch_zeus/tree/68f19fa0a159b8ff861dc9cf736d9c0ae64906ba/sgl-kernel-zeus-triton/python/glm53_flash/dsa",
+        "note": "2026-10-23 本地读取；没有在本轮重新执行性能测试",
+        "kind": "源码"
+      }
+    ],
+    "takeaways": [
+      "MLA 压缩表示，DSA 选择位置，二者可以叠加。",
+      "保留全部历史与本步只读取少量历史并不矛盾。",
+      "Indexer、TopK、gather 与通信必须进入总账。",
+      "从模型公式到 528-byte packed row，必须贯通逻辑语义和 ABI。"
+    ]
+  },
+  {
+    "id": "kda-linear",
+    "part": "算法与 Attention",
+    "order": 14,
+    "title": "KDA：把长历史变成可更新的矩阵记忆",
+    "subtitle": "从线性 Attention、Delta rule 到当前 518 BF16 state ABI",
+    "minutes": 65,
+    "level": "深入",
+    "tags": [
+      "Linear Attention",
+      "DeltaNet",
+      "KDA",
+      "Stateful kernel",
+      "BF16",
+      "Graph"
+    ],
+    "lead": "KDA 最容易被一句“线性 Attention 没有 KV cache”讲错。它有持久状态，只是状态通常不随上下文长度线性增长；其更新顺序、精度、布局和请求槽位都属于模型执行语义。先手算一次矩阵记忆更新，再讨论融合和硬件。",
+    "sections": [
+      {
+        "id": "linear",
+        "title": "线性 Attention 的第一步：交换求和顺序",
+        "html": "<p>把 softmax attention 换成具有可分解特征映射的相似度后，可以维护固定形状的历史摘要。例如正特征 φ 下，分子 Σ(q′ᵀk′<sub>j</sub>)v<sub>j</sub> 可写为 q′ᵀ(Σk′<sub>j</sub>v<sub>j</sub>ᵀ)。括号内是 key-value 外积的累积状态。带归一化时还要维护 Σk′<sub>j</sub>。基础思路见 <a href=\"https://arxiv.org/abs/2006.16236\">Transformers are RNNs</a>。</p><div class=\"formula\">Sₜ = Sₜ₋₁ + kₜvₜᵀ<br>oₜ = Sₜᵀqₜ<br>S 的逻辑 shape：[dk,dv]</div><p>上式是帮助理解矩阵记忆的未归一化简化形式，不是把标准 exp-softmax 精确改写成固定状态。有限维状态会把很多历史关联压进同一矩阵，存在信息干扰与表达能力限制。因此“线性”既是复杂度变化，也是模型结构变化，需要训练与质量验证。</p><p>这里的外积 k·vᵀ 将当前 key 对应的 value 写入记忆，读出 Sᵀq 相当于用 query 查询这些关联。它很像一个在推理期间更新的小线性映射，但状态是当前请求的激活记忆，不是模型训练权重。</p>"
+      },
+      {
+        "id": "delta",
+        "title": "Delta rule：只修正当前记忆预测错的部分",
+        "html": "<p>简单累加会不断叠加相似 key 的 value。Delta rule 先用旧状态预测当前 value，再写入残差。令 v̂=Sᵀk，误差 e=v−v̂，更新 S←S+βkeᵀ。它等价于对 1/2‖Sᵀk−v‖² 做一步梯度更新；相关并行化讨论见 <a href=\"https://arxiv.org/abs/2406.06484\">DeltaNet 论文</a>。</p><div class=\"formula\">Sₜ = (I−βₜkₜkₜᵀ)Sₜ₋₁ + βₜkₜvₜᵀ</div><p>手算一个 2×2 例子：S=[[1,0],[0,1]]，k=[1,0]，v=[3,4]，β=1/2。旧预测为 [1,0]，残差为 [2,4]；外积增量为 [[1,2],[0,0]]，新 S=[[2,2],[0,1]]。若 q=[1,0]，输出为 [2,2]。它朝新 value 移动，但因 β=1/2 并没有一步覆盖成 [3,4]。</p><p>这个例子还能检查矩阵方向：当 S 的逻辑布局是 [d<sub>k</sub>,d<sub>v</sub>] 时，增量是 key×value-residual 的外积；若物理存储转置成 [d<sub>v</sub>,d<sub>k</sub>]，代码中的外积顺序也随之变化。方阵 shape 相等不会暴露方向错误。</p>"
+      },
+      {
+        "id": "gate",
+        "title": "从 Gated DeltaNet 到 KDA：遗忘变成按通道控制",
+        "html": "<p>Gated DeltaNet 在 Delta 更新前增加遗忘，基础方法见 <a href=\"https://arxiv.org/abs/2412.06464\">Gated Delta Networks</a>。KDA 把标量遗忘细化为 key 通道上的向量门控；具体模型与算法见 <a href=\"https://arxiv.org/abs/2510.26692\">Kimi Linear</a>。设 D=Diag(α)，可按下面顺序理解一拍更新：</p><div class=\"formula\">S̃ = D·Sprev<br>v̂ = S̃ᵀk<br>e = v−v̂<br>Snew = S̃ + β·k·eᵀ<br>o = Snewᵀq</div><p>“先 decay，再预测，再纠正，最后读出”不能任意交换。沿用上一节初始 S=I，设 α=[0.5,1]、k=[1,0]、v=[3,4]、β=0.5。decay 后 S̃=diag(0.5,1)，预测 [0.5,0]，更新后第一行为 [1.75,2]。若错误地先用未 decay 的 S 预测，再做别的操作，就不是同一个递推。</p><p>逐通道遗忘允许不同 key 维度保留不同时间尺度的信息。可把它理解成“不同抽屉有不同遗忘速度”，但不能把每个通道机械地解释为某个人类语义概念。训练决定这些空间如何使用。</p>"
+      },
+      {
+        "id": "prefill-chunks",
+        "title": "递归是否意味着 prefill 必须逐 token 串行",
+        "html": "<p>单步 decode 的自然形式是依次更新 S，但 prefill 已知整段输入，能够把多步转移组织成 chunkwise 计算。抽象地写 S<sub>t</sub>=A<sub>t</sub>S<sub>t−1</sub>+B<sub>t</sub>；两个转移可合成为 A₂A₁ 与 A₂B₁+B₂。这揭示了并行扫描的可能性，但直接构造一般稠密 A 会带来很高成本。</p><p>Delta/KDA 的转移具有对角与低秩结构，所以可以用专门 chunkwise 算法把大量工作转为矩阵运算，保留跨 chunk 的状态传递。Kimi Linear 的方法专门利用这种结构；本教程不把它简化成“一行 associative scan 就自动高效”。实际还要考虑块内因果约束、门控累计量和数值稳定。</p><p>硬件上，prefill 的 chunk 可以有较高 tensor 利用率；decode 只有一拍状态更新，读改写、向量归约和投影固定开销更突出。一个优秀的 decode 单 kernel，并不能自动证明同一实现适合长 prefill。模型框架通常需要区分两条执行路径。</p>"
+      },
+      {
+        "id": "real-graph",
+        "title": "GLM5Next KDA 子层：递归只是中间一段",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 760 260\" role=\"img\" aria-label=\"GLM5Next KDA 投影递归与输出图\"><rect width=\"760\" height=\"260\" rx=\"16\" fill=\"#111d32\"/><g font-family=\"sans-serif\" fill=\"#eaf0ff\" text-anchor=\"middle\" font-size=\"15\"><rect x=\"18\" y=\"88\" width=\"105\" height=\"60\" rx=\"8\" fill=\"#255b66\"/><text x=\"70\" y=\"112\">hidden</text><text x=\"70\" y=\"133\">[B,4096]</text><rect x=\"157\" y=\"22\" width=\"173\" height=\"55\" rx=\"8\" fill=\"#324b82\"/><text x=\"244\" y=\"45\">QKV 投影 + 短卷积</text><text x=\"244\" y=\"65\">q / k / v</text><rect x=\"157\" y=\"100\" width=\"173\" height=\"55\" rx=\"8\" fill=\"#324b82\"/><text x=\"244\" y=\"124\">β 与 decay gate 投影</text><text x=\"244\" y=\"145\">sigmoid / safe gate</text><rect x=\"365\" y=\"76\" width=\"162\" height=\"92\" rx=\"8\" fill=\"#57457c\"/><text x=\"446\" y=\"100\">KDA 递归</text><text x=\"446\" y=\"124\">读旧 state</text><text x=\"446\" y=\"146\">写新 state</text><rect x=\"563\" y=\"76\" width=\"177\" height=\"92\" rx=\"8\" fill=\"#73572b\"/><text x=\"652\" y=\"101\">Gated RMSNorm</text><text x=\"652\" y=\"125\">Output projection</text><text x=\"652\" y=\"148\">TP SUM 在调用层</text><path d=\"M123 105L157 50M123 121H157M330 50L365 105M330 126H365M527 122H563\" stroke=\"#79d4ba\" stroke-width=\"2\" fill=\"none\"/><text x=\"376\" y=\"221\">另有 output gate 投影；所有路径都必须计入完整子层成本</text></g></svg><figcaption>概念数据流。当前部署 recipe 将这些本地计算融合为一个双核设备 kernel；图中的盒子不是 launch 数。</figcaption></figure><p>本地 config 的 KDA 为 64 heads、d<sub>k</sub>=d<sub>v</sub>=128，TP4 后每 rank 为 16 heads，投影宽 P<sub>local</sub>=2048。输入 hidden 仍为 H4096；Q/K/V 合计宽为 6144。短卷积宽度为 4，需要保存 3 个历史 tap。除此之外还有 β 投影、decay gate 的低秩投影、output gate 与输出投影。</p><p>当前 runner 的 CPU 参考先对 Q/K 做 L2 norm，再用缩放后的 Q 读出；safe gate 把 log-decay 限制在配置范围内。它使用独立数学参考表达这一递推，但设备计算仍需自己验证。把整个子层性能简写成“一个 state matvec”会严重漏算投影和门控。</p>"
+      },
+      {
+        "id": "state-abi",
+        "title": "当前 ABI：BF16、转置布局、独立槽位",
+        "html": "<p>2026-10-23 核实的 active recipe 是 v3.1：<code>fused_kda_decode</code>，<code>state_dtype=bfloat16</code>、<code>gpswap=True</code>、<code>safe_gate=True</code>。原生状态为 <code>rec[pool,16,Dv,Dk]</code>，卷积状态为 <code>conv[pool,3,6144]</code>。这里 Dv 与 Dk 恰好都是 128，但轴的含义不同，不能省略。</p><p>历史文档中的 FP32 <code>[pool,head,Dk,Dv]</code> 与 channel-major 卷积状态，是旧路径。当前 runner 提供显式 legacy pool 导入转换；旧 pool 不会自动随新路径更新。写教程时必须给版本，不能把旧文档的“FP32 更稳”与当前设备实际 BF16 交叉拼成一条不存在的实现。</p><p>每次 batch 的 cache indices 必须有效且互不重复；否则两个 token 可能并发读改写同一请求状态，形成竞争。请求重排允许改变索引顺序，但同一请求的时间顺序仍要成立。Graph replay 需要保持 pool、workspace、权重和输出的生命周期；并发图用不同 call_slot 的工作区，不能只看 tensor shape 一样就复用同一缓冲。</p><p>这类状态 kernel 的测试要同时检查输出和新 state。只检查当前输出会漏掉“这一拍输出近似正确、下一拍从错误状态继续”的问题。</p>"
+      },
+      {
+        "id": "memory",
+        "title": "“固定状态”有多大：算一次真实的 TP-local 空间",
+        "html": "<div class=\"formula\">单请求、单 KDA 层、单 TP rank 的 rec<br>= 16 × 128 × 128 × 2 bytes = 512 KiB<br>conv = 3 × 6144 × 2 bytes = 36 KiB<br>合计 = 548 KiB（不含权重、workspace、对齐与保留槽）</div><p>34 层仅 rec 是 17 MiB/rank/request，conv 另为 1.1953125 MiB，总计约 18.195 MiB。它与上下文长度无关，但随并发请求数、KDA 层数、head 数和状态精度增长。“O(1)”只是相对于 L 的阶数，绝不表示零成本或一定能全部留在片上。</p><p>若每步都从外存读取并写回全部 rec，则仅 rec 最低逻辑读写量约为 1 MiB/层/rank/request，34 层就是 34 MiB。真实外存事务还取决于驻留、cache、tiling 与执行方式；这是成本模型，不是测得带宽。每步的状态更新还要进行乘、归约和外积，因此不能看到状态字节少就直接断言 attention 已没有瓶颈。</p><p>模型从 GQA 转向 KDA 混合后，随 L 增长的缓存项减少，容量墙可能后移；同时每步固定 state 与投影成本占比上升，延迟对 L 的斜率可能变小。剩余 DSA 层和 indexer 仍随 L 变化，整模型不会自动变成完全水平线。</p>"
+      },
+      {
+        "id": "accuracy",
+        "title": "BF16 持久状态：一次 allclose 不够",
+        "html": "<p>状态每步写回 BF16 会引入舍入，下一步又以这个舍入后的状态为输入。长期误差行为由门控、归约顺序、输入分布和循环长度共同决定，不能拿单步 FP32 临时计算推断持久状态等效 FP32。当前 recipe 的选择是工程事实，质量是否满足目标则需要相应测试证据。</p><p>可分四层验证：独立单步数学参考验证更新顺序；连续多步固定输入验证 state 演化；真实模型 capture 或真实请求验证分布与质量；Graph/eager 对比验证固定地址及状态管理。四者不能相互替代。特别是 graph 与 eager 逐位一致，证明的是同一实现两种调度模式一致，并不证明二者共同的算法没有错误。</p><p>对编译器而言，BF16 持久 state 还是写回时机和类型转换的合同。移动 cast、让某个融合延后舍入、改变 state 的 transpose，都可能影响后续每一步。若要优化这种算子，首先冻结 ABI 和 reference，再用精度、生命周期与真实硬件证据逐层收敛。</p>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "KDA 与标准 softmax attention 是等价变换吗？",
+        "a": "不是。KDA 使用有限矩阵状态与门控 delta 更新，表达和记忆机制与显式历史 softmax attention 不同。它需要在模型训练与质量评估中成立；编译器不能把任意 softmax attention 自动替换成 KDA。",
+        "followup": "为什么混合模型仍保留部分 full/global attention 层？"
+      },
+      {
+        "q": "Delta rule 为什么要减去旧预测？",
+        "a": "旧状态已包含部分 key-value 关联，写入残差可以修正而非盲目重复累加。对平方重构误差求梯度，得到 βk(v−Sᵀk)ᵀ，直接说明了更新的方向。",
+        "followup": "请手算一个 2×2 state 的更新并核对轴。"
+      },
+      {
+        "q": "KDA 的“常量内存”怎样解释才准确？",
+        "a": "相对于上下文长度，固定维度 state 不增长；但它随 B、层数、heads、dk·dv 与 dtype 增长。当前 TP-local 单请求单层 rec 仍有 512 KiB，不能视作零成本。",
+        "followup": "如果 state 全部读写外存，最低流量是多少？"
+      },
+      {
+        "q": "为什么 Dk=Dv 时布局迁移更危险？",
+        "a": "因为转置前后 shape 相同，类型检查无法发现语义轴错置。旧 [Dk,Dv] 与当前 [Dv,Dk] 必须显式迁移，并用有方向性的非对称数值检查。",
+        "followup": "只用全零 state 测迁移有什么盲点？"
+      },
+      {
+        "q": "重复 cache index 会有什么问题？",
+        "a": "两个活跃 token 会读改写同一个 state 槽位，可能发生竞争或破坏时间顺序。并发执行中需要有效且唯一的索引，跨步还要保证同请求序列化与 slot 回收正确。",
+        "followup": "Graph replay 如何安全处理请求退出和槽位复用？"
+      },
+      {
+        "q": "当前 KDA 一个 kernel 是否已经包含 TP 通信？",
+        "a": "本地 forward_partial_zeus 只做融合计算；调用层需要一次 TP SUM。forward_zeus 在配置 group 时执行 all-reduce。因此本地 kernel cycle 与完整子层延迟的边界不同。",
+        "followup": "怎样避免在两层 wrapper 中重复 all-reduce？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "linear-rnn",
+        "label": "Transformers are RNNs",
+        "url": "https://arxiv.org/abs/2006.16236",
+        "note": "",
+        "kind": "论文"
+      },
+      {
+        "id": "delta",
+        "label": "Parallelizing Linear Transformers with the Delta Rule",
+        "url": "https://arxiv.org/abs/2406.06484",
+        "note": "",
+        "kind": "论文"
+      },
+      {
+        "id": "gdn",
+        "label": "Gated Delta Networks",
+        "url": "https://arxiv.org/abs/2412.06464",
+        "note": "",
+        "kind": "论文"
+      },
+      {
+        "id": "kimi-linear",
+        "label": "Kimi Linear / KDA",
+        "url": "https://arxiv.org/abs/2510.26692",
+        "note": "",
+        "kind": "论文"
+      },
+      {
+        "id": "local-kda-runner",
+        "label": "GLM5Next 当前 KDA runner",
+        "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_linear_attn_fused_tp4_dp4.py",
+        "note": "2026-10-23 本地核实；原仓库访问权限独立",
+        "kind": "源码"
+      },
+      {
+        "id": "local-kda-kernel",
+        "label": "KDA v3.1 当前融合实现",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/68f19fa0a159b8ff861dc9cf736d9c0ae64906ba/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py",
+        "note": "当前 BF16 state 配方；本轮未重新执行设备验证",
+        "kind": "源码"
+      }
+    ],
+    "takeaways": [
+      "KDA 用固定形状矩阵记忆替代显式全历史，不等于没有状态。",
+      "递推顺序是 decay→预测→delta 更新→读出。",
+      "状态布局、精度、索引唯一性与生命周期都属于 ABI。",
+      "短步数正确与长期模型质量需要不同证据。"
+    ]
+  },
+  {
+    "id": "glm5next-architecture",
+    "part": "算法与 Attention",
+    "order": 15,
+    "title": "GLM5Next 实例：让算法演进回答硬件问题",
+    "subtitle": "45 层真实配置、混合状态账本、低并发延迟与高并发吞吐的条件性判断",
+    "minutes": 55,
+    "level": "深入",
+    "tags": [
+      "GLM5Next",
+      "模型部署",
+      "Roofline",
+      "容量墙",
+      "CUDA 对比",
+      "架构判断"
+    ],
+    "lead": "这一章把前面五章落到本地真实配置，并练习一种资深工程师的表达：先钉住模型与版本，再计算资源账本，最后给出需要 trace 验证的预测。所有性能形状图都是机制示意，本轮没有重新测量 518 或 H200。",
+    "sections": [
+      {
+        "id": "identity",
+        "title": "首先区分内部 GLM5Next 与公开 GLM-5",
+        "html": "<table><thead><tr><th>字段</th><th>内部 GLM5Next 当前 next 配置</th><th>公开 GLM-5 官方配置</th></tr></thead><tbody><tr><td>model_type</td><td>glm5_next</td><td>glm_moe_dsa</td></tr><tr><td>hidden size</td><td>4096</td><td>6144</td></tr><tr><td>主干层数</td><td>45</td><td>78</td></tr><tr><td>routed experts</td><td>288</td><td>256</td></tr><tr><td>每 token 专家数</td><td>8</td><td>8</td></tr><tr><td>Attention 主干</td><td>34 KDA + 11 full-attn/DSA 层</td><td>官方 GLM DSA 模型配置</td></tr><tr><td>MLA 位置维</td><td>qk_rope_head_dim=0；mla_nope=true</td><td>qk_rope_head_dim=64</td></tr></tbody></table><p>内部信息来自固定 SHA 的 <code>model_state_dev/glm5next_modules/configs/config_next.json</code>；公开信息来自 <a href=\"https://huggingface.co/zai-org/GLM-5/blob/main/config.json\">官方 config</a>，访问日期为 2026-10-23。公开报告见 <a href=\"https://arxiv.org/abs/2602.15763\">GLM-5 技术报告</a>。这两者不能用同一张参数表代替。</p><p>本地运行配置另称其为 GLM-5-Next 300B；本教程沿用项目标签，不声称本轮读取全部 checkpoint 权重后重新精确统计了参数总量。<code>num_nextn_predict_layers=1</code> 也不应不加区分地并入每个普通 decode token 的 45 层主干成本。</p>"
+      },
+      {
+        "id": "layer-map",
+        "title": "45 层的真实排列：Attention 和 FFN 是两条轴",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 760 240\" role=\"img\" aria-label=\"GLM5Next 45 层的 KDA DSA 与 Dense MoE 分布\"><rect width=\"760\" height=\"240\" rx=\"16\" fill=\"#111d32\"/><g fill=\"#edf2ff\" font-family=\"sans-serif\" font-size=\"15\" text-anchor=\"middle\"><text x=\"106\" y=\"34\">层索引</text><text x=\"236\" y=\"34\">0 / 1 / 2</text><text x=\"397\" y=\"34\">3</text><text x=\"569\" y=\"34\">4 ... 43</text><text x=\"699\" y=\"34\">44</text><text x=\"82\" y=\"83\">Attention</text><rect x=\"168\" y=\"55\" width=\"142\" height=\"44\" rx=\"6\" fill=\"#255b66\"/><text x=\"240\" y=\"83\">KDA × 3</text><rect x=\"329\" y=\"55\" width=\"132\" height=\"44\" rx=\"6\" fill=\"#73572b\"/><text x=\"395\" y=\"83\">DSA</text><rect x=\"478\" y=\"55\" width=\"171\" height=\"44\" rx=\"6\" fill=\"#324b82\"/><text x=\"565\" y=\"83\">每 4 层重复 3:1</text><rect x=\"665\" y=\"55\" width=\"75\" height=\"44\" rx=\"6\" fill=\"#255b66\"/><text x=\"702\" y=\"83\">KDA</text><text x=\"82\" y=\"146\">FFN</text><rect x=\"168\" y=\"117\" width=\"142\" height=\"44\" rx=\"6\" fill=\"#57457c\"/><text x=\"239\" y=\"146\">Dense × 3</text><rect x=\"329\" y=\"117\" width=\"411\" height=\"44\" rx=\"6\" fill=\"#344c65\"/><text x=\"535\" y=\"146\">MoE × 42（第 3 ... 44 层）</text><text x=\"380\" y=\"205\">同一层同时有一个 Attention 子层和一个 FFN 子层</text></g></svg><figcaption>根据当前配置数组重绘，索引从 0 开始。34+11 与 3+42 是同一 45 层的两个分类，不应相加成 90 层。</figcaption></figure><p><code>full_attn_layers</code> 明确为 3、7、11、15、19、23、27、31、35、39、43，其他主干层在 <code>kda_layers</code> 中，共 34 层。<code>first_k_dense_replace=3</code> 表示前三层 dense FFN，其余 42 层为 MoE；具体执行仍需与当前模型 forward 的分支规则一致。</p><p>本次信息来自配置读取，而不是从旧性能截图的乘数反推。这样可以把历史“34 KDA / 11 DSA”的记忆线索升级为当前源码证据。同时保留边界：模型配置字段、模块 runner、完整模型实际选择的分支是不同层次，部署时还要检查启动参数是否覆盖配置。</p>"
+      },
+      {
+        "id": "resource-ledger",
+        "title": "混合模型的状态账本：固定项 + 随长度增长项",
+        "html": "<div class=\"formula\">State(B,L) ≈ B·[34·StateKDA + 11·StateDSA(L)]<br>另加权重、通信 buffers、workspace、索引、页面碎片与保留容量</div><p>KDA 的单层状态约随 h·d<sub>k</sub>·d<sub>v</sub> 增长，不随 L 增长；DSA 的 latent/index 历史通常仍随 L 增长。当前 packed latent row 为 528 字节，所以单请求单 DSA 层、L=65536 的逻辑 latent 数据是 33 MiB，11 层为 363 MiB，未加 index cache、页表和保留空间。CP4 理想均分后每 rank 约 90.75 MiB，但实际页面预算和请求复用规则还需单独计入。</p><p>KDA 前章给出的约 18.195 MiB/rank/request 与上面 latent 项可以作为第一版容量估计，但不能直接当服务端可分配值：不同层使用的组映射、pool 预留、guard、并发 workspace 和权重布局都会改变实际占用。把 per-request、per-rank、per-DP-group 三个单位写清楚，才有可比性。</p><p>从架构上看，减少 full-history 层数与压缩每 token 表示，会让长度相关容量项大幅变化。这解释了为什么立项阶段按 GQA 得到的“先撞容量墙”判断，必须在模型改成 KDA/DSA 后重新评估，而不是沿用旧图。</p>"
+      },
+      {
+        "id": "concurrency",
+        "title": "低并发与高并发：两个机制都要算",
+        "html": "<p>用户描述的观察可以作为一个待验证机制：低并发时，大权重读取和小 M 算子使算术强度低；增加并发后，权重在更多 token 间共享，程序数量增加，GPU 可能利用更多 SM/warps 隐藏延迟。对计算资源较少、已有较高占用的设备，继续加 batch 的主要收益可能来自 kernel 内部摊销，随后更早受 tensor 或 vector 吞吐限制。</p><p>但“GPU 低并发所有 SM 都空转”不是严格描述。可能是活跃 SM 少，也可能大量 SM 有工作但等待内存、依赖或同步；甚至小 batch 的某个大投影已充分占用 GPU。低 utilization、低 occupancy、低 achieved FLOPs 是三个指标，不能互相代替。</p><div class=\"formula\">Tstep(B,L) ≳ max(Ftensor(B,L)/Peff, Fvector(B,L)/Veff,<br>　　　　　　　　　Bytes(B,L)/BWeff) + 未被隐藏的 launch / sync / comm<br>Throughput ≈ 本轮实际生成 token 数 / Tstep</div><p>Peff、Veff、BWeff 都是当前工作负载下的有效值。推断“518 从 B≈2 后收益主要来自摊销”需要来自该 profile 的 sweep 和 trace，本文保留为用户经验假设，未把它写成普适硬件常数。GPU 不好做低延迟也应落到具体 kernel、互联和服务策略，不能只按产品类别判断。</p>"
+      },
+      {
+        "id": "curve",
+        "title": "一张机制图：容量墙与计算饱和并非同一堵墙",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 760 280\" role=\"img\" aria-label=\"非实测并发吞吐机制示意\"><rect width=\"760\" height=\"280\" rx=\"16\" fill=\"#111d32\"/><g font-family=\"sans-serif\" font-size=\"14\" fill=\"#eaf0ff\"><path d=\"M70 225H708M70 225V36\" stroke=\"#a7b4ca\" stroke-width=\"2\" fill=\"none\"/><text x=\"300\" y=\"260\">活动并发 B（同上下文长度）</text><text x=\"18\" y=\"32\">吞吐</text><path d=\"M77 218C130 160 200 115 278 106S440 103 650 103\" stroke=\"#73d7b0\" stroke-width=\"4\" fill=\"none\"/><path d=\"M77 218C180 193 265 150 352 101S526 54 672 54\" stroke=\"#82aaff\" stroke-width=\"4\" fill=\"none\"/><path d=\"M385 225V37\" stroke=\"#e5b567\" stroke-width=\"3\" stroke-dasharray=\"7 6\"/><text x=\"180\" y=\"92\" fill=\"#73d7b0\">较早计算饱和的示意</text><text x=\"495\" y=\"41\" fill=\"#82aaff\">可继续提升并行的示意</text><text x=\"398\" y=\"196\" fill=\"#e5b567\">某个配置的容量上限</text><text x=\"398\" y=\"215\" fill=\"#e5b567\">超过此线无法驻留</text><text x=\"96\" y=\"245\" fill=\"#a7b4ca\">示意图：没有设备名称、实测坐标或收益承诺</text></g></svg><figcaption>两条曲线仅解释机制。容量上限由模型、精度、上下文、权重和并行布局决定；改变 KV 结构可能移动竖线，也可能改变曲线形状。</figcaption></figure><p>若从 GQA 改成多数层 KDA 加少数 DSA，长度相关的缓存容量下降，原本无法驻留的更大 B 可能成为可测试点；与此同时主 attention 的带宽压力下降，vector、TopK、投影或通信更可能暴露。曲线右侧的吞吐潜力因此会改变。</p><p>对于“延迟随并发上升更明显”的判断，先分解每步流量：权重部分可能近似固定并被摊销，独立请求的 KV/state 部分大致随 B 增长。带宽占优时，随着 B 增大读取的总历史字节增多，step latency 上升是合理预期；但 cache 命中、频率、调度与并行度变化可能产生区间性的平坦或非单调曲线。需要实测确认转折点。</p>"
+      },
+      {
+        "id": "benchmark",
+        "title": "怎样设计一组能支持架构观点的实验",
+        "html": "<p>固定模型 checkpoint、tokenizer、输入分布、上下文长度、decode 长度、精度、并行拓扑和编译器版本。分别做 B sweep 与 L sweep，记录 p50/p95 TPOT、总吞吐、峰值显存/状态占用，以及完整子层、kernel 与通信时间。短 prompt 启动耗时和稳定 decode TPOT 要分开。</p><p>每个点标清“活动请求数”与“kernel 实际 token 行数”。例如每卡 6 请求、DP4 聚合 24 token，与单卡一个 B24 kernel 不是同一部署含义。padding 到 bucket 的容量也不等于有效行数，空行是否参与算力和通信要从实现核实。</p><p>想验证“算力先饱和”，需要看到 tensor 或 vector 工作随 B 增长、有效利用率接近该执行形状可达上限，而非只看吞吐 plateau。plateau 也可能来自 host 调度、collective、cache 争用或频率限制。想验证“容量墙”，需要实际分配账本和 OOM/admission 行为；单条理论公式只能给预测。</p><p>对 518 的双核证据，报告每个 kernel 的 max(core0 duration,core1 duration)，保留 start/end 区间用于审计；跨核 span 是另一个时间概念。CycleSim、VCS/RTL、真芯片与 E2E 服务结果分别标记，不把某一层的成功自动升级为下一层。</p>"
+      },
+      {
+        "id": "deployment",
+        "title": "部署前画三张图：模型图、状态图、rank 图",
+        "html": "<p><strong>模型图</strong>标明每层选择 KDA 还是 DSA、dense 还是 MoE，mHC 等残差是否包在计时范围。<strong>状态图</strong>标明每层 state/KV pool 的 dtype、layout、slot 映射与生命周期。<strong>rank 图</strong>标明 attention 的 TP/CP、FFN 的 TP/EP、DP 请求归属和跨层布局转换。三张图对应不同问题，不宜挤成一张看不清的大图。</p><p>当前模块层面的已核实事实是 KDA TP4/DP4、DSA CP4/DP4；FFN 的 TP4/EP4 要与它们在层间接口上对齐。相同 world size=16 不代表所有模块在同一个维度上切分。很多“算子对了、模型错了”的问题发生在这些边界：输出复制或求和次数不对，请求顺序错，state slot 被错误复用，或者准备阶段 weight pack 与实际调用不是同一版本。</p><p>编译缓存与 Graph 又引入版本边界。保留源码 SHA、实际导入路径/算子 digest、编译器版本和产物信息，才能确定你测的是哪条实现。文章里引用固定 SHA 是来源证明；它不等于当前运行进程已经加载该 SHA，更不等于相应硬件测试已通过。</p>"
+      },
+      {
+        "id": "answer",
+        "title": "把两年经历组织成一段有深度的回答",
+        "html": "<p>可以这样开场：“我负责的主线是把 518 PE 从指令和架构约束推进到可用编译链，再把真实模型 FFN 部署起来。做这些工作时，我发现模型结构本身在改变硬件瓶颈：早期 GQA 的长 KV 更强调容量和带宽；当前 GLM5Next 的 KDA/DSA 混合减少了部分历史流量，但把状态更新、TopK、索引和融合调度推到前台。”</p><p>接着用一个可核验的具体问题展开，而不是立刻罗列所有 pass：“例如某个 fused FFN 的 tile 选择改变了片上 live range，编译器地址复用或同步需要满足哪些条件；修复后用什么输入、什么 reference、什么 RTL 指标证明正确与收益。”算法、硬件和编译就这样在一个案例中连起来。</p><p>最后主动说明边界：本人核心交付是哪些模块；attention 的哪些内容是为系统协同建立的理解；贡献占比统计采用什么仓库、时间窗和 merge 口径；性能是本地 kernel、完整子层还是模型 E2E。能够提出一个可证伪的硬件预测并设计验证，比未经限定地宣称“我们的芯片比 GPU 更适合大模型”更有架构深度。</p><aside class=\"callout\">练习：分别准备 90 秒、5 分钟、20 分钟三个版本。三个版本必须引用同一组事实和证据，只改变展开程度；不能短版说“整模型提升”，长版才承认只是本地算子。</aside>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "内部 GLM5Next 是公开 GLM-5 吗？",
+        "a": "本次核实配置不是同一个模型：H、层数、专家数、位置维和混合 attention 都不同。应以具体 config、checkpoint 与 runner 标识模型，公开论文只提供对应方法的参考。",
+        "followup": "如果性能表只写 GLM5 300B，最先追问哪三个版本信息？"
+      },
+      {
+        "q": "34 KDA、11 DSA、3 Dense、42 MoE 是否意味着 90 层？",
+        "a": "不是。每个主干层有 attention 与 FFN 两个子层，34+11 和 3+42 是同一 45 层的不同分类。额外 MTP 层还应与普通 decode 主干单独计数。",
+        "followup": "mHC 的计时应放在层内还是单独项，怎样防止重复？"
+      },
+      {
+        "q": "模型改变后，原芯片带宽优势会怎样？",
+        "a": "要重算工作负载。KDA 减少长度相关状态增长，MLA 压缩 KV，DSA 减少主 attention 精读，但增加或凸显 vector、索引和通信。原带宽优势可能仍存在，也可能不再是主导瓶颈。",
+        "followup": "你会用哪组 B/L sweep 证伪自己的预测？"
+      },
+      {
+        "q": "GPU 低并发 SM 空闲和 bandwidth-bound 是同一个概念吗？",
+        "a": "不是。SM 覆盖率低、occupancy 低、warp 等待内存和计算吞吐低是不同现象。它们可能同时出现，也可能分别发生；需要 profiler 指标和时间线来判断。",
+        "followup": "有很多 active warps 但 achieved FLOPs 很低，下一步看什么？"
+      },
+      {
+        "q": "为何本地算子加速不能直接外推 TPOT？",
+        "a": "TPOT 还包含其他子层、通信、调度和同步，并且 stage 可能重叠。需要以实际关键路径和完整模型分母应用 Amdahl 分析；kernel cycle 相加也可能不等于 E2E。",
+        "followup": "真实 trace 中怎样识别被隐藏的时间与关键路径？"
+      },
+      {
+        "q": "一位资深 AI compiler 工程师应怎样谈算法演进？",
+        "a": "从模型定义推出 shape、状态和访问模式，再预测硬件资源需求，最后用编译计划与实测验证。既能解释算法为何这样算，也能说明当前实现的 ABI 和证据边界，避免把公开架构概念当作内部部署事实。",
+        "followup": "挑一个真实 MR，将算法假设、pass 改动与硬件结果连起来。"
+      }
+    ],
+    "sources": [
+      {
+        "id": "local-next-config",
+        "label": "内部 GLM5Next next 配置",
+        "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/configs/config_next.json",
+        "note": "2026-10-23 本地核实；原来源权限独立",
+        "kind": "源码"
+      },
+      {
+        "id": "local-full-config",
+        "label": "45 层 300B 运行配置",
+        "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/full_model_test/config/test_300b_fp8_in_h20.py",
+        "note": "仅引用模型标签、层数和逻辑拓扑；未转录环境私有路径",
+        "kind": "源码"
+      },
+      {
+        "id": "public-glm5-config",
+        "label": "公开 GLM-5 官方配置",
+        "url": "https://huggingface.co/zai-org/GLM-5/blob/main/config.json",
+        "note": "2026-10-23 核实；页面显示文件提交 22ce68a",
+        "kind": "官方文档"
+      },
+      {
+        "id": "public-glm5-report",
+        "label": "GLM-5 技术报告",
+        "url": "https://arxiv.org/abs/2602.15763",
+        "note": "",
+        "kind": "论文"
+      },
+      {
+        "id": "cuda-model",
+        "label": "CUDA Programming Guide",
+        "url": "https://docs.nvidia.com/cuda/cuda-programming-guide/index.html",
+        "note": "用于并行与执行模型概念对照，不作为 518/H200 性能证据",
+        "kind": "官方文档"
+      }
+    ],
+    "takeaways": [
+      "固定配置证明 45 层混合结构；公开 GLM-5 不能替代内部 GLM5Next。",
+      "KDA 固定状态与 DSA 线性增长状态要分项计账。",
+      "低并发摊销、并行度、带宽、计算饱和和容量上限是不同机制。",
+      "架构观点要给成立条件、可观测指标与验证方案。"
+    ]
+  }
+]

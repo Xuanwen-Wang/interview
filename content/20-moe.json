@@ -1,0 +1,781 @@
+[
+  {
+    "id": "ffn-to-moe",
+    "part": "GLM5Next · FFN 实战",
+    "order": 20,
+    "title": "从 Dense FFN 到 SwiGLU 与稀疏专家",
+    "subtitle": "先把数学、shape 和代价讲清楚，再谈 kernel 优化",
+    "minutes": 45,
+    "level": "基础",
+    "tags": [
+      "SwiGLU",
+      "MoE",
+      "Router",
+      "FLOPs",
+      "GLM5Next"
+    ],
+    "lead": "FFN 是模型的逐 token 非线性变换，也是你最有说服力的工作主线。面试时应从一个 token 的三个矩阵乘讲到专家选择、真实 TP 分片、数据移动和数值边界；这样后面的每个优化都有明确的计算对象。",
+    "sections": [
+      {
+        "id": "ffn-math",
+        "title": "1. 一行 hidden 究竟经历了什么",
+        "html": "<p>把 Attention 理解为跨 token 获取信息，FFN 理解为对每个 token 的通道特征做变换。输入 X 的形状为 [T,H]，T 是本次实际进入 kernel 的 token 行数，H 是 hidden width。传统两层 FFN 先从 H 扩展到 I，再投影回 H；忽略 bias，其表达式为 activation(XW₁)W₂。不同 token 共享同一组权重，但在这一步不互相混合。</p><div class=\"formula\">Dense FFN：Y = φ(XW₁)W₂<br>SwiGLU：G=XWg，U=XWu，A=SiLU(G)⊙U，Y=AWd<br>SiLU(z)=z·sigmoid(z)，Wg/Wu∈R^(H×I)，Wd∈R^(I×H)</div><p>G 是调节通道强弱的门，U 是被调节的信息；两者逐元素相乘。面试最容易混淆的是将 Gate projection 当成 MoE Router：前者决定一个专家内部每个中间通道的激活，后者决定 token 选择哪些专家。它们既不是同一矩阵，也不是同一层次的选择。</p><p>SwiGLU 有三份矩阵而传统 FFN 有两份，讨论参数预算必须同时说中间宽度。相同 H、I 下，三矩阵当然更贵；模型设计通常通过调整 I 比较相近参数/FLOP 预算。原始演进可查 <a href=\"https://arxiv.org/abs/2002.05202\">GLU Variants</a>；下面的 shape 与工程约束来自项目冻结源码。</p>"
+      },
+      {
+        "id": "ffn-diagram",
+        "title": "2. 用数据流图读懂融合空间",
+        "html": "<svg viewBox=\"0 0 920 280\" role=\"img\" aria-label=\"SwiGLU 的 Gate、Up、SiLU 和 Down 数据流\"><defs><marker id=\"moe-arrow-a\" markerWidth=\"7\" markerHeight=\"7\" refX=\"6\" refY=\"3\" orient=\"auto\"><path d=\"M0 0L6 3L0 6\" fill=\"none\" stroke=\"#466c85\"/></marker></defs><g fill=\"#eef5f8\" stroke=\"#8aacc0\"><rect x=\"18\" y=\"105\" width=\"130\" height=\"64\" rx=\"12\"/><rect x=\"205\" y=\"35\" width=\"150\" height=\"60\" rx=\"12\"/><rect x=\"205\" y=\"185\" width=\"150\" height=\"60\" rx=\"12\"/><rect x=\"410\" y=\"35\" width=\"145\" height=\"60\" rx=\"12\"/><rect x=\"610\" y=\"105\" width=\"95\" height=\"64\" rx=\"12\"/><rect x=\"760\" y=\"105\" width=\"140\" height=\"64\" rx=\"12\"/></g><g fill=\"#203f52\" font-size=\"19\" font-family=\"sans-serif\" text-anchor=\"middle\"><text x=\"83\" y=\"132\">X [T,H]</text><text x=\"83\" y=\"154\">BF16</text><text x=\"280\" y=\"61\">Gate GEMM</text><text x=\"280\" y=\"83\">[T,I]</text><text x=\"280\" y=\"211\">Up GEMM</text><text x=\"280\" y=\"233\">[T,I]</text><text x=\"482\" y=\"71\">SiLU</text><text x=\"657\" y=\"144\">逐元素 ×</text><text x=\"830\" y=\"132\">Down GEMM</text><text x=\"830\" y=\"154\">Y [T,H]</text></g><g fill=\"none\" stroke=\"#466c85\" stroke-width=\"2\" marker-end=\"url(#moe-arrow-a)\"><path d=\"M148 120L180 120L180 65L205 65\"/><path d=\"M148 150L180 150L180 215L205 215\"/><path d=\"M355 65H410\"/><path d=\"M555 65H657V105\"/><path d=\"M355 215H657V169\"/><path d=\"M705 137H760\"/></g></svg><p>图中每条边既是数学依赖，也是可能落入片上 SRAM 或外部存储的中间张量。Gate 和 Up 共享输入，可以合并权重方向的投影，也可以分别发射来改善 PE/VP 重叠。哪个更快要看缩放、舍入、SRAM 生命周期和编译后的实际调度，不能只数 Python 里的 dot 数。</p><p>融合的直接收益通常是减少启动、中间值写回和重复读取。代价是同时存活的 buffer 增多、地址分配更难、依赖链更长，某些通路会被串行化。真实工作中曾保留单个连续 Shared parent，却放弃物理双 GDG 输出实验；原因是跨 kernel ABI 与 Graph 生命周期同样属于优化成本。<a href=\"https://github.com/DarronTam/torch_zeus/pull/570\">PR #570</a> 给出了最终采用的单入口与回归边界。</p>"
+      },
+      {
+        "id": "ffn-cost",
+        "title": "3. 手算参数、FLOPs 与算术强度",
+        "html": "<p>把一次乘加记为 2 FLOPs，单个 SwiGLU 专家的三次 GEMM 约为 6THI FLOPs，参数是 3HI；SiLU 和逐元素乘法另计。GLM5Next 本地配置给出 H=4096、专家 I=2048，因此单专家有 25,165,824 个矩阵参数。只算矩阵权重，BF16 为 48 MiB，FP8 为 24 MiB；TP4 分片后分别是每 rank 12 MiB 与 6 MiB。这里没有把 scale、padding、pack 元数据、复制或 runtime workspace 算进去。</p><div class=\"formula\">理想权重受限算术强度 ≈ 6MHI / (3HI·b) = 2M/b FLOP/byte<br>b 是每个权重的字节数，M 是同一专家一次真正复用权重的 token 数。</div><p>这只是忽略 activation、输出、元数据和重复 weight traversal 的理想模型。FP8 下 M=1 约为 2 FLOP/byte，M=4 约为 8；因此低并发的单 route 常被权重供给限制，而同专家 token 合并可能提高利用率。但若逻辑 M4 被硬件拆成多轮装载，或者 Up/Down 的布局不同，实际复用低于上式。</p><p>面试时不要用全批 T 替代每个专家 M。T24、top8 表示 192 次 route 选择，分散到 288 个专家后，单专家命中可能很少，分布也不均匀。真正决定 kernel 行为的是每个 owner 的专家桶、尾组、重复 slot 与最慢核工作量。</p>"
+      },
+      {
+        "id": "moe-evolution",
+        "title": "4. 稀疏专家解决什么，又引入什么",
+        "html": "<p><a href=\"https://arxiv.org/abs/1701.06538\">早期稀疏 MoE</a> 用可学习门控为输入选择少量子网络，在不按比例增加每 token 计算的情况下扩展总参数。<a href=\"https://arxiv.org/abs/2101.03961\">Switch Transformer</a> 将路由简化，重点处理路由复杂度、通信与训练稳定性。<a href=\"https://arxiv.org/abs/2401.06066\">DeepSeekMoE</a> 进一步讨论细粒度专家和共享专家：共享部分学习通用能力，路由部分增加组合与专门化。</p><table><thead><tr><th>变化</th><th>算法目的</th><th>编译器与硬件的新增问题</th></tr></thead><tbody><tr><td>Dense → MoE</td><td>扩大总容量，控制激活计算</td><td>动态 IDs、不均匀小 GEMM、分发与归并</td></tr><tr><td>更细粒度专家</td><td>增加组合自由度</td><td>单专家中间维 I 更小；每专家 token 数 M 取决于路由，元数据与 dispatch 成本需重估</td></tr><tr><td>Shared + Routed</td><td>区分通用与选择性计算</td><td>两个分支资源竞争、ownership 与输出合并</td></tr><tr><td>低比特专家权重</td><td>减少权重容量和带宽</td><td>scale 粒度、解码路径、舍入与精度预算</td></tr></tbody></table><p>模型有 300B 参数不意味着每个 token 执行 300B 参数的 dense 计算；也不意味着所有未激活参数可以不占存储。部署问题同时包含总权重容量、每 token 活跃工作量、跨设备放置和最差路由延迟。优秀回答应把这四件事分开。</p><p>例如 DeepSeekMoE 的等激活计算拆分可写成 E→mE、K→mK、I→I/m。在均匀路由近似下，每专家 token 数 M≈TK/E 保持不变；真正变小的是专家宽度 I。如果只增加 E 而固定 K，M 才会按该近似下降。两类改动不能混为一谈。</p>"
+      },
+      {
+        "id": "glm-router-math",
+        "title": "5. GLM 的真实 Router：选择分数与混合权重不同",
+        "html": "<p>项目配置是 288 个 Routed expert、top-k=8、1 个 Shared expert，scoring_func 为 sigmoid，routed_scaling_factor 为 2.5，norm_topk_prob 开启。源码先计算 logits，并保留生产 BF16 logit 舍入；sigmoid 后得到 scores。用于 TopK 选择的是 scores 加 correction bias，而最终混合权重从未加 bias 的 scores 中 gather，再归一化和乘 factor。</p><div class=\"formula\">sₑ = sigmoid(logitₑ)<br>S = TopK₈(sₑ+bₑ)<br>pₑ = 2.5 · sₑ / Σⱼ∈S sⱼ，e∈S<br>y = Shared(x) + Σₑ∈S pₑ·Expertₑ(x)</div><p>这个区别直接影响 kernel 正确性：如果把偏置也当作输出权重，改变的是模型语义；如果 Router 已乘 2.5，Reduce 再乘一次，则会重复缩放。当前 dev 链明确由 Router 应用该 factor 一次。不能看到别的模型使用 softmax、sqrtsoftplus 或 top6，就在这条链里套用。</p><p>为面试准备 Router 时，除了 TopK 算法复杂度，还要解释 tie-breaking、尾部 padding 的哨兵、IDs dtype、选择结果落 SRAM/DDR 的时点，以及归一化的精度。真实优化从“算一个 TopK”深入到“已确定的 winner 前缀能否提前发布，让 Gather 与剩余 VP 波次重叠”。<a href=\"https://github.com/DarronTam/torch_zeus/pull/570\">相关集成记录</a> 将算法不变与调度改变分开描述。</p>"
+      },
+      {
+        "id": "glm-concrete-shapes",
+        "title": "6. 对照 45 层配置，避免模型名称代替事实",
+        "html": "<p>冻结的内部配置有 45 个 Transformer 层，前 3 层用 Dense FFN，其余 42 层进入 MoE。Dense intermediate_size=12288，MoE intermediate_size=2048，两者不能混用。Attention 的结构演进与 FFN 的专家配置是不同维度：一层可以换用不同 attention 机制而保留同一种 MoE FFN。</p><p>“GLM5Next 300B”在本教材中指 <a href=\"https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/configs/config_next.json\">该项目 config_next.json</a> 与配套 checkpoint/运行入口；公开模型名称、后续版本和相似命名不能自动继承这些内部参数。测量表中的 42 层是 42 个 MoE 层的实际聚合，不是完整 45 层模型的总时延。</p><table><thead><tr><th>层次</th><th>真实对象</th><th>常见误读</th></tr></thead><tbody><tr><td>模型</td><td>45 层；3 Dense + 42 MoE</td><td>42 层 MoE 表就是整模 TPOT</td></tr><tr><td>专家</td><td>H4096 / I2048</td><td>把 I512 当全专家宽度</td></tr><tr><td>rank</td><td>TP4 后 I512；EP4 后 E72</td><td>把本地权重大小当整板/整模</td></tr><tr><td>kernel</td><td>实际 T16/T24/T32</td><td>CLI tokens=6 就是 T6</td></tr></tbody></table><p>建议面试开场在纸上写 H、I、T、E、K、TP、EP 七个符号；后续所有字节量、FLOPs、通信和延迟都能回到这张纸验证。</p>"
+      },
+      {
+        "id": "moe-algorithm-interview",
+        "title": "7. 把算法知识转成自己的工程叙述",
+        "html": "<p>一个有力度的叙述可以是：“我负责的是 FFN 从数学语义到芯片执行的完整链：先确定 Router 的选择和权重规则、Shared/Routed 的量化合同，再落实每个 rank 与 core 的 ownership，最后围绕真实路由分布优化计算、搬运和归约。”接着只选一个具体案例深入，不要把所有优化名词一次列完。</p><p>面试官若追问“为什么不用更大的 GEMM”，应回到实际专家桶：增加 M 需要同 expert 的多行真实输入，需要归组、gather、padding 与写回映射；batch 大了也未必均匀。若追问“MoE 为什么可能更慢”，要回答随机权重访问、路由开销、跨设备通信、尾部负载和低利用率可能抵消激活 FLOPs 的节省。</p><p>你不必把自己包装成训练算法作者。真正有深度的算法理解是：能够说明哪些改变严格等价，哪些改变动了量化路径或近似函数，哪些需要模型级验证。例如“保留原 token/slot 输出而内部按 expert 合并”是执行优化；“改变 top-k、删除 Shared、替换 SiLU LUT”则需要重新讨论算法与精度合同。</p><aside class=\"callout\">简历的“25% 以上 MR”目前是本人陈述，本教材不把它当已核验仓库统计。工程故事优先用可定位 PR、冻结 SHA、明确作者和可解释结果支撑。</aside>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "SwiGLU 的 Gate 和 MoE Router 有什么区别？",
+        "a": "Gate 是专家内部的 H→I 投影，逐通道调节 Up 分支；Router 是 H→E 的专家打分，按 token 选 top-k 专家。二者的 shape、参数、输出语义和精度要求不同。",
+        "followup": "画出一个 token 从 Router 到两个专家内部 Gate/Up/Down 的数据流。"
+      },
+      {
+        "q": "MoE 只激活 8/288 个专家，时延就等比下降吗？",
+        "a": "不会。总权重仍要存储，路由与通信增加；单专家小 M、随机访问和负载不均会降低利用率。应比较相同精度与质量目标下的实际计算、访存和通信关键路径。",
+        "followup": "T24/top8 时，为什么还需要统计每个 owner 的 M1/M2/M4 数量？"
+      },
+      {
+        "q": "一个 H4096/I2048 的 SwiGLU 专家权重多大？",
+        "a": "三矩阵共3×4096×2048=25,165,824参数；纯矩阵BF16为48MiB，FP8为24MiB。TP4后每rank分别12MiB/6MiB，不含scale、padding或复制。",
+        "followup": "如果FP8路径额外复制权重到两个core，哪个统计层次要翻倍？"
+      },
+      {
+        "q": "为什么 Router bias 只参与选人？",
+        "a": "本项目模型合同规定 correction bias 改变专家被选中的机会，最终混合系数仍来自原 sigmoid score。把带偏置分数直接归一化会改变数值语义。",
+        "followup": "如何用极端 bias 的小输入构造能检测这个错误的测试？"
+      },
+      {
+        "q": "你如何解释从 Dense 到细粒度 MoE 对芯片设计的影响？",
+        "a": "工作负载从规则大矩阵转向大量动态小矩阵与元数据处理。除MAC外，动态寻址、低启动成本、向量和标量链延迟、SRAM、权重供给以及跨核同步变得更重要。",
+        "followup": "哪一项瓶颈可以通过编译器解决，哪一项需要硬件机制？"
+      },
+      {
+        "q": "融合 Gate/Up 一定比拆开好么？",
+        "a": "不一定。合并可共享输入和减少部分控制，但增加大临时值与缩放/切片压力；拆开可能改善PE/VP重叠。必须保留舍入边界并看实际指令和慢核测量。",
+        "followup": "你会记录哪些buffer生命周期来解释一次融合回退？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "glu-paper",
+        "label": "GLU Variants Improve Transformer",
+        "url": "https://arxiv.org/abs/2002.05202",
+        "note": "SwiGLU/GLU 演进的原始论文。",
+        "kind": "论文"
+      },
+      {
+        "id": "moe-original",
+        "label": "Sparsely-Gated Mixture-of-Experts",
+        "url": "https://arxiv.org/abs/1701.06538",
+        "note": "条件计算与稀疏专家的原始论文。",
+        "kind": "论文"
+      },
+      {
+        "id": "switch-paper",
+        "label": "Switch Transformers",
+        "url": "https://arxiv.org/abs/2101.03961",
+        "note": "路由简化、通信与训练稳定性。",
+        "kind": "论文"
+      },
+      {
+        "id": "deepseek-moe-paper",
+        "label": "DeepSeekMoE",
+        "url": "https://arxiv.org/abs/2401.06066",
+        "note": "细粒度专家与 Shared expert。",
+        "kind": "论文"
+      },
+      {
+        "id": "glm-config",
+        "label": "GLM5Next 内部配置（冻结 SHA）",
+        "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/configs/config_next.json",
+        "note": "需原仓库访问权限；内部配置不代表所有同名公开版本。",
+        "kind": "源码"
+      },
+      {
+        "id": "moe570",
+        "label": "PR #570 四算子优化",
+        "url": "https://github.com/DarronTam/torch_zeus/pull/570",
+        "note": "2026-10-23 API核验已合入；作者Xuanwen-Wang。",
+        "kind": "PR"
+      }
+    ],
+    "takeaways": [
+      "先讲数学和实际 shape，再谈 tiling 或 fusion。",
+      "全批 token 数不等于每专家真正的 GEMM M。",
+      "Router correction bias、混合权重和 routed factor 必须逐一确认。",
+      "用可核验案例表达负责范围，贡献比例另做历史统计。"
+    ]
+  },
+  {
+    "id": "moe-topology",
+    "part": "GLM5Next · FFN 实战",
+    "order": 21,
+    "title": "TP4 × EP4：从权重归属到完整输出",
+    "subtitle": "把 board、rank、core、Shared 和通信边界画在同一张图上",
+    "minutes": 50,
+    "level": "进阶",
+    "tags": [
+      "TP",
+      "EP",
+      "ownership",
+      "Shared",
+      "AllReduce",
+      "ReduceScatter"
+    ],
+    "lead": "架构面试经常不是问矩阵乘怎么写，而是问某个输出究竟少了谁的贡献。这里以项目 world16 配置为准，逐层区分专家切分、专家分布、双核 partial 与跨 rank collective。",
+    "sections": [
+      {
+        "id": "topology-map",
+        "title": "1. 十六个 rank 是怎样排列的",
+        "html": "<p>当前配置为 tp_size=4、ep_size=4、dp_size=4、world_size=16。rank 的映射是 tp_rank=rank%4，ep_rank=rank//4。这里 TP4×EP4 和 TP4×DP4 是同一个 world16 在不同算子阶段的组织方式，不能相乘得到 64 个 rank。board 是当前通信方案使用的逻辑分组，不能仅从这个名字推断封装或物理芯片个数。</p><svg viewBox=\"0 0 920 310\" role=\"img\" aria-label=\"四个EP board各含四个TP rank，Shared只归属EP0\"><g font-family=\"sans-serif\" text-anchor=\"middle\"><g fill=\"#e7f5ed\" stroke=\"#79a891\"><rect x=\"20\" y=\"30\" width=\"200\" height=\"220\" rx=\"14\"/></g><g fill=\"#edf3f9\" stroke=\"#94b0cc\"><rect x=\"245\" y=\"30\" width=\"200\" height=\"220\" rx=\"14\"/><rect x=\"470\" y=\"30\" width=\"200\" height=\"220\" rx=\"14\"/><rect x=\"695\" y=\"30\" width=\"200\" height=\"220\" rx=\"14\"/></g><g fill=\"#24465d\" font-size=\"19\"><text x=\"120\" y=\"65\">EP0 / E0…71</text><text x=\"345\" y=\"65\">EP1 / E72…143</text><text x=\"570\" y=\"65\">EP2 / E144…215</text><text x=\"795\" y=\"65\">EP3 / E216…287</text><text x=\"120\" y=\"110\">r0 r1 r2 r3</text><text x=\"345\" y=\"110\">r4 r5 r6 r7</text><text x=\"570\" y=\"110\">r8 r9 r10 r11</text><text x=\"795\" y=\"110\">r12 r13 r14 r15</text><text x=\"120\" y=\"154\">TP0 TP1 TP2 TP3</text><text x=\"345\" y=\"154\">TP0 TP1 TP2 TP3</text><text x=\"570\" y=\"154\">TP0 TP1 TP2 TP3</text><text x=\"795\" y=\"154\">TP0 TP1 TP2 TP3</text><text x=\"120\" y=\"200\">Shared 真权重</text><text x=\"345\" y=\"200\">Shared 无贡献</text><text x=\"570\" y=\"200\">Shared 无贡献</text><text x=\"795\" y=\"200\">Shared 无贡献</text><text x=\"460\" y=\"285\">跨 board 同 TP lane：例如 [r0,r4,r8,r12]</text></g></g></svg><p>默认连续 expert 区间如图；显式静态映射或重排实验要以自己的 logical→physical map 为准。图示的是默认布局，不声称任何后续重排仍按同一编号物理存放。<a href=\"https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/full_model_test/config/test_300b_fp8_in_h20.py\">配置</a>和<a href=\"https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/_support/_comm.py\">通信 helper</a>是核验入口。</p>"
+      },
+      {
+        "id": "tp-math",
+        "title": "2. TP 切的是 intermediate，不是四次重复完整 FFN",
+        "html": "<p>令一个完整专家的 intermediate 维度分成四份 I₀…I₃。Gate 与 Up 在输出通道方向分片，每个 TP rank 只计算自己的 512 个中间通道；Down 则沿输入 K 方向对应分片。每个 rank 的 Down 都生成 [T,H]，但那只是对应 intermediate 区间的贡献。</p><div class=\"formula\">yᵣ = SiLU(XWg,ᵣ) ⊙ (XWu,ᵣ) · Wd,ᵣ<br>完整专家输出 y = y₀+y₁+y₂+y₃<br>本 rank：Gate/Up [M,4096]×[4096,512]；Down [M,512]×[512,4096]</div><p>这解释了为什么 Down 输出已经是 H4096，仍然需要 TP AllReduce：shape 完整不代表数学贡献完整。反过来，把 TP-local output 当完整专家输出与 CPU 全专家 reference 比较，会把分片缺失误报为 kernel 数值错误。</p><p>TP 的收益不是单纯把时间除四。它缩小矩阵与本地权重，但增加跨 rank 合并，还可能改变 PE tile、尺度统计、通信粒度与活跃专家分布。I512 再改 I128 是 pack、scale、dot、partial、reducer 和 Graph ABI 的协同变化，需要重新验证，不能只改一个 constexpr。</p>"
+      },
+      {
+        "id": "ep-math",
+        "title": "3. EP 切专家，和 TP 切通道是两种求和",
+        "html": "<p>EP4 把 288 个 Routed expert 分为四组，每组 72。每个 rank 只对当前 top-k 中落在本地专家区间的 route 计算；剩余 route 将由其他 EP 负责。默认双核又按本地专家奇偶分工，因此每核保存 36 个 TP-local 专家分片。双核 owner 决定谁算，不改变最终 token/slot 的逻辑意义。</p><div class=\"formula\">zₑₚ,ₜₚ(t)=Σₖ∈本EP p(t,k)·ExpertPartialₜₚ(t,k)+SharedPartialₑₚ,ₜₚ(t)<br>完整输出 = Σₑₚ Σₜₚ zₑₚ,ₜₚ</div><p>本地 Reduce 先把本 rank 的有效 route 加权相加并加入 Shared partial；TP 方向补全专家通道贡献；EP 方向再补全被其他专家组负责的 route。工程实现可以按合法的线性关系重排部分步骤，但涉及 BF16 rounding 时不保证逐位等价，通信算法也可能改变输出分发方式。</p><p>若面试官问“为什么不用 AllToAll”，应解释当前 decode 路径选择共享/分发 hidden 后按 ownership 计算，再做归约；经典 dispatch/gather AllToAll 是另一种数据流。哪种合适取决于 T、H、top-k、expert 分布、互联能力以及是否能重叠，不能把某个框架的默认算法当硬件必然。</p>"
+      },
+      {
+        "id": "shared-ownership",
+        "title": "4. Shared 的三个概念：存在、执行、最终贡献",
+        "html": "<p>模型层面只有 1 个 Shared expert，所有 token 都使用它。当前 dev harness 的真实 Shared 权重只存在于 EP0 的四个 TP rank；EP1–EP3 创建零权重/scale，并可执行相同形状的链以保持 Graph 对称。因此看到十六个 rank 都调用 Shared API，不等于模型拥有十六个 Shared expert，也不等于十六份真实权重都产生非零贡献。</p><p>生产集成可能通过 compute=False 或其他分派跳过不活跃 Shared；例如 PR #588 的性能聚合明确只计实际执行的 EP0 Shared。harness 的零权重占位执行与生产调度不能互相冒充。必须同时写清“谁拥有权重”“谁实际发射 kernel”“谁贡献非零输出”。</p><p>Shared kernel 输出的 [2,T,H] 中 2 是两个 core 的 partial，不是两个 Shared expert，也不是 TP=2。它们存于单个连续 parent 中，上层 Reduce 消费完整 parent；更进一步的 TP4 与 EP4 汇总仍由 caller 执行。Shared 没有一条独立的“广播到所有 EP 再重复加”的隐藏路径，否则很容易重复计入四次。</p><p>这个例子很适合展现架构判断：仅从张量 shape、API 次数或 profiler 名称，无法推出模型语义；必须追踪权重归属与数据依赖。</p>"
+      },
+      {
+        "id": "memory-budget",
+        "title": "5. 从单专家到整板的容量核算",
+        "html": "<table><thead><tr><th>对象</th><th>纯矩阵体积</th><th>解释</th></tr></thead><tbody><tr><td>完整 BF16 Shared</td><td>48 MiB</td><td>H4096/I2048，三矩阵</td></tr><tr><td>一个 TP4 Shared shard</td><td>12 MiB</td><td>真实 Shared 只在 EP0 的四个 TP rank</td></tr><tr><td>完整 FP8 Routed expert</td><td>24 MiB</td><td>未计 FP32 scales</td></tr><tr><td>一个 TP4 Routed shard</td><td>6 MiB</td><td>I512</td></tr><tr><td>单 rank 的 72 个 Routed shard</td><td>432 MiB</td><td>默认双核各 216 MiB</td></tr><tr><td>一个 EP board 的 72 个完整专家</td><td>1728 MiB</td><td>四个 TP rank 合计</td></tr></tbody></table><p>这里描述的是权重存储量，不能与片上 512 KiB SRAM 混在一起。权重在专门的存储层级中被选择和搬运；SRAM 还要容纳输入、转换结果、累加器、LUT 与调度缓冲。即使模型权重“放得下”，kernel 仍可能因片上中间值过大失去流水。</p><p>例如 T24、top8、H4096 的全 route BF16 输出容量为 24×8×4096×2=1,572,864 bytes，即 1536 KiB，已大于单核 512 KiB。把 Routed 与 Reduce 融合并试图完整保留全部 route，需要更细粒度的生产/消费计划、跨核同步或分块，不能仅删除中间 store。实际有效行少于容量也不自动给编译器一个静态可用的紧凑布局。</p>"
+      },
+      {
+        "id": "communication-boundary",
+        "title": "6. 本地 Reduce 不是 TP AllReduce",
+        "html": "<p><code>forward_zeus(hidden)</code> 返回 rank-local [T,H] partial；caller 随后执行 TP4 <code>dist.all_reduce</code>，再走 EP4 的 board-replicated reduce-scatter。代码把这个边界写得很明确。一次 kernel profiler 里叫 Reduce 的项，通常只包含 route weighting、valid-slot guard、FP32 累加与 Shared 合并。</p><div class=\"flow\"><div>本地 Router → Shared / Routed → Reduce</div><div>↓ rank-local [T,H] partial</div><div>TP4 AllReduce：补齐 intermediate shards</div><div>↓ 每个 board 内完整专家贡献</div><div>EP4 ReduceScatter：汇总专家组并分发 token shard</div></div><p>因此 Zeus/NV Reduce 比值不能直接当 TP 通信代价。PR #588 配套分析中，Zeus T24 Reduce 约 1.5167 ms，而 NV 约 0.2182 ms；NV 把 route weighting 融合在 Down/Routed 中，两列工作量不同。相同报告的 Routed+Reduce 是 Zeus 4.6765 ms、NV 5.4271 ms。这些都是 42 层非通信 kernel 预算，并不是服务端 token 延迟。</p><p>要回答 TP4 真正付出多少代价，应单独记录 collective 字节数、参与 rank、算法、持续时间与 overlap trace。只用两个同名 kernel 的耗时相除，无法区分通信、融合与局部算术。</p>"
+      },
+      {
+        "id": "topology-tradeoff",
+        "title": "7. 拓扑选择如何形成架构观点",
+        "html": "<p>比较 TP4×EP4 与更高 EP、更高 TP 时，先固定总设备数与模型，再列四项：每 rank 权重容量、每专家 local I、每 rank route 数、每步通信。增大 TP 减小 local I，却让更多 rank 参与同一专家的输出；增大 EP 减少本地专家数，却可能加强跨设备 token 分发和尾部负载影响。</p><p>低并发时若单专家 M 很小，大量并行计算单元可能没有足够工作；高带宽、低控制延迟和权重访问效率很重要。并发上升后，GPU 能增加活跃 SM 及批内复用；518 的收益也可来自同专家权重摊销和流水填充，但会较早碰到自身 PE/VP 计算上限。这是待以数据验证的结构性解释，不是“GPU 必然高延迟”或“并发2就普遍饱和”的硬结论。</p><p>模型从大 KV 的 GQA 走向压缩、稀疏或递归状态 Attention，会减少某些容量/访存压力，FFN 和 MoE 占比可能上升。架构师应讨论瓶颈怎样迁移：原来为 Attention 带宽准备的资源，能否被不规则专家访问利用；更密集的 MoE 复用是否需要更高 MAC/VP 比例；通信是否成为新的临界路径。</p><aside class=\"callout\">架构判断使用“在什么 T、序列长度、路由分布、精度和互联条件下”的句式。配置名字和峰值 TOPS 不能替代这些条件。</aside>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "Down 已经输出 [T,H]，为什么还需要 AllReduce？",
+        "a": "TP切分的是intermediate维，Down在每个rank只累加了该维的四分之一。输出形状完整，贡献不完整，需要四个TP shard相加。",
+        "followup": "如果把AllReduce移到route weighting前后，实数等价与BF16逐位等价分别怎样？"
+      },
+      {
+        "q": "tp_size=4、ep_size=4、dp_size=4是否意味着64张卡？",
+        "a": "不是。本配置明确world_size=16，TP4×EP4与TP4×DP4是不同计算阶段对同一组16个逻辑rank的组织。物理封装需单独核验。",
+        "followup": "列出rank13的TP和EP编号及其跨board lane。"
+      },
+      {
+        "q": "[2,T,H] Shared 输出里的2代表什么？",
+        "a": "两个core的部分和。模型仍只有一个Shared expert，TP分片与跨rank通信另算。Reduce必须消费完整连续parent，不能把两个视图当独立模型专家。",
+        "followup": "若parent生命周期结束但子view仍被Graph引用，会有什么风险？"
+      },
+      {
+        "q": "为什么 EP1 的 Shared 可能被发射但没有贡献？",
+        "a": "dev harness可能用零权重保持Graph形状对称；真实Shared只归属EP0。生产可以跳过inactive Shared，性能聚合要按实际执行记录。",
+        "followup": "用什么证据区分ownership、launch和非零贡献？"
+      },
+      {
+        "q": "一个rank存多少 Routed FP8权重？",
+        "a": "默认72个专家，每个TP4 shard为6MiB，合计432MiB；双核各216MiB。只算三矩阵，不含scale、元数据、复制、workspace。",
+        "followup": "改成TP1/EP16时local专家数与单专家大小怎样变化？"
+      },
+      {
+        "q": "Zeus Reduce 比 NV 慢约7倍能证明通信慢吗？",
+        "a": "不能。表内Reduce排除了collectives，且两端route weighting融合归属不同。应对齐Routed+Reduce工作量，再分别测通信和重叠。",
+        "followup": "怎样设计一个能隔离TP AllReduce成本的对照实验？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "topology-config",
+        "label": "world16 配置",
+        "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/full_model_test/config/test_300b_fp8_in_h20.py",
+        "note": "只取拓扑字段；操作性路径不纳入教程。",
+        "kind": "源码"
+      },
+      {
+        "id": "moe-entry",
+        "label": "RankLocalFusedMoEFp8 与 collective caller",
+        "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_moe_fused_fp8_tp4_ep4.py",
+        "note": "forward_zeus与1795附近collective调用；需原仓库权限。",
+        "kind": "源码"
+      },
+      {
+        "id": "comm-helper",
+        "label": "board-replicated communication",
+        "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/_support/_comm.py",
+        "note": "同TP lane的EP通信以及world16校验。",
+        "kind": "源码"
+      },
+      {
+        "id": "moe-readme",
+        "label": "MoE/Dense 模块边界",
+        "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/docs/README_moe_dense.md",
+        "note": "Shared ownership、四launch、本地partial和caller-owned collective。",
+        "kind": "源码"
+      },
+      {
+        "id": "pr588-topology",
+        "label": "PR #588 实测与比较边界",
+        "url": "https://github.com/DarronTam/torch_zeus/pull/588",
+        "note": "42层非通信组件预算；不等于TPOT。",
+        "kind": "PR"
+      }
+    ],
+    "takeaways": [
+      "shape完整不代表数学贡献完整。",
+      "权重ownership、实际launch与有效输出是三个不同事实。",
+      "本地双核Reduce、TP AllReduce与EP ReduceScatter不能混称。",
+      "拓扑改变需要同时评估local I、route分布、pack与通信。"
+    ]
+  },
+  {
+    "id": "moe-four-kernel-contract",
+    "part": "GLM5Next · FFN 实战",
+    "order": 22,
+    "title": "四算子链与有效行 ABI：一次真正的跨层优化",
+    "subtitle": "Router、Shared、Routed、Reduce 如何在 Graph 中组成可靠系统",
+    "minutes": 55,
+    "level": "深入",
+    "tags": [
+      "ABI",
+      "Graph",
+      "valid rows",
+      "FP32",
+      "Routed",
+      "Reduce"
+    ],
+    "lead": "PR #429 的价值不是把四个快 kernel 拼起来，而是把“只生产本地有效行”变成上下游一致遵守的契约。它很适合展示从算子到编译器、runtime 和验证的系统能力。",
+    "sections": [
+      {
+        "id": "chain-launch",
+        "title": "1. 四类逻辑算子与四次实际 launch",
+        "html": "<p>GLM5Next 这条本地路径依次调用 Router、BF16 Shared、FP8 per-tensor Routed、Reduce。Shared 与 Routed 在数学上是并行分支，但当前 stream 上的发射次序和硬件实际重叠要由 trace 决定。所有 collective 都在链外，pack、scratch 分配和 warmup 在计时/Graph capture 外。</p><table><thead><tr><th>阶段</th><th>主要输入</th><th>输出合同</th></tr></thead><tbody><tr><td>Router</td><td>hidden、router weight、bias</td><td>当前 [T,8] IDs 与已归一化/缩放 weights</td></tr><tr><td>Shared BF16</td><td>hidden、TP-local shared weight</td><td>连续 [2,T,H] parent，两个core partial</td></tr><tr><td>Routed FP8</td><td>hidden、IDs、local expert weights</td><td>[T,8,H]，仅本地专家行有定义，未加 route weight</td></tr><tr><td>Reduce</td><td>partials、当前 IDs/weights、expert interval</td><td>完全有定义的 rank-local [T,H]</td></tr></tbody></table><p>这里“4”既可以指四类逻辑算子，也恰好是默认本地路径的四次 host launch；但这个等号是查源码得出的，不是通用事实。一个 <code>@triton.jit</code> helper 被内联调用不会单独产生 host launch；分阶段量化的另一模型 FFN 则可能有多次 launch。比较方案前先统一计数对象。</p>"
+      },
+      {
+        "id": "sparse-abi",
+        "title": "2. 优化关键：不再写无用的 remote rows",
+        "html": "<p>原来若把整个 [T,8,H] 初始化为零，再写入本地 route，既要清理远端行，也会促使 consumer 读取大量无用数据。新合同保留相同逻辑 shape，但只保证 <code>expert_start ≤ id &lt; expert_start+local_experts</code> 的行有定义；其他行可以是上轮旧值、NaN 或 Inf。</p><p>这并非“允许错误数据流过”，而是将定义域显式缩小，并让 consumer 使用同一次调用的 IDs 判断有效性。Reduce 可以为了 DMA 连续性搬入覆盖首末有效 slot 的大块区间，但无效行必须在浮点乘法/累加之前被排除。<strong>0×NaN 仍然是 NaN</strong>，不能先读取整块参与算术，再用零权重掩盖。</p><pre><code>for slot in ascending_slot_order:\n    if expert_start &lt;= ids[token, slot] &lt; expert_start + local_experts:\n        acc = acc + fp32(route[token, slot]) * fp32(prob[token, slot])\nout[token] = bf16(acc)</code></pre><p>上例只表达合同，不是最终优化代码。双核 producer 按 expert owner 分工，Reduce 的 consumer 分工可以按 token 或 H；consumer 不能再次按 producer core 过滤，否则会漏掉另一核生产、但同属本 rank 的有效贡献。<a href=\"https://github.com/DarronTam/torch_zeus/pull/429\">PR #429</a> 把这个变化标为跨仓 ABI 合同。</p>"
+      },
+      {
+        "id": "reduce-order",
+        "title": "3. 浮点“等价”必须具体到执行顺序",
+        "html": "<p>fast Reduce 以两个 Shared partial 的 FP32 和作为初值，然后按 slot 升序加入每个 route 的 FP32 乘积，最后只做一次 BF16 输出舍入。这个顺序同时约束数值和优化空间：可以把不同 token 或不同 H 元素映射给多个 VP，但不能任意改变同一个输出元素的加法顺序。</p><div class=\"formula\">acc₀=FP32(shared₀)+FP32(shared₁)<br>accₖ₊₁=accₖ+FP32(routeₖ)·FP32(weightₖ)<br>out=BF16(acc_final)</div><p>“先 BF16 sum，再 cast FP32”与“先 cast FP32，再累加”完全不同；把乘法融合到 Down 输入前也可能跨越 FP8/BF16 量化边界。即使实数代数允许换序，生产数值合同仍可能要求保留既有舍入。</p><p>R6 这类调度优化可以提前 Shared DMA、让一行累加完成就转 BF16 并写出，再与下一行计算重叠。它缩短的是等待和尾部，不必改变 slot 数学顺序。讨论优化时把“算术顺序”“指令发射顺序”“不同元素的并行”分开，才能准确解释为什么改动应当保持结果。</p>"
+      },
+      {
+        "id": "pipeline-real",
+        "title": "4. 流水优化到底隐藏了哪段等待",
+        "html": "<p>Routed 先确定 owner/IDs，再加载真正需要的 hidden 和权重；相邻 route 的 Gate/Up、SwiGLU、Down 可以交错，利用 PE 与 VP 分属不同执行资源的特点。Shared 也可以让 Gate/Up、激活和 Down 的阶段交叠。Reduce 使用双缓冲或交错的 token tile，把下一块 DMA 放到当前块向量运算期间。</p><svg viewBox=\"0 0 920 220\" role=\"img\" aria-label=\"两个token tile的搬运与计算交错示意，非实测比例\"><g font-family=\"sans-serif\" font-size=\"18\" fill=\"#24465d\"><text x=\"20\" y=\"35\">示意时间轴 →（长度不代表实测）</text><text x=\"20\" y=\"90\">DMA</text><text x=\"20\" y=\"155\">VP</text></g><g stroke=\"#8baebd\"><rect x=\"125\" y=\"60\" width=\"170\" height=\"46\" rx=\"8\" fill=\"#d4e7f3\"/><rect x=\"330\" y=\"60\" width=\"170\" height=\"46\" rx=\"8\" fill=\"#d4e7f3\"/><rect x=\"535\" y=\"60\" width=\"170\" height=\"46\" rx=\"8\" fill=\"#d4e7f3\"/><rect x=\"295\" y=\"125\" width=\"205\" height=\"46\" rx=\"8\" fill=\"#dcefdc\"/><rect x=\"500\" y=\"125\" width=\"205\" height=\"46\" rx=\"8\" fill=\"#dcefdc\"/><rect x=\"705\" y=\"125\" width=\"190\" height=\"46\" rx=\"8\" fill=\"#dcefdc\"/></g><g font-family=\"sans-serif\" font-size=\"18\" text-anchor=\"middle\" fill=\"#24465d\"><text x=\"210\" y=\"89\">加载 A(i)</text><text x=\"415\" y=\"89\">加载 B(i)</text><text x=\"620\" y=\"89\">加载 A(i+1)</text><text x=\"397\" y=\"154\">计算 A(i)</text><text x=\"602\" y=\"154\">计算 B(i)</text><text x=\"800\" y=\"154\">计算 A(i+1)</text><text x=\"460\" y=\"208\">同一buffer重用前，必须等待真正的最后一个异步读者</text></g></svg><p>真正的难点是 liveness 不是 Python 变量作用域。发射了 store 不代表 store 已读完 buffer；下一轮 DMA 重用地址必须等待异步读者结束。若地址分配把两个逻辑临时值复用到同一物理区间，原本独立的工作可能新增 WAR/WAW 约束。性能与正确性都要跨过 IR、地址和同步三个层次核验。</p>"
+      },
+      {
+        "id": "graph-contract",
+        "title": "5. Graph 测试为什么必须换输入、换路由、污染 scratch",
+        "html": "<p>只对同一个输入 replay 十次很容易放过错误：host 缓存了旧 IDs、某条 remote row 意外残留正确值、output 没被重新写入，都可能产生看似稳定的答案。强一些的验证先 capture 稳定地址，再修改 hidden 与 IDs 的内容，重放后对照 eager 和独立 reference；另外把无效 partials 填 NaN/哨兵，检验 valid-row guard 是否真实生效。</p><p>pack/release 必须在 capture 外；weights、输入、输出和连续 parent 的地址在 replay 完成前保持存活。允许更新 tensor 内容，不等于允许替换底层 storage。编译产物的 ABI、入口或 shape 改了，就必须重新 JIT 与 capture，不能把旧 raw 参数 blob 塞给新 zbin。</p><p>PR #429 记录了两次 eager 的 CPU-reference 检查，以及换输入和污染 scratch 的三次 Graph 重放逐位一致。其 RTL replay 另与同输入 CycleSim golden 逐字节比较；这两种验证证明不同事情：Graph 检查运行时状态，RTL 对照检查执行一致性，独立 CPU reference 检查目标数值合同。</p><aside class=\"callout\">Graph PASS 是输入内容与资源生命周期的一组验证结果，不是“所有动态shape都支持”，也不能替代真实checkpoint的全模型质量验收。</aside>"
+      },
+      {
+        "id": "pr429-evidence",
+        "title": "6. PR #429：可直接讲的完整案例",
+        "html": "<p>当时的目标是把 T8/H4096/top8、TP4/EP4、I_rank=512 的 Router、Shared、Routed、Reduce 统一到同一生产调用链。测试位于 TP0/EP0，seed42 的输入有 16 条 local、48 条 remote route，属于合成业务形状输入。此次只写有效 route，使 Routed 避免无用写入，同时要求 Reduce 与上层元数据同步升级。</p><table><thead><tr><th>Kernel</th><th>本轮 VCS cycles</th><th>证据范围</th></tr></thead><tbody><tr><td>Router</td><td>10,282</td><td>双核慢核耗时</td></tr><tr><td>Shared</td><td>8,557</td><td>双核慢核耗时</td></tr><tr><td>Routed</td><td>28,383</td><td>只比较16条有效route</td></tr><tr><td>Reduce</td><td>13,633</td><td>rank-local完整输出</td></tr><tr><td>合计</td><td>60,855</td><td>400MHz下152.1375μs</td></tr></tbody></table><p>相对同 PR 上版 84,373 cycles，四项合计减少 27.87%；变化包含 kernel 和编译器更新，不能全归于某一条 patch。统一指标是 max(core0_end−core0_start, core1_end−core1_start)，包含异步尾部；跨核开始时刻偏移不计入单 launch 服务时间。原始截图有的采用 span，未对齐的数字不能硬算提升率。</p><p>这组证据是本地计算链与四个 VCS replay，排除多 rank 通信、host/JIT、装载，也没有证明真实 checkpoint 全模型结果。API 于 2026-10-23 核验：<a href=\"https://github.com/DarronTam/torch_zeus/pull/429\">PR #429</a> 已合入，作者 Xuanwen-Wang。</p>"
+      },
+      {
+        "id": "fusion-next",
+        "title": "7. 继续融合之前，先回答四个问题",
+        "html": "<p>从四 launch 走向三 launch，较直接的候选是 Router → (Shared+Routed) → Reduce：两条 FFN 分支都读 hidden、各自权重与独立输出，能否同 kernel 调度取决于片上活跃集和资源冲突。再把 Reduce 融入就必须处理不同 owner 产物的跨核交接，难度显著增加。</p><ol><li>生产者何时完成哪些输出行，消费者是否有显式可证明的可见性与完成条件？</li><li>融合后 live SRAM 高水位是多少，是否失去原有地址错开或流水？</li><li>省掉的外存流量和 launch 时间，是否大于同步、等待与重复计算成本？</li><li>输出 ABI、FP32顺序、最后BF16舍入、Graph changed-input行为是否保持？</li></ol><p>每核可能有不同 route 数，barrier 放进数据依赖循环会带来不匹配风险；“都调用了同一个 kernel”不等于自动同步。也不能为了消除 barrier 把权重无条件复制到每个核，再隐去容量代价。</p><p>成熟的优化路线是先建立可测的候选与明确退路，再决定是否扩大范围。若没有实际编译和测量，最多称“候选设计/建模推断”，不能把预计节省写成已取得的全 MoE 或整模收益。</p>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "为什么无效 route 不能简单乘零？",
+        "a": "其内容可能是NaN/Inf，0×NaN仍为NaN。必须依据本次IDs和local interval，在进入浮点乘法与累加前排除。搬入SRAM与参与算术是不同层次。",
+        "followup": "连续DMA包含无效行时，怎样验证它们未进入向量算术？"
+      },
+      {
+        "q": "有效行 ABI 变化需要改哪些地方？",
+        "a": "producer、consumer、上层IDs/区间传递、独立reference、Graph资源和旧raw参数都要匹配。输出shape不变并不意味着ABI语义没变。",
+        "followup": "如果旧consumer仍假定remote rows为零，怎样构造最小反例？"
+      },
+      {
+        "q": "为什么不能任意改变 route 相加顺序？",
+        "a": "浮点加法不满足严格结合律；BF16乘法后加与FP32乘积/累加后一次BF16舍入也不同。需要按既定数值合同保留顺序或证明容差可接受。",
+        "followup": "并行不同H元素会改变同一元素的累加顺序吗？"
+      },
+      {
+        "q": "怎样证明一个 Graph 没有偷用 capture 时的路由？",
+        "a": "保持地址，修改hidden和IDs内容，污染scratch，再与eager及独立reference比较；重复slot、全remote/全local、行置换都应覆盖。",
+        "followup": "换tensor对象与原位copy新内容有什么差别？"
+      },
+      {
+        "q": "PR #429 的27.87%可否写成真实模型加速？",
+        "a": "只能写成冻结T8合成输入的四算子VCS慢核周期合计下降，且包含编译器更新；它排除collectives、host/JIT，也不是全模型TPOT。",
+        "followup": "若要升级为真实模型性能结论，还缺哪些测量？"
+      },
+      {
+        "q": "为什么融合有时变慢？",
+        "a": "扩大live buffers会增加SRAM压力，地址重用可能引入等待，不同资源调度也可能串行化。融合收益必须抵扣同步、padding、控制和occupancy损失。",
+        "followup": "怎样从IR liveness与trace定位是哪一种损失？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "pr429-contract",
+        "label": "PR #429 valid-rows集成与VCS记录",
+        "url": "https://github.com/DarronTam/torch_zeus/pull/429",
+        "note": "已合入；合成T8四算子本地计算证据。",
+        "kind": "PR"
+      },
+      {
+        "id": "pr570-r6",
+        "label": "PR #570 Shared单parent与Reduce R6",
+        "url": "https://github.com/DarronTam/torch_zeus/pull/570",
+        "note": "连续parent、FP32顺序及最后一次舍入的调度优化。",
+        "kind": "PR"
+      },
+      {
+        "id": "routed-source",
+        "label": "Routed wrapper与输出合同（PR588 head）",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/882bdf9be61303f826cc3eb3338c2c716f898909/sgl-kernel-zeus-triton/python/glm53_flash/moe/sgl_moe_grouped_gemm_silu_down_fp8_per_tensor.py",
+        "note": "冻结源文件，需原仓库权限；不是当前本地旧checkout。",
+        "kind": "源码"
+      },
+      {
+        "id": "reduce-source",
+        "label": "Sparse Reduce",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/882bdf9be61303f826cc3eb3338c2c716f898909/sgl-kernel-zeus-triton/python/glm53_flash/moe/sgl_moe_reduce_sparse_fast.py",
+        "note": "valid-row筛选、slot顺序、FP32累加与流水。",
+        "kind": "源码"
+      }
+    ],
+    "takeaways": [
+      "优化未定义行必须让producer与consumer同时遵守合同。",
+      "浮点顺序、指令发射顺序与元素并行是不同概念。",
+      "改变输入与污染scratch的Graph测试能揭露状态复用错误。",
+      "一条跨层优化的可信度来自ABI、源码、数值、Graph和RTL各自的证据。"
+    ]
+  },
+  {
+    "id": "moe-token-merge",
+    "part": "GLM5Next · FFN 实战",
+    "order": 23,
+    "title": "从 M1 到 M4：真实路由驱动的 token 合并",
+    "subtitle": "PR #570 → #588：权重复用、归组代价、流水与可解释回退",
+    "minutes": 60,
+    "level": "深入",
+    "tags": [
+      "token merge",
+      "M4",
+      "profiling",
+      "bitmap",
+      "V122",
+      "CycleSim"
+    ],
+    "lead": "多个 token 命中同一 expert 只是潜在机会。真正的优化要把它们在设备端归组，用同一份权重执行多行 GEMM，再精确写回原 token/slot；最终由最慢 owner 决定是否获益。",
+    "sections": [
+      {
+        "id": "merge-meaning",
+        "title": "1. “合并 token”没有把两个请求变成一个语义 token",
+        "html": "<p>这里的 merge 是执行层批处理。若 token 2、7、10、15 都命中同一专家，就把四行 hidden 组成 [4,H]，共同乘该专家权重；输出再按原 token 与 slot 写回。不同 token 的隐藏状态仍独立，不做求和、平均、丢弃或近似融合。</p><svg viewBox=\"0 0 920 250\" role=\"img\" aria-label=\"四个token命中相同专家，组成M4矩阵后写回原slot\"><g font-family=\"sans-serif\" text-anchor=\"middle\" font-size=\"18\"><g fill=\"#edf3f9\" stroke=\"#8faec5\"><rect x=\"15\" y=\"30\" width=\"180\" height=\"45\" rx=\"9\"/><rect x=\"15\" y=\"85\" width=\"180\" height=\"45\" rx=\"9\"/><rect x=\"15\" y=\"140\" width=\"180\" height=\"45\" rx=\"9\"/><rect x=\"15\" y=\"195\" width=\"180\" height=\"45\" rx=\"9\"/><rect x=\"305\" y=\"68\" width=\"260\" height=\"130\" rx=\"12\"/><rect x=\"665\" y=\"68\" width=\"235\" height=\"130\" rx=\"12\"/></g><g fill=\"#24465d\"><text x=\"105\" y=\"59\">token2 / slot0</text><text x=\"105\" y=\"114\">token7 / slot5</text><text x=\"105\" y=\"169\">token10 / slot2</text><text x=\"105\" y=\"224\">token15 / slot6</text><text x=\"435\" y=\"105\">同一 expert / 同一 owner</text><text x=\"435\" y=\"142\">M4 Gate / Up / Down</text><text x=\"435\" y=\"178\">共享权重访问</text><text x=\"782\" y=\"111\">恢复原 token/slot</text><text x=\"782\" y=\"149\">route weight 仍独立</text><text x=\"782\" y=\"180\">Reduce 顺序不变</text></g><g stroke=\"#6a8ca2\" stroke-width=\"2\" fill=\"none\"><path d=\"M195 53L305 100M195 108L305 120M195 163L305 140M195 218L305 160M565 133H665\"/></g></g></svg><p>同一个 token 若存在重复 expert slot，可以共用专家投影结果，再分别写回两个 slot；Reduce 仍按各自 route weight 加权。这要求保留 slot mask，不能简单去重 IDs 后丢掉其中一次贡献。正常模型 TopK 往往唯一，但接口鲁棒性与回归仍要测试重复 slot。</p>"
+      },
+      {
+        "id": "merge-model",
+        "title": "2. 先统计分布，再建立收益模型",
+        "html": "<p>对每个 layer、EP、core，记录有效 route 总数、不同专家数、每专家不同 token 数、M1/M2/M4 组数、重复 slot 数和最大 owner 负载。均值只能描述总体，低延迟由尾部 owner 决定。两个 batch 即使都是 T24/top8，路由集中度不同，也可能出现完全不同的复用收益。</p><div class=\"formula\">预计收益 ≈ 节省的权重访问 + 减少的控制/装载<br>− 归组与gather代价 − padding/尾组代价 − SRAM与同步损失</div><p>理想情况下，专家 e 有 nₑ 个不同 token，用最大 M4 分组后需 floor(nₑ/4) 个 M4，再用 M2/M1 收尾。但这只统计逻辑组数；真实硬件的 minitile、权重重放与激活驻留决定每组内部是否只读一次权重。观察到专家碰撞，只能说明存在机会，不能直接报告百分比加速。</p><p>为避免“只优化训练样本”，候选设计使用固定训练批，参数冻结后再看验证/测试批；固定随机输入保留为边界与回归。真实业务输入应包含 hidden、完整 IDs/weights、模型 checkpoint身份、layer/rank以及生成历史，而不是只留下一个seed。</p>"
+      },
+      {
+        "id": "merge-device",
+        "title": "3. PR #570 的设备端归组合同",
+        "html": "<p>PR #570 在实际 T16/T24、top8、I512、默认奇偶 owner 的范围内默认开启 merge_tokens。wrapper 只读 host 可知的 shape、expert interval 和 pack metadata，不把设备 IDs 搬回 CPU 生成计划。归组、gather 与写回都发生在 device 中，这保留 Graph 对 changed-input 的正确响应。</p><p>一个完整 owner 范围内，按 expert 找出 token bitmap 和 slot mask，分成 M4/M2/M1 执行。输出仍是原 [T,8,H]，remote rows仍未定义，量化与舍入不变。显式 merge_tokens=False 提供 M1 对照；静态 expert_core_map 路径维持自己的 inverse-map ABI，不强行接到假设奇偶 owner 的归组算法上。</p><p>位图不是无限宽的魔法。某些统计借助 FP32 精确整数表示与标量运算，因此必须限制 IDs 范围及 packed count/bitmap 的位数。在冻结 PR588 源码中，eligible expert range 需不超过 2²⁴；T16/T24 与 T32 使用不同打包方式。越界应回退或报错，不能舍入成另一个专家或丢失高位 token。</p><p>这种优化很能体现编译器能力：高层小整数/位图处理最终经过 VP、CT、DMA 与标量依赖。收益不仅来自 GEMM 变大，也来自避免无用的元数据物化、同步和标量往返。</p>"
+      },
+      {
+        "id": "merge-v122",
+        "title": "4. V122 怎样继续缩短 T16/T24 并覆盖 T32",
+        "html": "<p><a href=\"https://github.com/DarronTam/torch_zeus/pull/588\">PR #588</a> 的 V122 延续同一输出/数值合同。T16/T24 重点减少 owner 分类和标量准备，拆分 Gate/Up 增加 PE/VP 重叠；T32 则在完整 32-token owner 上归组，使用 count+bitmap 打包、8行 hidden lookahead 和较小的 M1/M2 展开。最大 GEMM 组仍是 M4，超过四个token要继续分组。</p><p>T32 的完整 bitmap 不能天真地塞进一个 FP32 精确整数。冻结实现将 token 分为两个 16位 half，并把 count 与bitmap按可证明精确的范围编码；还将多个小计数放入受限字段，减少反复标量扫描。此处的位域设计同时受算法范围、FP32表示精度与目标执行资源限制。</p><p>T24/T32 wrapper 单次 launch 显式设置 executor width 2 与 128 KiB L2 headroom，其他阶段保持自己的配置。这是 kernel/编译器共同确定的调度和分配选择；不能把收益全部记为 token merge 算法，也不能把环境变量全局打开导致 Router/Shared/Reduce 被无意改变。</p><p>读源码要看三个层次：设备计划是否完整覆盖本 owner；每个 group 是否只消费自己被分配的 token；写回是否唯一且保留原slot。少看一个，既可能漏数据，也可能测到“少算了所以快”。</p>"
+      },
+      {
+        "id": "merge-failure",
+        "title": "5. 三个比成功数字更有价值的失败或退路",
+        "html": "<p><strong>低复用时归组会回退。</strong> PR #570 固定随机看板的某个 T16 EP3有35条route，仅形成5组M2、25组M1，没有M4；Routed 单项 74.9625→82.8275 μs，回退10.49%。归组有成本，缺少权重复用时不能靠“MoE应该更快”解释。完整MoE仍有其他优化，最终总量要按同一个最慢完整EP计算。</p><p><strong>更大M未必更少weight traversal。</strong> 逻辑M8/M16可能内部拆成多个minitile；扩大M会增加live activation、padding和片上压力。真实选择M4是有资源约束的工程决定，不是硬件永远不支持更大的M，也不是“每个expert只装载一次”。</p><p><strong>并行需要证明地址独立。</strong> 相关编译器工作只对已证明完整、对齐、不重叠的私有行分配并行DT；真实共享读写依赖仍保留。不能为了放开ParallelExecutor删除真实WAR/WAW。显式静态分核、不支持shape、位图边界和ID精度范围保留既有路径，是可维护性的组成部分。</p><p>面试叙述应交代失败条件与最终分派策略。只展示最佳case会把一个严谨的工程优化说成碰运气调参。</p>"
+      },
+      {
+        "id": "merge-result",
+        "title": "6. 真实业务结果：收益很大，但口径更重要",
+        "html": "<table><thead><tr><th>实际输入</th><th>PR570基线</th><th>PR588</th><th>耗时下降</th></tr></thead><tbody><tr><td>T16 / 4 req/card / 64K / step0</td><td>5.5356ms</td><td>4.8623ms</td><td>12.16%</td></tr><tr><td>T24 / 6 req/card / 4K / 首 decode</td><td>7.3260ms</td><td>6.4421ms</td><td>12.07%</td></tr><tr><td>T32 / 8 req/card / 4K / 首 decode</td><td>14.4504ms</td><td>8.3757ms</td><td>42.04%</td></tr></tbody></table><p>这是 H200 真实推理导出的固定输入，在 Zeus 400MHz CycleSim 上回放的42个MoE层组件计算总量；逐launch取双核各自duration的最大值，rank内累加实际阶段，再选每层最慢完整EP/TP路径，最后累加42层。两版分别选择自身最慢EP。排除通信、host/JIT、pack和初始化。</p><p>性能变化包含Routed与编译器升级。后续更新到编译器d115a6c85时，核验16个唯一规格的加载代码、常量、ABI、入口和relocation等价，15个实际JIT程序匹配，6个实际完整链入口的周期、输出和Graph一致，因此复用原42层测量；不是又跑了一轮完整矩阵。本轮没有新增V122 RTL证据。</p><p>PR588原验收记录的4,032个完整MoE case，与PR572曾规划的6批×42层×16rank=4,032不是同一件事。相同数字必须附上数据集、版本、A/B数量与完成状态，不能跨报告挪用。</p><aside class=\"callout\">这三行不是只改变 T 的同一工作负载伸缩曲线：T16 与 T24/T32 的上下文长度不同，路由与激活也来自各自 capture。每行只支持其固定输入下 PR570→PR588 的配对 A/B 结论；跨行变化不能全部归因于 batch。</aside>"
+      },
+      {
+        "id": "merge-cuda",
+        "title": "7. 为什么没有照搬 GPU 的 M64 tile",
+        "html": "<p>PR570对照的H200实现先按expert分桶，再采用M64 tile；Zeus借鉴的是“同expert共同执行”的组织思想，tile大小仍由自身PE、SRAM、weight layout和控制开销决定。GPU的大量SM需要足够任务填满并行度；本芯片更少的执行资源、不同权重通路和较小片上工作集，使得M4可能更合适。</p><p>比较CUDA与自研后端，应该对齐输入、权重、量化、路由与完整输出职责，然后分别分析block/warp或PE/VP/DT如何映射。GPU occupancy是活跃warp受寄存器、shared memory等约束的结果；它不等价于MAC有效利用率。Zeus的多个VP并行也不保证缩短关键路径，可能只增加buffer、mail与排队。</p><p>一个成熟的回答是：“我没有把GPU tile当作目标规格；先测真实专家桶，再估算复用与片上活跃集，用M1作为同语义对照，逐步启用M2/M4，并保持原slot输出，最后用多层、changed-input Graph和独立reference验收。”这比“把矩阵做大”更能说明你的工程贡献。</p>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "本项目token merge会不会改变模型输入的token数量？",
+        "a": "不会。它只是把同expert的多行组织成批量GEMM，保持每个token独立，并写回原token/slot。不是语义上的token压缩。",
+        "followup": "同token重复expert slot应如何处理？"
+      },
+      {
+        "q": "为什么必须保留merge_tokens=False？",
+        "a": "它提供同一权重、量化和输出ABI的M1对照，帮助隔离归组/多行执行错误和性能收益，也为不支持profile提供退路。",
+        "followup": "M1与merged逐位相同能证明相对原模型完全准确吗？"
+      },
+      {
+        "q": "T32为什么需要新的位图打包？",
+        "a": "完整32位bitmap不能任意经FP32无损表达。实现拆成可精确表示的16位半段和受限count字段，并约束ID范围，避免高位丢失。",
+        "followup": "FP32连续精确表示整数的边界是什么，如何把它写进dispatch合同？"
+      },
+      {
+        "q": "T16某个EP Routed回退，整链仍加速，矛盾吗？",
+        "a": "不矛盾。归组低复用时单项可能回退，Router/Shared/Reduce等阶段仍改善；整链应先对同一EP累加，再取最慢完整EP，不能逐项拼不同EP最大值。",
+        "followup": "给出一个逐项取max会虚构关键路径的两EP例子。"
+      },
+      {
+        "q": "#588的T32 42.04%能否称硅片加速？",
+        "a": "不能。它是冻结业务输入在CycleSim上的42层非通信组件计算下降，包含编译器变化。本轮未新增V122 VCS/RTL或实板测量。",
+        "followup": "若要报告实际TPOT，还需加入哪些阶段与排队因素？"
+      },
+      {
+        "q": "归组的收益模型应该包含哪些项？",
+        "a": "省下权重访问和重复控制，再减去归组、gather、padding、尾组、SRAM压力与同步损失。最后看最慢owner和最慢完整rank，而不是平均route。",
+        "followup": "如何从routing统计判断一个case可能没有M4？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "pr570-merge",
+        "label": "PR #570 Token合并与回退记录",
+        "url": "https://github.com/DarronTam/torch_zeus/pull/570",
+        "note": "作者Xuanwen-Wang；真实业务与固定随机输入分开报告。",
+        "kind": "PR"
+      },
+      {
+        "id": "pr588-v122",
+        "label": "PR #588 V122",
+        "url": "https://github.com/DarronTam/torch_zeus/pull/588",
+        "note": "作者Xuanwen-Wang；2026-10-23核验已合入。",
+        "kind": "PR"
+      },
+      {
+        "id": "merge-frozen",
+        "label": "归组、bitmap与dispatch源码",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/882bdf9be61303f826cc3eb3338c2c716f898909/sgl-kernel-zeus-triton/python/glm53_flash/moe/sgl_moe_grouped_gemm_silu_down_fp8_per_tensor.py",
+        "note": "owner计划约第983行、merged entry约1254行、wrapper约1684行。",
+        "kind": "源码"
+      },
+      {
+        "id": "merge-evaluation",
+        "label": "V122冻结评估报告",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/882bdf9be61303f826cc3eb3338c2c716f898909/dev_docs/evaluations/moe_routed_v122_20261022/README.md",
+        "note": "42层原测量、Shared审计及holdout边界。",
+        "kind": "历史记录"
+      },
+      {
+        "id": "compiler-equivalence",
+        "label": "最新编译器等价核验",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/882bdf9be61303f826cc3eb3338c2c716f898909/dev_docs/evaluations/moe_pr588_compiler_refresh_20261022/RETRY.md",
+        "note": "程序等价和代表入口验证支持复用历史性能，不冒充全量重测。",
+        "kind": "历史记录"
+      }
+    ],
+    "takeaways": [
+      "命中同expert只是潜在复用，设备归组与慢核收益才是实现证据。",
+      "保持token/slot输出和M1对照，能把执行优化与语义改变分开。",
+      "小整数与位图优化也必须证明表示精度和合法范围。",
+      "真实性、测量层级与聚合方式与加速百分比同样重要。"
+    ]
+  },
+  {
+    "id": "moe-quantization-and-592",
+    "part": "GLM5Next · FFN 实战",
+    "order": 24,
+    "title": "FP8、INT4 与一次 2.209% 误差定位",
+    "subtitle": "数值面试的核心：找首次分歧，而不是先改阈值",
+    "minutes": 60,
+    "level": "深入",
+    "tags": [
+      "FP8",
+      "INT4",
+      "BF16",
+      "SiLU LUT",
+      "reference",
+      "#592"
+    ],
+    "lead": "低比特优化需要同时掌握量化公式、舍入位置、参考实现和模型级质量。#592 是一个很强的真实案例：生产 kernel 没变，问题却能通过修正独立 CPU 参考被准确解释。",
+    "sections": [
+      {
+        "id": "quantization-types",
+        "title": "1. “用了 FP8”远远不够描述数值合同",
+        "html": "<p>量化至少要回答：编码格式是什么，scale 是 per-tensor、per-channel、per-group 还是 per-token，scale 自身用什么dtype，在哪里计算amax，零张量怎么处理，clamp在哪里，以及乘加累加与输出用何种精度。FP8 E4M3FN 是一种具体编码；一个“FP8 kernel”仍可能包含大量FP32累加、BF16中间值和额外scale处理。</p><div class=\"formula\">典型对称量化：q = cast_Q(clamp(x/s, qmin, qmax))；x̂ = s·q<br>per-tensor：整个矩阵一个s；per-channel：每个输出通道一个s<br>per-group：沿K分组；per-token：每行activation一个动态s</div><p>scale更细通常能适应局部动态范围，但需要更多scale存储、读取和算术。若scale来自完整行amax，融合/切片时必须保留完整量化域；不能把一个全行量化拆成每tile独立量化，却仍声称数值合同相同。</p><p>INT4与FP8也不能只按“4比8小一半”决定快慢。INT4权重还需分组scale、解码、对应硬件模式和布局；如果这些额外工作落在瓶颈VP或数据路径上，容量优势未必转换成时延优势。工程评估应分别报告权重体积、有效带宽、MAC模式、前后处理与模型误差。</p>"
+      },
+      {
+        "id": "glm-quant-path",
+        "title": "2. GLM per-tensor 路径的真实舍入链",
+        "html": "<p>该Routed路径装载时先按原checkpoint scale把权重恢复到BF16，再对每个expert的Gate、Up、Down分别计算一个FP32 scale，重新量化为FP8。TP-local矩阵与完整矩阵可能得到不同scale，因此改变TP拓扑并不自动保持这一重新量化路径的数值等价。</p><pre><code>Wbf16 = bf16(fp32(W_original) * original_scales)\ns = max(abs(fp32(Wbf16))) / 448    # use 1 for an all-zero matrix\nWq = fp8_e4m3fn(clamp(fp32(Wbf16) / s, -448, 448))\n\nxq = fp8_e4m3fn(x)                 # fixed activation scale = 1\nG = bf16(dot_fp32(xq, Wgq.T) * sg)\nU = bf16(dot_fp32(xq, Wuq.T) * su)\nG = min(G, limit); U = clamp(U, -limit, limit)\nAq = fp8_e4m3fn(bf16(SiLU_LUT(fp32(G)) * fp32(U)))\nY = bf16(dot_fp32(Aq, Wdq.T) * sd)</code></pre><p>上面的clamp按当前调用的swiglu_limit表达；业务配置limit=10，未启用时遵循对应入口。它与“动态per-token FP8”不同：两处activation cast的scale固定为1，没有动态amax。值域、非有限值和可表示范围需要单独验收。另一个Shared BF16路径也不应被误写为同一FP8量化算法。</p><p>优化不能随意删去G/U的BF16舍入，或把A的BF16→FP8合成一个直接FP32→FP8转换。多一次离散舍入可能改变临界点；只有真实证明或接受新的数值合同，才能做这种变换。</p>"
+      },
+      {
+        "id": "ds-contrast",
+        "title": "3. 用 DS V4 的 INT4-G32 对比，训练迁移能力",
+        "html": "<p><a href=\"https://github.com/DarronTam/torch_zeus/pull/528\">PR #528</a> 是团队另一位作者 siahuat0727 的参考工作，不归入本人的PR贡献。其Routed为FP8动态per-token activation × INT4-G32 weight，Shared为FP8动态activation × FP8 per-output-channel weight。它使用每行完整H和完整TP-local I的amax，scale存BF16，全零行取1。</p><p>另一个关键区别是route weight与routed factor在Down输入量化之前应用。这样输出route已经加权，最终reducer只求和；如果接上GLM的旧weighted reducer就会重复乘概率。看似同样叫MoE/SwiGLU，接口语义和量化域实际上不同。</p><table><thead><tr><th>项目</th><th>GLM冻结路径</th><th>DS V4参考路径</th></tr></thead><tbody><tr><td>Routed weight</td><td>每projection FP8 scale</td><td>INT4-G32</td></tr><tr><td>activation</td><td>scale=1 FP8 cast</td><td>动态整行per-token FP8</td></tr><tr><td>route weighting</td><td>本地Reduce中</td><td>Down输入量化前</td></tr><tr><td>无效route输出</td><td>未定义，按IDs过滤</td><td>接口约定写零</td></tr><tr><td>执行组织</td><td>fused Shared / Routed</td><td>分阶段量化与GEMM</td></tr></tbody></table><p>面试时可以用它说明你如何接一个新模型：不按函数名替换，而是先比较source dtype、scale、舍入、weight ownership、factor位置、输出定义域和Graph资源，再谈fusion。该PR的局部功能测试不代表多rank、实板、全模型质量或E2E已验收。</p>"
+      },
+      {
+        "id": "numeric-gates",
+        "title": "4. 四层精度证据，不要混成一个 PASS",
+        "html": "<table><thead><tr><th>检查</th><th>回答的问题</th><th>不能推出</th></tr></thead><tbody><tr><td>旧版/新版逐位一致</td><td>这次优化改变结果了吗</td><td>原算法或量化一定准确</td></tr><tr><td>固定LUT实现参考</td><td>设备实现遵守约定量化/近似了吗</td><td>与解析SiLU或原模型无误差</td></tr><tr><td>解析数学参考</td><td>近似和量化产生多大误差</td><td>模型任务质量一定合格</td></tr><tr><td>整模质量评估</td><td>任务指标/token行为是否可接受</td><td>每个局部kernel都没有潜伏bug</td></tr></tbody></table><p>I512这条验收的逐route门槛为relative L2&lt;3%、normalized peak&lt;2%，有限性与全零case另检验。peak分母是该route参考输出的最大绝对值，不是每个元素自己的值。逐元素相对误差在参考接近零时会放大，不适合独自判断这类抵消明显的输出。</p><div class=\"formula\">relative L2 = ||actual−ref||₂ / max(||ref||₂, ε)<br>normalized peak = max|actual−ref| / max(max|ref|, ε)</div><p>历史PR570仍有解析SiLU预算超线，而固定LUT与A/B输出一致；PR588也保留Shared的一个解析超差点。把“优化不引入新误差”写成“全模型精度通过”，会失去最重要的证据边界。</p>"
+      },
+      {
+        "id": "592-first-difference",
+        "title": "5. #592：2.209% peak 的首次分歧在哪里",
+        "html": "<p>反例来自真实decode：T24、layer29、rank13=EP3/TP1，有46条有效route。原固定LUT CPU参考的最大relative L2为1.8286945%，通过3%；normalized peak为2.2093024%，超过2%。显式M1与merged的有效输出原始字节全部一致，先排除了“只有新合并路径才出现”的假设。</p><p>随后固定输入、原权重和工具链，逐阶段保存Gate/Up dot、BF16投影、LUT输出、BF16激活、FP8激活及Down输出。首次分歧落在Up通道207：Gate/Up共1024个投影值中只有这里跨了BF16中点；512个LUT结果全部逐位一致。把实测激活送入原CPU Down也逐位一致，于是定位范围缩到CPU投影累加与后续舍入。</p><table><thead><tr><th>Up207</th><th>数值</th></tr></thead><tbody><tr><td>独立FP64累加</td><td>3784.00030517578125</td></tr><tr><td>原CPU FP32 dot</td><td>3784.0</td></tr><tr><td>CycleSim PE dot（历史记录）</td><td>3784.000244140625</td></tr><tr><td>scale</td><td>2⁻¹²</td></tr><tr><td>BF16中点</td><td>0.923828125</td></tr><tr><td>原CPU / CycleSim BF16 Up</td><td>0.921875 / 0.92578125</td></tr><tr><td>原CPU / CycleSim FP8激活</td><td>0.5 / 0.5625</td></tr></tbody></table><p>极小的dot差异经过BF16与FP8离散舍入，变成一个activation元素的明显差异，最终被Down扩散到4096维输出。仅看最终2.2%无法判断责任层；逐阶段找到第一处差异才有因果证据。完整过程见<a href=\"https://github.com/DarronTam/torch_zeus/blob/882bdf9be61303f826cc3eb3338c2c716f898909/dev_docs/evaluations/moe_issue592_20261022/README.md\">冻结定位记录</a>。</p>"
+      },
+      {
+        "id": "592-fix",
+        "title": "6. 修复参考，而不是修改生产 kernel 或放宽门槛",
+        "html": "<p>修复将Gate/Up CPU reference改为FP64累加，再转回FP32 dot结果，按原FP32 scale乘法和BF16投影边界继续。Down reference、固定LUT、activation BF16→FP8、生产kernel与3%/2%门槛都不改。FP64在这里是更可靠的独立数学参考，不是对PE内部累加树的逐拍模拟，也不保证任意输入都和硬件bit-exact。</p><pre><code>dot = (x.double() @ weight.double().T).float()\nprojection = (dot * scale).bfloat16().float()</code></pre><p>原46条有效route对修正固定LUT参考L2/peak均为0；M1/merged逐位一致，无效slot保留NaN。原反例完整链与两次Graph（含行置换）通过，新增6项CPU回归和4项I512/I2048算子用例通过。该case对解析SiLU的诊断L2约1.7964%、peak约1.6892%，也通过原门槛。</p><p>Router/Routed/Reduce仍是6484/26857/14119 cycles，生产kernel未变，所以保留原42层性能，未重新跑全部18,144个case或NV性能。原始FAIL记录仍然保留。2026-10-23 API读回时<a href=\"https://github.com/DarronTam/torch_zeus/issues/592\">issue #592</a>仍open，而修复所在<a href=\"https://github.com/DarronTam/torch_zeus/pull/588\">PR #588</a>已merged；issue状态与技术修复状态必须分别陈述。</p>"
+      },
+      {
+        "id": "numeric-diagnostic-method",
+        "title": "7. 把这个案例抽象成通用定位方法",
+        "html": "<ol><li><strong>先锁身份。</strong>输入、选中expert原权重、pack、编译器、runtime和模拟器都要冻结；只说“同一个seed”不够。</li><li><strong>拆竞争假设。</strong>新优化、旧量化、LUT、reference、编译器和模拟器都有可能，先找同输入M1对照。</li><li><strong>找首次分歧。</strong>逐阶段比较原始位、舍入前值、舍入后值，避免后级放大掩盖原因。</li><li><strong>构造独立oracle。</strong>使用更宽累加、精确可表示输入与中点两侧反例，避免把硬件输出直接当golden。</li><li><strong>保持门槛。</strong>修复原因后按原标准复测；需要修改质量预算时应作为独立决策。</li><li><strong>限制结论。</strong>单反例闭环、局部测试、全矩阵与整模质量分别记录。</li></ol><p>面试官若问“为什么不直接用FP64做所有参考”，可以回答：需要保留被测实现约定的FP32 scale和BF16边界，盲目全FP64会变成另一个算法；更宽累加用于降低oracle自身噪声，而不是抹去真实舍入。必要时还要比较高精度数学值与目标硬件允许的误差区间。</p><p>若问“CPU reference比设备差是否说明设备更准确”，应限制到这个反例：独立精确和支持该点的解释，但没有证明设备在所有输入上更准确。数值工程的深度恰恰在于能说明证据证明了什么、没有证明什么。</p>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "固定LUT逐位一致是否意味着解析SiLU误差为零？",
+        "a": "不是。固定LUT oracle检验实现是否复现约定近似；解析SiLU检验近似和量化偏差。两者必须分别报告，模型任务质量还需第三层评估。",
+        "followup": "优化A/B一致但解析预算失败时，你如何写验收结论？"
+      },
+      {
+        "q": "#592为什么不能先把2%门槛调到2.3%？",
+        "a": "那会隐藏oracle问题并改变验收合同。原始反例可通过首次分歧定位解释为FP32参考累加噪声，经舍入放大；修复reference后原门槛即可通过。",
+        "followup": "怎样设计一个只触发BF16中点跨越的最小回归？"
+      },
+      {
+        "q": "为什么FP64 dot之后又转FP32？",
+        "a": "为了提高累加参考可靠性，同时保留原FP32 dot结果、scale乘法和BF16舍入边界。全程FP64会变成不同的参考算法。",
+        "followup": "FP64 reference能否承诺与任意PE累加树逐位一致？"
+      },
+      {
+        "q": "把route weighting从Reduce搬到Down前严格等价吗？",
+        "a": "实数线性层可重排，但跨BF16/FP8量化边界后一般不逐位等价。DS参考路径明确把权重放在Down输入量化前，必须配套不同reducer，不能直接迁移。",
+        "followup": "给出activation量化前乘概率为何改变scale和量化误差的解释。"
+      },
+      {
+        "q": "为什么只检查全tensor cosine similarity不够？",
+        "a": "全局指标会掩盖少数route、通道或零值错误；本例一个activation元素跨量化点就导致某route peak失败。应检查逐routeL2/peak、有限性、零值和关键中间值。",
+        "followup": "remote rows未定义时，全tensor有限性检查会产生什么误报？"
+      },
+      {
+        "q": "INT4权重一定比FP8快么？",
+        "a": "不一定。容量降低需抵扣group scale、解码、布局和实际硬件模式成本；若VP/控制成为瓶颈，低位宽未必降低关键路径。",
+        "followup": "你会怎样分别测pack成本、运行期访存和计算时间？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "fp8-source",
+        "label": "FP8 per-tensor pack与计算路径",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/882bdf9be61303f826cc3eb3338c2c716f898909/sgl-kernel-zeus-triton/python/glm53_flash/moe/sgl_moe_grouped_gemm_silu_down_fp8_per_tensor.py",
+        "note": "权重requant、固定activation scale、舍入与shape合同。",
+        "kind": "源码"
+      },
+      {
+        "id": "reference-source",
+        "label": "独立MoE CPU reference",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/882bdf9be61303f826cc3eb3338c2c716f898909/sgl-kernel-zeus-triton/tests/cyclesim_performance/helpers/moe_reference.py",
+        "note": "FP64投影累加与原L2/peak门槛。",
+        "kind": "源码"
+      },
+      {
+        "id": "issue592",
+        "label": "Issue #592 原反例",
+        "url": "https://github.com/DarronTam/torch_zeus/issues/592",
+        "note": "2026-10-23核验仍open；原FAIL与技术修复分开记录。",
+        "kind": "历史记录"
+      },
+      {
+        "id": "issue592-fix",
+        "label": "#592 首次分歧与修复报告",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/882bdf9be61303f826cc3eb3338c2c716f898909/dev_docs/evaluations/moe_issue592_20261022/README.md",
+        "note": "冻结报告记录量化中点、补测范围、未重跑全量性能。",
+        "kind": "历史记录"
+      },
+      {
+        "id": "ds-quant-pr528",
+        "label": "PR #528 DS V4量化参考",
+        "url": "https://github.com/DarronTam/torch_zeus/pull/528",
+        "note": "团队同事siahuat0727的已合入工作；不计入本人贡献。",
+        "kind": "PR"
+      }
+    ],
+    "takeaways": [
+      "量化合同必须细到scale域、舍入位置、factor应用点和输出定义域。",
+      "独立reference也可能有数值噪声，必须能被反例挑战。",
+      "逐位一致、数学精度与模型质量回答三个不同问题。",
+      "定位先找首次分歧，保持门槛与原始失败证据。"
+    ]
+  },
+  {
+    "id": "moe-evidence-and-interview",
+    "part": "GLM5Next · FFN 实战",
+    "order": 25,
+    "title": "把优化结果组织成资深工程师的面试证据",
+    "subtitle": "真实输入、冻结版本、聚合公式、CUDA对齐与可追问的项目叙述",
+    "minutes": 50,
+    "level": "深入",
+    "tags": [
+      "benchmark",
+      "provenance",
+      "面试",
+      "Graph",
+      "VCS",
+      "performance"
+    ],
+    "lead": "最强的项目叙述不是列出最多百分比，而是让面试官能沿着一个结果追问到输入、源码、编译产物、依赖、误差与硬件边界。下面把已有工作整理成可演练的证据链。",
+    "sections": [
+      {
+        "id": "input-admission",
+        "title": "1. 真实业务输入怎样成为可信 benchmark",
+        "html": "<p>PR #572 补齐T24/4K、layer3..44的真实hidden捕获，源端是CUDA TP4/EP1/world4，目标回放是Zeus TP4/EP4/world16。源有6个batch，每个batch42层，每层4个TP文件，因此1008个源文件；目标是6×42×16=4032个待回放case。这不是4032个独立请求，更不是4032次独立业务实验。</p><p>该PR作者是QiyiJiang，负责benchmark入口与数据准备；本人优化使用这些输入作为配套证据，应明确团队贡献。PR本身只做语法、diff和无设备plan检查，不能把“支持4032”写成“已完成4032性能与Graph”。后续PR588自己的4032验收记录要按自己的矩阵身份读取。</p><p>admission应核对冻结请求、真实tensor shape/dtype、源TP一致性、请求行序、层号、首个采样token、权重revision及选中专家原张量哈希。若只有hidden而没有捕获到完整目标MoE输出，必须用独立CPU reference并明确缺少原框架golden的范围。</p><p>CLI <code>--tokens 6</code> 在该benchmark表示6 req/card，对应实际 [24,4096]。文档和图表优先写T24，再附业务标签。文本训练/验证分区相关时，也不能仅凭batch编号不同就称独立holdout。<a href=\"https://github.com/DarronTam/torch_zeus/pull/572\">PR #572</a> 明确保留了这些边界。</p>"
+      },
+      {
+        "id": "aggregation-math",
+        "title": "2. 一套不制造虚假关键路径的聚合公式",
+        "html": "<p>对每个launch先取两核各自duration的较大者；同一rank内把实际执行的各stage/launch累加；再在一层的各rank/完整EP中取最慢者；最后累加实际42层。独立batch分开报告，可求均值和范围，但不能把六个batch相加冒充一次decode。</p><div class=\"formula\">C_launch=max(c₀,end−c₀,start, c₁,end−c₁,start)<br>C_layer=max_rank Σ_stage Σ_launch C_launch<br>C_42layers=Σ_layer C_layer；t_ms=C_cycles / 400000（400MHz）</div><p>错误方式是分别取最慢Router、最慢Routed、最慢Shared、最慢Reduce，然后把来自不同rank的极值相加。例子：rankA的Router/Routed为10/90，rankB为40/50，真实两条完整路径最大是100；逐项max却得到40+90=130，制造出不存在的执行路径。</p><p>另一种混淆是max(end0,end1)−min(start0,start1)这个跨核span，它包含启动偏移。span仍值得保留用于调试，但主指标按照本项目约定用慢核自身duration。需要报告raw start/end、skew与所选rank，确保别人能重新计算。</p><p>还要确认循环边界、异步tail和补充copy/fill是否纳入。把完成时间换成发射时间，或漏掉stage内部launch，会把“未算完整”误当优化。</p>"
+      },
+      {
+        "id": "evidence-ladder",
+        "title": "3. 功能、CycleSim、VCS、实板与E2E分别证明什么",
+        "html": "<table><thead><tr><th>证据层</th><th>主要用途</th><th>不能替代</th></tr></thead><tbody><tr><td>源码/静态IR检查</td><td>解释语义、shape、契约和候选原因</td><td>实际运行正确性和性能</td></tr><tr><td>CPU/reference与功能回放</td><td>数学/量化合同、接口行为</td><td>RTL时序合法性或真实时延</td></tr><tr><td>CycleSim</td><td>冻结模型下的周期与瓶颈</td><td>VCS或硅片测量</td></tr><tr><td>VCS/RTL</td><td>该RTL模型下的执行与时序</td><td>实板频率、系统拥塞、服务排队</td></tr><tr><td>实板与服务E2E</td><td>真实硬件及TTFT/TPOT/吞吐</td><td>没有控制变量时的单优化归因</td></tr></tbody></table><p>CI成功也只是它实际执行的检查成功。一个job显示queued/running不是PASS；源码merged也不代表所有profile完成RTL与模型质量验收。PR588已合入，但本轮V122没有新增RTL测量；PR429有特定T8四项VCS结果，两者不能拼成“最新真实业务全量RTL通过”。</p><p>本教材本轮做的是源码与历史证据核验，没有重新跑仿真或芯片benchmark。报告中的周期和测试数均标为各PR冻结记录，不能写成建站过程中重新实测。这个原则同样适用于简历：把证据等级写对，通常比夸大性能更能体现资深程度。</p>"
+      },
+      {
+        "id": "reusing-evidence",
+        "title": "4. 编译器升级后，什么时候允许复用性能",
+        "html": "<p>kernel源码没变不足以证明性能没变。新的lowering、地址分配或同步可能改变实际程序；同一IR/汇编条数也不足以证明等价。PR588后续核验重新构建编译器与匹配JIT adapter，对16个唯一规格比较code、constants、参数ABI、入口、relocation及其他加载字节，只忽略生成日期与对应header checksum。</p><p>随后检查实际JIT产物与直接编译产物一致，并运行6个T16/T24/T32完整链入口，覆盖有Shared与无Shared的EP，核对逐阶段cycles、输入/权重/Router身份、原始输出位与两次Graph。最终MLIR回归1380/1380通过，结合程序等价支持复用原42层性能。</p><p>这是一组明确的证据，不是“抽6个case所以默认全量正确”。应保留原测量版本、后续验证版本与复用理由；如果一个实际路径或编译选项不在等价覆盖内，就不能自动继承结果。即使程序等价，旧的Shared解析超差仍然存在，也不会被新的编译测试冲掉。</p><p>讲这个故事可以突出你的工具链意识：编译器、kernel、runtime、模拟器、数据和统计脚本共同构成性能身份。单一git SHA通常还不足以还原一次结果。</p>"
+      },
+      {
+        "id": "cuda-fair-comparison",
+        "title": "5. 与 H200 比较：先对齐工作量，再解释硬件",
+        "html": "<p>PR588另有27个真实decode业务观测，每档9个，保持配对的逐层hidden相同。42层非通信kernel预算均值：T16 Zeus/NV为4.665/6.104 ms，T24为6.151/6.853 ms，T32为7.973/7.160 ms。Zeus为400MHz CycleSim；NV为四卡H200 NVL，模型原生TP4、MoE EP4的实际实现。</p><p>这些数字不能直接变成“低并发Zeus胜、并发升高GPU胜”的通用定律。NV取每层每轮最慢rank再取10轮最快，kernel duration之和可能包含双stream重叠；跨T生成历史略有分歧，因此它不是只改变batch的严格伸缩实验。表还排除通信、host/JIT、pack与输入还原，不是E2E或TPOT。</p><p>合理推断是：增加并发可能改善GPU SM覆盖及专家复用，而Zeus在权重摊销后较快暴露PE/VP算力上限；要确认需固定同一组hidden/route分布和序列状态，逐T测出计算、访存、collective、overlap及服务时延。GQA时代大KV的容量墙与带宽墙，也应在固定上下文长度/精度的内存模型里单独推导。</p><p>数值状态同样分开：原18,144个layer/rank case中一个#592反例后来补测通过，性能沿用原记录，没有全量重跑，也没有重测NV；Shared解析诊断偏差仍保留。</p>"
+      },
+      {
+        "id": "interview-stories",
+        "title": "6. 三个可展开十分钟的项目故事",
+        "html": "<details><summary>故事A：从有效行ABI到四算子VCS闭环</summary><p>背景：T8的Routed只需要计算本地expert，旧接口却让上下游处理完整route张量。决策：保留逻辑shape，仅定义有效行，Reduce使用当前IDs过滤。难点：NaN不能乘零掩盖，producer owner与consumer分工不同，Graph会复用旧scratch。验证：独立reference、changed-input/poisoned-scratch Graph、四项VCS。结果：冻结对照四项84,373→60,855cycles，含编译器变化。边界：合成输入、本地计算、排除collective。</p></details><details><summary>故事B：真实路由驱动的M4合并</summary><p>背景：M1反复加载同expert权重，但真实命中与owner负载不均。决策：设备端完整owner归组，M4/M2/M1收尾，原token/slot输出与M1对照保持。难点：bitmap精度、scalar准备、SRAM活跃集、Graph输入更新和静态映射退路。结果：PR570到PR588三档42层组件下降12.16%/12.07%/42.04%。失败分析：低复用随机EP3有10.49% Routed回退。边界：CycleSim，含编译器变化，无本轮新RTL。</p></details><details><summary>故事C：2.209%误差如何定位为CPU参考问题</summary><p>背景：真实T24某route超过2% peak，M1和merged却逐位一致。决策：冻结反例并逐阶段定位，不调整阈值。根因：Up累加的小残差跨BF16中点，FP8激活0.5/0.5625分歧被Down放大。修复：CPU FP64累加后保留原FP32/ BF16边界。验证：46route固定LUT逐位一致、Graph和回归通过。边界：原单case补测，不外推整模质量或重测全部性能。</p></details><p>每个故事都遵循“目标与约束→假设与对照→关键决策→失败/反证→结果→边界”。面试官选择某个点深入时，你能自然进入数学、ABI、编译器或RTL；不需要背几十条优化名字。</p>"
+      },
+      {
+        "id": "jd-map",
+        "title": "7. 把JD要求映射到能够拿出的东西",
+        "html": "<table><thead><tr><th>JD能力</th><th>可讲证据</th><th>进一步追问</th></tr></thead><tbody><tr><td>模型/算子分析</td><td>SwiGLU、Router语义、真实TP/EP shape</td><td>FLOPs、权重容量、量化域</td></tr><tr><td>后端算子与tiling</td><td>M1→M4、owner计划、Shared/Reduce流水</td><td>尾组、minitile、SRAM高水位</td></tr><tr><td>内存规划和DMA</td><td>有效行ABI、连续parent、异步buffer复用</td><td>alias、WAR/WAW、完成可见性</td></tr><tr><td>编译器协同</td><td>TopK/Gather重叠、私有行并行、选项隔离</td><td>合法性证明与fallback</td></tr><tr><td>精度验证</td><td>#592首次分歧与reference修复</td><td>量化中点、独立oracle、模型质量</td></tr><tr><td>性能与工程交付</td><td>真实42层、Graph、CycleSim/VCS边界</td><td>版本冻结、指标聚合、回退和复用</td></tr></tbody></table><p>建议准备三种时长：90秒讲职责与一个结果，10分钟讲一条完整故事，30分钟让面试官沿源码/IR/trace追问。每次演练主动写出本案例的T/H/I/E/K、计时范围和最重要数值边界。</p><p>尚需本人补充的部分是组织协作、需求决策、流片前指令取舍的第一手背景，以及贡献比例的统计定义。教程能帮助组织技术事实，但不会凭PR作者信息推断所有架构决策都由一个人独立完成。把“我主导”“我实现”“我集成验证”“团队配套”分别表述，个人贡献反而更清楚。</p>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "#572的4032到底是什么？",
+        "a": "6批×42层×16目标rank的计划回放case数；每批672。源1008文件是6×42×4的CUDA hidden文件，并非4032独立请求。该PR本身未跑全量benchmark。",
+        "followup": "为什么#588也有4032，不能直接复用#572的完成状态？"
+      },
+      {
+        "q": "如何避免把不同rank拼成虚假的最慢路径？",
+        "a": "先在同一rank内累加实际stage/launch，再取该层max-rank，最后跨层求和。逐stage独立max再相加会组合出不存在的路径。",
+        "followup": "同一个batch里每层最慢rank不同，跨层怎样合理汇总？"
+      },
+      {
+        "q": "源码没改可以直接复用旧性能吗？",
+        "a": "不够。编译器可能改变代码、地址和同步。需核验加载程序、ABI、入口、常量、relocation、实际JIT路径，并用代表入口验证；报告保留历史测量身份。",
+        "followup": "哪些编译产物字段可以忽略，为什么必须明确列出？"
+      },
+      {
+        "q": "VCS通过为什么不能称实板验证？",
+        "a": "VCS验证的是冻结RTL及其测试环境，不包含实板频率、完整存储/互联、系统拥塞和服务排队。每种证据都有自己的适用边界。",
+        "followup": "CycleSim与VCS周期不一致时先核对哪四类身份？"
+      },
+      {
+        "q": "你如何把自己的FFN工作讲成资深能力而非调参？",
+        "a": "展示从数学/shape到ownership、ABI、编译调度、数值、Graph和多层统计的因果链，解释失败方案与退路，并用可定位PR和冻结结果支撑个人负责部分。",
+        "followup": "选择一次最重要的跨团队接口决策，讲清你如何推动闭环。"
+      },
+      {
+        "q": "怎样验证“低并发带宽瓶颈，高并发计算瓶颈”的判断？",
+        "a": "固定输入身份、路由分布、序列状态与精度，改变实际T；同时测权重/activation流量、PE/VP利用、归组比例、collective和E2E。用roofline与trace交叉解释，不能仅凭延迟曲线定性。",
+        "followup": "如果路由越来越集中，批量增加带来的收益为何可能被负载不均抵消？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "pr572-benchmark",
+        "label": "PR #572 T24真实输入benchmark",
+        "url": "https://github.com/DarronTam/torch_zeus/pull/572",
+        "note": "作者QiyiJiang；4032为该PR计划coverage，不冒充本人的PR或完成性能。",
+        "kind": "PR"
+      },
+      {
+        "id": "pr588-evidence",
+        "label": "PR #588 完整结果与边界",
+        "url": "https://github.com/DarronTam/torch_zeus/pull/588",
+        "note": "三档42层、27业务观测、数值补测与历史性能复用。",
+        "kind": "PR"
+      },
+      {
+        "id": "pr429-story",
+        "label": "PR #429 有效行ABI案例",
+        "url": "https://github.com/DarronTam/torch_zeus/pull/429",
+        "note": "本人作者已核验，冻结T8四项VCS。",
+        "kind": "PR"
+      },
+      {
+        "id": "pr570-story",
+        "label": "PR #570 四算子优化案例",
+        "url": "https://github.com/DarronTam/torch_zeus/pull/570",
+        "note": "本人作者已核验，真实/随机输入、失败case分别记录。",
+        "kind": "PR"
+      },
+      {
+        "id": "refresh-report",
+        "label": "编译器刷新与证据复用记录",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/882bdf9be61303f826cc3eb3338c2c716f898909/dev_docs/evaluations/moe_pr588_compiler_refresh_20261022/RETRY.md",
+        "note": "16规格、15 JIT程序、6入口与1380 MLIR的证据分工。",
+        "kind": "历史记录"
+      }
+    ],
+    "takeaways": [
+      "把实际batch、layer/rank case与独立业务观测分开计数。",
+      "先完整路径求和，再选最慢rank；保留raw intervals供复算。",
+      "合成输入、真实回放、RTL和实板E2E各自标明。",
+      "最可信的面试材料是一个能一路追问到首次分歧和编译产物的案例。"
+    ]
+  }
+]
