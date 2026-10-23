@@ -18,7 +18,7 @@ class ContentCheck(HTMLParser):
 def build():
     chapters = []
     for path in sorted((ROOT / 'content').glob('*.json')):
-        rows = json.loads(path.read_text())
+        rows = json.loads(path.read_text(encoding='utf-8'))
         assert isinstance(rows, list), path
         chapters.extend(rows)
     chapters.sort(key=lambda c: c['order'])
@@ -35,18 +35,18 @@ def build():
             section_ids.add(section['id'])
             ContentCheck().feed(section['html'])
         assert len(c['questions']) >= 3, c['id']
-    template = (ROOT / 'web/index.html').read_text()
+    template = (ROOT / 'web/index.html').read_text(encoding='utf-8')
     data = json.dumps(chapters, ensure_ascii=False).replace('</', '<\\/')
-    result = template.replace('/* INLINE_STYLE */', (ROOT / 'web/style.css').read_text())
+    result = template.replace('/* INLINE_STYLE */', (ROOT / 'web/style.css').read_text(encoding='utf-8'))
     result = result.replace('/* INLINE_DATA */', f'const CHAPTERS = {data};')
-    result = result.replace('/* INLINE_APP */', (ROOT / 'web/app.js').read_text())
+    result = result.replace('/* INLINE_APP */', (ROOT / 'web/app.js').read_text(encoding='utf-8'))
     assert not re.search(r'/\* INLINE_\w+ \*/', result)
     out = ROOT / 'dist'
     out.mkdir(exist_ok=True)
-    (out / 'index.html').write_text(result)
+    (out / 'index.html').write_text(result, encoding='utf-8')
     (out / '.nojekyll').touch()
     manifest = {'chapters': len(chapters), 'sections': sum(len(c['sections']) for c in chapters), 'questions': sum(len(c['questions']) for c in chapters), 'characters': sum(len(re.sub('<[^>]+>', '', s['html'])) for c in chapters for s in c['sections']), 'bytes': len(result.encode())}
-    (out / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
+    (out / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
     print(json.dumps(manifest, ensure_ascii=False, indent=2))
 
 if __name__ == '__main__':

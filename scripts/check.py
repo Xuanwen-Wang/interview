@@ -7,7 +7,7 @@ from urllib.parse import urlsplit, unquote
 from html.parser import HTMLParser
 
 ROOT = Path(__file__).resolve().parent.parent
-rows = [c for p in sorted((ROOT / 'content').glob('*.json')) for c in json.loads(p.read_text())]
+rows = [c for p in sorted((ROOT / 'content').glob('*.json')) for c in json.loads(p.read_text(encoding='utf-8'))]
 chapters = {c['id']: c for c in rows}
 errors = []
 
@@ -29,7 +29,7 @@ def check_link(url, where):
     target = (ROOT / unquote(path)).resolve()
     if not target.is_relative_to(ROOT) or not target.is_file():
         errors.append(f'{where}: missing source {url}')
-    elif anchor and f'id="{anchor}"' not in target.read_text():
+    elif anchor and f'id="{anchor}"' not in target.read_text(encoding='utf-8'):
         errors.append(f'{where}: missing explicit source anchor {url}')
 
 class CheckHTML(HTMLParser):
@@ -50,6 +50,8 @@ class CheckHTML(HTMLParser):
 for c in rows:
     assert len(c['sections']) >= 5, c['id']
     assert len(c['questions']) >= 3, c['id']
+    assert not ({s['id'] for s in c['sections']} & {'questions', 'takeaways', 'references', 'notes'}), c['id']
+    assert len({q.get('id', q['q']) for q in c['questions']}) == len(c['questions']), c['id']
     parser = CheckHTML(c['id'])
     for s in c['sections']:
         parser.feed(s['html'])
@@ -58,7 +60,7 @@ for c in rows:
     for q in c['questions']:
         assert q['q'] and q['a'] and q['followup'], (c['id'], q)
 
-html = (ROOT / 'dist/index.html').read_text()
+html = (ROOT / 'dist/index.html').read_text(encoding='utf-8')
 assert 'const CHAPTERS =' in html
 assert 'INLINE_' not in html
 assert not re.search(r'<script[^>]+src=', html), 'Standalone HTML must not need script downloads'

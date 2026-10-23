@@ -1,0 +1,157 @@
+[
+  {
+    "id": "compiler-real-case",
+    "title": "真实案例：省下 1 KiB，为什么反而让 PE 等待",
+    "part": "518 硬件与编译器",
+    "order": 36,
+    "subtitle": "从已入库 MLIR 夹具，跟到地址决策、物理依赖和同步合同",
+    "minutes": 30,
+    "level": "深入",
+    "tags": [
+      "真实源码",
+      "AddressAllocation",
+      "InjectSync",
+      "PE",
+      "WAR",
+      "回归测试"
+    ],
+    "lead": "两次独立 GEMM 没有数据依赖，但编译器把第二次输出放进第一次输入刚释放的地址，会凭空增加物理 WAR。这一章沿真实回归解释：为什么地址分配是调度的一部分，为什么正确性修复与性能优化必须分层，以及怎样证明优化没有把真依赖一起删掉。",
+    "sections": [
+      {
+        "id": "case-identity",
+        "title": "1. 从真实夹具开始：先确定到底优化了什么",
+        "html": "<p>主线是已入库的 <code>address_allocation_pe_inflight_reuse.mlir</code>，冻结在 <code>triton_shared@82613bc2eb30feb9ef7f57aef20584df0ef9e28a</code>。它有三个函数：<code>@independent</code>、<code>@raw_reuse</code>、<code>@capacity_fallback</code>，分别检验有收益空间的独立操作、必须保留的真实数据依赖、不能牺牲的容量可行性。它们是专门隔离机制的编译器测试，不是完整 FFN，也不是性能 benchmark。</p><p>先读 <code>@independent</code>：从同一个外部源分别 load 到独立的 <code>%b</code>、<code>%a</code>；第一个 PE 计算 <code>a×w→y</code>；释放 a 后，第二个 PE 计算 <code>b×w→z</code>。第二次不读 y，因此两次 GEMM 在张量语义上没有前后相接的 RAW。测试每个 activation 是 <code>1×1×4×128 BF16</code>，恰好 1024 字节；权重是单独的 weight allocation。</p><pre><code>// Exact excerpt: source lines 28–30.\nmemref.dealloc %a : memref&lt;1x1x4x128xbf16&gt;\n%z = memref.alloc() {alignment = 16 : i64} : memref&lt;1x1x4x128xbf16&gt;\n%zd = zeus_high.create_fmap_desc %z {offset = 0, tensor_shape = [1, 1, 4, 128], tile_shape = [1, 1, 4, 128]} : memref&lt;1x1x4x128xbf16&gt; -&gt; !zeus_high.fmap_desc</code></pre><p>这三行是真实摘录。<code>dealloc</code>在这里让分配器看见一个逻辑生命周期结束点；它并不是一个证明“硬件已经把 a 的所有字节读完”的 completion event。程序顺序规定了命令顺序，但异步执行单元的内部读取、计算和写回仍可能在途。<a href=\"./evidence/compiler-sources.md#c-case-pe-test\">原始测试与逐行定位</a>。</p><aside class=\"callout\">本章没有执行这些 RUN 行。下面的地址、mail 和 report 字段分别标为“测试预期”或“教学推导”，不冒充本轮生成的 IR、波形或测试 PASS。后端示例是另一个已入库夹具，不能冒称为本例实际编译出的后半段。</aside>"
+      },
+      {
+        "id": "case-address-time",
+        "title": "2. 地址与时间叠起来，才能看见隐形依赖",
+        "html": "<p>关闭 PE 专属偏好时，测试预期 z 的描述符地址为 <code>1024</code>；开启 <code>avoid-pe-inflight-reuse=true</code> 后预期为 <code>3072</code>。为什么正好差 2048？按这个小夹具的分配顺序，可画出 b、a、y 各占 1 KiB 的简化布局：旧 a 的洞在 [1024,2048)，新地址在三块之后 [3072,4096)。真正由 FileCheck 钉住的是 z 的两个地址；图是根据夹具解释这些预期的示意。</p><svg viewBox=\"0 0 820 370\" role=\"img\" aria-label=\"地址与时间示意：复用旧a地址产生PE读后写等待，使用新地址消除这条物理冲突；非实际trace\" xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"820\" height=\"370\" rx=\"16\" fill=\"#f5f2e9\"/><text x=\"24\" y=\"30\" fill=\"#1e322c\" font-size=\"18\" font-weight=\"700\">同一逻辑程序，两种地址放置（示意，非 trace）</text><path d=\"M180 62H785\" stroke=\"#627468\" stroke-width=\"2\"/><text x=\"684\" y=\"54\" fill=\"#627468\" font-size=\"13\">时间 / 无周期刻度 →</text><text x=\"24\" y=\"105\" fill=\"#25392f\" font-size=\"15\">复用 [1024,2048)</text><rect x=\"180\" y=\"80\" width=\"240\" height=\"44\" rx=\"7\" fill=\"#315c4c\"/><text x=\"197\" y=\"108\" fill=\"#fff\" font-size=\"15\">PE₁ 仍可能读取 a</text><path d=\"M420 102H492\" stroke=\"#b25130\" stroke-width=\"3\"/><text x=\"429\" y=\"84\" fill=\"#a14a2d\" font-size=\"13\">WAR 等待</text><rect x=\"492\" y=\"80\" width=\"280\" height=\"44\" rx=\"7\" fill=\"#c45c37\"/><text x=\"513\" y=\"108\" fill=\"#fff\" font-size=\"15\">PE₂ 才能安全覆盖为 z</text><text x=\"180\" y=\"153\" fill=\"#627468\" font-size=\"13\">逻辑 a 已 dealloc；物理旧读取仍须被正确约束</text><text x=\"24\" y=\"220\" fill=\"#25392f\" font-size=\"15\">旧 [1024,2048)</text><rect x=\"180\" y=\"192\" width=\"240\" height=\"44\" rx=\"7\" fill=\"#315c4c\"/><text x=\"197\" y=\"220\" fill=\"#fff\" font-size=\"15\">PE₁ 读取 a</text><text x=\"24\" y=\"280\" fill=\"#25392f\" font-size=\"15\">新 [3072,4096)</text><rect x=\"306\" y=\"252\" width=\"280\" height=\"44\" rx=\"7\" fill=\"#b7945c\"/><text x=\"323\" y=\"280\" fill=\"#fff\" font-size=\"15\">PE₂ 写 z：不再冲突</text><text x=\"180\" y=\"331\" fill=\"#627468\" font-size=\"14\">只消除地址造成的边；同一 PE 的计算资源与其他依赖仍然存在</text><text x=\"24\" y=\"355\" fill=\"#627468\" font-size=\"12\">色块位置和长度仅表达约束关系，不代表实际 overlap、cycle 或加速比例。</text></svg><p>这条边是 <strong>WAR</strong>：PE₁ 先读 a，PE₂ 后写 z，而两个名字在物理上指向重叠字节。它不是 PE₁ 产生 y、PE₂ 消费 y 的 RAW。把 z 放到新地址，只是取消由共址制造的先后约束；不会增加 PE 数量，也不能保证两次矩阵计算完全并行。流水中哪些读、算、写能够重叠，还要由硬件合同和实际 trace 判断。</p><p>若另一个例子是两条不同队列都写同一段地址，就变成 WAW；若后者要读前者的结果，就变成 RAW。不能只靠“SSA 名字不一样”排除冲突，也不能看到同地址就一律插 barrier。应先判字节区间和访问类型，再判有没有已存在的完成顺序证明。</p>"
+      },
+      {
+        "id": "case-allocator",
+        "title": "3. 分配器真正改的是代价，不是正确性规则",
+        "html": "<p>核心实现是 <code>AddressAllocation.cpp::findPaidReusePair</code>。它拿新 buffer 的首次访问，与旧空间来源的尾部访问集合比较；有多个尾部读者时，不能只取文本上最后一条。遇到 CT 完成证明、可覆盖的真实 RAW 路径等情况，可以继续免费复用；PE 专属开关让原先按同队列处理的独立 PE→PE 复用也进入付费候选。</p><pre><code>// Exact excerpt: AddressAllocation.cpp:2260–2262.\nbool chargePEReuse = avoidPEInflightReuse &amp;&amp;\n                     tail.unit.kind == AccessUnitKind::PE &amp;&amp;\n                     head.unit.kind == AccessUnitKind::PE;</code></pre><p>紧接着的逻辑非常关键：不是 <code>chargePEReuse=true</code> 就永久禁止复用。若 <code>rawPathReaches(tail.op, head.op)</code> 已成立，并符合相应门禁，复用仍可免费，因为消费者原本就必须等生产者。这里预测的是额外等待成本，不能把这个预测拿给后端当 no-mail proof。<a href=\"./evidence/compiler-sources.md#c-case-policy\">判定、选择新地址与容量兜底源码</a>。</p><p>候选选择也不是“无条件另开一块”。空洞保存先前占用者的字节来源；实现可以选另一个免费洞、跳过洞中在途部分，或容量足够时 bump 到新地址。源码在 2930–2936 行检查 <code>freshAddr + allocBytes ≤ l2AllocatableBytes</code>，可分配预算已经考虑保留空间。若早先偏好改变了布局、碎片最终导致超限，3456–3486 行还有撤销偏好并重排的兜底。</p><p>这是约束分层：布局必须满足容量与别名硬约束；在合法布局中，再按同步代价选择。PE 专属选项在 ODS 默认是 false，且总开关 <code>ZEUSHIGH_L2_INFLIGHT_REUSE=0</code> 会使本测试回到 BASE 预期。不能把 opt-in 性能偏好说成所有编译的默认行为。<a href=\"./evidence/compiler-sources.md#c-case-option\">选项定义</a>。</p>"
+      },
+      {
+        "id": "case-to-sync",
+        "title": "4. 从 addr 到 L2Region，再到真实 PE self-mail 预期",
+        "html": "<p>地址决策必须穿过 lowering 才能影响真实同步。在 <code>ZeusHighToZeusLow.cpp:2966–2994</code>，后端消费 AddressAllocation 物化的 <code>addr/size_bytes</code>，把 <code>zeus.l2_region_base</code> 与 <code>zeus.l2_region_size_bytes</code> 保留在 <code>breg_set_addr</code> 上。这样，即使两个 BReg/SSA 名字不同，InjectSync 仍能看到它们共享的物理字节。<a href=\"./evidence/compiler-sources.md#c-case-region-lowering\">真实跨 IR 合同</a>。</p><div class=\"flow\"><div>AddressAllocation<br>addr + size_bytes</div><b>→</b><div>ZeusHigh→ZeusLow<br>L2 region 元数据</div><b>→</b><div>Effect / conflict<br>重叠字节 × 读写类型</div><b>→</b><div>Admission / schedule<br>token 或免 mail 证明</div></div><p><code>Resources.cpp::l2RegionsOverlap</code> 的判定是半开区间相交：<code>A.begin &lt; B.end &amp;&amp; B.begin &lt; A.end</code>，并使用饱和加法处理区间末端。地址相邻而不相交时不因此冲突；只重叠一部分也不能当成完全独立。资源冲突统一入口把这项和 Value、配置、DMA window 等资源规则组合。<a href=\"./evidence/compiler-sources.md#c-case-overlap\">区间与资源冲突实现</a>。</p><p>相邻阶段的实际回归 <code>inject_sync_same_unit_linear_war.mlir</code> 更直接：函数 <code>@pe_same_unit_linear_war_uses_ordered_dag</code> 把读区间设为 [8192,8320)，后写区间设为 [8256,8384)，交集为 64 字节。两个 PE 使用不同 BReg，依然要求 ordered WAR。下面是真实 CHECK 摘录，不是本次运行结果：</p><pre><code>// Exact excerpts: test lines 86 and 89.\n// CHECK: zeus_low.pe_compute {{.*}} {send_mails = [\"PE\"]}\n// CHECK: zeus_low.pe_compute {{.*}} {recv_mails = [\"PE\"]}</code></pre><p>其 report 预期还包含 <code>status=ADMIT reason=ordered-admitted</code> 和 <code>WAR channel=PE-&gt;PE</code>。这证明测试合同明确反对“同 PE 队列，所以所有内存依赖都免费”的推理。<a href=\"./evidence/compiler-sources.md#c-case-pe-war\">后端真实夹具</a>。项目硬件合同另行区分同 PE 的 WAW 写回顺序与 RAW/WAR 的完成要求；不能从 WAW 的 no-mail 规则推导 WAR 也免 mail。<a href=\"./evidence/compiler-sources.md#c-case-pe-timing\">PE 时序合同</a>。</p><aside class=\"callout\">8192/8256 来自独立的后端测试，不是前面 1024/3072 用例自动 lowering 的结果。本章建立的是源码机制和相邻回归之间的可审读联系；要取得完整连续的输出证据，需要另行运行同一主夹具的真实全 pipeline 并保存产物。</aside>"
+      },
+      {
+        "id": "case-counterexamples",
+        "title": "5. 三个反例，把过度优化挡在门外",
+        "html": "<table><thead><tr><th>真实测试函数</th><th>BASE → AVOID 的 z 地址预期</th><th>它阻止哪种错误</th></tr></thead><tbody><tr><td>@independent</td><td>1024 → 3072</td><td>只接受选项却没改变实际放置</td></tr><tr><td>@raw_reuse</td><td>0 → 0</td><td>凡是 PE→PE 就强制另分配，浪费容量</td></tr><tr><td>@capacity_fallback</td><td>147456 → 147456</td><td>为了减少等待，让原来合法的程序容量失败</td></tr></tbody></table><p><code>@raw_reuse</code> 的第二次 PE 消费第一次结果 y，所以原有 RAW 已经建立完成约束。即使 z 复用更早的 a，额外另分配也未必减少等待。<code>@capacity_fallback</code> 每块有 <code>1×1×576×128×2=147456</code> 字节，即 144 KiB；夹具明确三块能放，第四块不行。432 KiB 与 576 KiB 是按测试尺寸算出的简化 activation 占用，不是某次完整 FFN 的 L2 实测高水位。此时接受有同步代价的洞，是合法降级。</p><p>还需要防止另一种误修：为了少同步而丢掉物理区间。配套 <code>inject_sync_static_l2_order_proofs.mlir</code> 在地址 1400 放两个不同写描述符，期待 <code>LD→DT</code> WAW 被 ADMIT 并得到一发一收的 token；同文件也有 DT 同 lane FIFO 的免 mail 反例。它的具体 mail 编排 CHECK 显式钉 legacy planner，另有使用默认 planner 的语义验证 RUN。教学时应说“这条 legacy 预期如此”，不能把某规划器的一种合法放置当成所有规划器唯一输出。<a href=\"./evidence/compiler-sources.md#c-case-waw\">真实 WAW 与免 mail 对照</a>。</p><p>最后，<code>driver_pe_inflight_reuse.mlir</code> 通过 Python 驱动和集成 <code>zeus-compiler</code> 两个入口检查 <code>place=fresh(avoid PE-&gt;PE)</code>，并用固定生成时间比较“默认”与“显式 false”的 zbin。这是在防参数转发遗漏；只是 argparse 接受参数不足以证明策略真的到达 allocator。<a href=\"./evidence/compiler-sources.md#c-case-driver\">入口合同测试</a>。以上都是已有测试的设计与预期，本轮没有新执行结论。</p>"
+      },
+      {
+        "id": "case-interview-evidence",
+        "title": "6. 把它讲成工程故事，而不是一句“我优化了同步”",
+        "html": "<p>面试可以按五步讲：首先观察独立 GEMM 被地址复用制造的 WAR 串联；再用小 IR 把业务复杂度去掉，留下两次 PE、一个 dealloc 和一次重分配；接着在 allocator 增加可关闭的代价偏好，保留真实 RAW 与容量回退；然后验证描述符的物理区间一直送到 InjectSync，由后端独立处理正确性；最后在同输入、同配置、同计时边界下评价周期与 L2 占用的交换。</p><p>当前 git 历史可定位引入这一 PE 主题的提交 <code>5dd4ddbe47d91ca5a081fd466df2a9d0e389dbe4</code>，标题为 <code>feat(AddressAllocation): support independent PE reuse placement [CONTRACT]</code>。提交说明强调 opt-in、RAW、capacity fallback、dependency checks，以及最终 allocator 和两个 capacity probe 的策略一致。<a href=\"./evidence/compiler-sources.md#c-case-history\">引入提交与探测参数定位</a>。本章引用这些已核对的代码合同，不据此推定个人独立作者身份、MR 当前状态或模型收益。</p><p>为什么 probe 也要一致？lookahead 若按旧策略估计容量，最终 allocator 按新策略另开地址，就可能出现“探测判能并行，落地却超限”；反过来会保守拒绝本来可行的方案。因此优化不只是某个 if 分支，还涉及入口传参、试算与最终分配、失败回退、下游元数据的完整接口。</p><table><thead><tr><th>证据</th><th>能说明什么</th><th>不能说明什么</th></tr></thead><tbody><tr><td>本章源码审读</td><td>实现机制、回归设计、版本身份</td><td>本轮测试通过</td></tr><tr><td>FileCheck 实际执行</td><td>该版本下的地址/结构/诊断合同</td><td>数值、无死锁和性能全部成立</td></tr><tr><td>同二进制功能与 RTL 验证</td><td>对应输入和环境下的执行行为</td><td>任意 shape 或所有模型都成立</td></tr><tr><td>固定业务输入的 A/B trace</td><td>等待、周期、占用的实际交换</td><td>未测并发或整模 E2E 同比加速</td></tr></tbody></table><p>最好的结论不是“省了几封 mail 就一定快”，而是“我改变了物理分配，让本来独立的工作少一条人为约束，同时保留后端证明与容量可行性；是否兑现收益，用关键路径和实际产物确认”。现在这份案例完成了源码与测试合同层，尚未生成本轮连续 IR/汇编或 trace，因而没有填写新的加速百分比。</p>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "a 已经 dealloc，为什么还可能需要等 PE？",
+        "a": "dealloc 表示逻辑生命周期结束，不能当作异步单元退休事件。旧 PE 可能仍在读取这段物理字节；把同一空间交给独立后写者会增加 WAR，后端必须用正确顺序证明或同步保护。",
+        "followup": "如果只是改 BReg 配置，而没有覆盖 L2 数据，等待点是否相同？解释 snapshot 与数据 completion。"
+      },
+      {
+        "q": "为什么不把所有复用都禁掉？",
+        "a": "片上容量有限，而且已有 RAW 等待可能已覆盖复用成本。主测试用 raw_reuse 保留地址0，用 capacity_fallback 保留147456；这是性能偏好，不允许把合法程序变成容量失败。",
+        "followup": "偏好只改变洞的选择、没有 bump 新地址，也可能导致后续碎片超限吗？"
+      },
+      {
+        "q": "同一 PE 队列的两条指令，为什么还会需要 PE→PE mail？",
+        "a": "指令顺序不自动等于全部读写阶段互斥。真实后端回归对部分重叠 L2 区间的 PE WAR 明确要求 ordered admission 和 self-mail；WAW 是否免 mail 需使用自己的写回顺序证明，不能混用。",
+        "followup": "读[8192,8320)、写[8256,8384)，相交多少字节？为什么只比较起始地址不够？"
+      },
+      {
+        "q": "怎样证明开关到达了生产编译链？",
+        "a": "既要直接 pass 测试，也要公共入口驱动真实 placement report，并固定生成身份比较默认与显式false。还需核对lookahead容量试算和最终allocator使用相同参数。仅解析命令行参数不能证明实际生效。",
+        "followup": "为什么 capacity probe 与最终分配策略不一致，会形成跨pass合同错误？"
+      },
+      {
+        "q": "这章现在能宣称消除了多少等待、加速多少吗？",
+        "a": "不能。本轮只读取已有源码与FileCheck预期，未运行全pipeline、模拟器或RTL。可以证明设计针对哪条物理依赖；实际mail减少、周期、L2高水位和模型收益必须绑定生成产物与输入重新测量。",
+        "followup": "如何设置A/B，使地址策略的收益不被kernel、精度或编译器其他变化混入？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "c-case-pe-test",
+        "label": "三个实际地址分配回归",
+        "url": "./evidence/compiler-sources.md#c-case-pe-test",
+        "note": "triton_shared@82613bc2eb30 · test/ZeusV3Midend/Unit/Transforms/address_allocation_pe_inflight_reuse.mlir:1–101；只读源码与预期，未在本轮执行。",
+        "kind": "源码"
+      },
+      {
+        "id": "c-case-policy",
+        "label": "PE 付费复用判定与容量回退",
+        "url": "./evidence/compiler-sources.md#c-case-policy",
+        "note": "triton_shared@82613bc2eb30 · lib/Dialect/ZeusHigh/Transforms/AddressAllocation.cpp:2245–2284,2922–2965,3456–3486；只读源码与预期，未在本轮执行。",
+        "kind": "源码"
+      },
+      {
+        "id": "c-case-region-lowering",
+        "label": "物理 L2 区间贯通 lowering",
+        "url": "./evidence/compiler-sources.md#c-case-region-lowering",
+        "note": "triton_shared@82613bc2eb30 · lib/Conversion/ZeusHighToZeusLow/ZeusHighToZeusLow.cpp:2966–2994；只读源码与预期，未在本轮执行。",
+        "kind": "源码"
+      },
+      {
+        "id": "c-case-overlap",
+        "label": "按字节区间判定资源冲突",
+        "url": "./evidence/compiler-sources.md#c-case-overlap",
+        "note": "triton_shared@82613bc2eb30 · lib/Dialect/ZeusLow/Transforms/InjectSync/Resources.cpp:70–85,1414–1425；只读源码与预期，未在本轮执行。",
+        "kind": "源码"
+      },
+      {
+        "id": "c-case-pe-war",
+        "label": "真实 PE 同单元 WAR 回归",
+        "url": "./evidence/compiler-sources.md#c-case-pe-war",
+        "note": "triton_shared@82613bc2eb30 · test/ZeusV3Backend/Unit/Transforms/inject_sync_same_unit_linear_war.mlir:1–2,75–97；只读源码与预期，未在本轮执行。",
+        "kind": "源码"
+      },
+      {
+        "id": "c-case-waw",
+        "label": "跨单元 WAW 与 no-mail 反例",
+        "url": "./evidence/compiler-sources.md#c-case-waw",
+        "note": "triton_shared@82613bc2eb30 · test/ZeusV3Backend/Unit/Transforms/inject_sync_static_l2_order_proofs.mlir:1–6,96–136；只读源码与预期，未在本轮执行。",
+        "kind": "源码"
+      },
+      {
+        "id": "c-case-driver",
+        "label": "实际入口必须转发选项",
+        "url": "./evidence/compiler-sources.md#c-case-driver",
+        "note": "triton_shared@82613bc2eb30 · test/BusinessKernels/driver_pe_inflight_reuse.mlir:1–17；只读源码与预期，未在本轮执行。",
+        "kind": "源码"
+      },
+      {
+        "id": "c-case-option",
+        "label": "PE 偏好默认关闭",
+        "url": "./evidence/compiler-sources.md#c-case-option",
+        "note": "triton_shared@82613bc2eb30 · include/triton-shared/Dialect/ZeusHigh/Transforms/Passes.td:768–775；只读源码与预期，未在本轮执行。",
+        "kind": "源码"
+      },
+      {
+        "id": "c-case-pe-timing",
+        "label": "PE 读写时序的项目合同",
+        "url": "./evidence/compiler-sources.md#c-case-pe-timing",
+        "note": "triton_shared@82613bc2eb30 · docs/vcs_debug/rtl-instruction-dependency-model.md:727–767；只读源码与预期，未在本轮执行。",
+        "kind": "源码"
+      },
+      {
+        "id": "c-case-history",
+        "label": "PE 复用偏好的已核对引入提交",
+        "url": "./evidence/compiler-sources.md#c-case-history",
+        "note": "triton_shared@5dd4ddbe47d91ca5a081fd466df2a9d0e389dbe4；git log + git show 核对标题、提交说明及测试文件，不推定 MR 状态或个人贡献。",
+        "kind": "历史记录"
+      }
+    ],
+    "takeaways": [
+      "逻辑生命周期结束不等于异步硬件访问完成；地址复用会把独立工作变成物理 WAR/WAW。",
+      "PE 复用偏好只影响合法布局的成本排序；真实 RAW、容量回退和 InjectSync 正确性仍独立成立。",
+      "追踪 addr/size_bytes 到 L2Region，才能把前端名字不同而物理重叠的访问连起来。",
+      "读回归预期、执行回归、数值验证、RTL 与性能是不同证据层，不能互相代替。"
+    ]
+  }
+]

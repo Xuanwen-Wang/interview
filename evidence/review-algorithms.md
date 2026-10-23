@@ -86,3 +86,53 @@ DeepSeekMoE §3.1 的做法是将专家数 E 扩为 mE，将中间维 I 缩为 I
 ## 未验证范围
 
 本轮没有运行业务 kernel、CPU/Graph/CycleSim/VCS/实板测试，没有复测历史性能或核验完整原始 trace。未逐条审计所有 kernel 指令和所有 PR discussion；上述历史数值主要通过固定提交的报告与对应参考实现交叉核验。没有检查浏览器排版与最终部署路径，来源文件是否被发布包携带需由主任务完成。
+
+## 第二轮复验与闭环（2026-10-23）
+
+以下状态更新覆盖上文第一轮问题的处理结果；第一轮快照及原发现保留用于审计。本轮只修改本审阅记录，未修改正文和网页代码。
+
+复验快照 SHA256：
+
+- `content/00-core.json`：`b0945ef8baee1131856dc2505271e9819cb4b242761c2ffe64cad60aee90e3f5`
+- `content/20-moe.json`：`d27fd54f037d053f0f4b404ed1d18a0bf5028fb04abbadde878d86667fd79586`
+- `content/10-algorithms.json`：`95307e96877be9ff67dea9f1f006cb9ba9d01ac3a2daa95db8ad346f4d9490c6`
+- `evidence/README.md`：`298db5349edc14b7474bf5b3069b3fc751d03ca2e7ee435b7e3fba19a36a5da1`
+
+### 第一轮三项的处理结果
+
+| 项目 | 复验结论 | 当前依据 |
+| --- | --- | --- |
+| P2-1 细粒度专家与 M | 已修复 | 表格已改为单专家 I 更小；正文明确 E、K 同比例增加时 T·K/E 不变，并区分仅增加 E、固定 K 的情况。 |
+| P2-2 固定点终止条件 | 已修复 | 当前句子同时要求有限高度格与单调转移，另说明无限高度域可能需要 widening。没有继续使用“有限域或单调”的错误析取。 |
+| P2-3 来源文件不存在 | 原问题已修复，发布读回另验 | `evidence/README.md` 已存在，包含 JD 输入、个人陈述、固定源码、历史实验、教学推导与本站验收的边界。`web/app.js` 的 `sourceUrl()` 将相对来源转为 GitHub 仓库文件链接，因此无需把 Markdown 复制进 Pages 的 dist 才能访问，但仍需提交/发布对应文件并检查线上链接。 |
+
+复验时新索引引用的 `evidence/review-and-validation.md` 尚未生成，其他三份分领域来源文件均存在。该链接已反馈主任务补齐；这属于尚在进行的最终验收记录，不否定前述两项技术修复。最终发布验收应确认这份索引目标存在，不能只检查 README 本身。
+
+### KV 实验室的扫描用词与单位
+
+已检查 `web/app.js` 的 KV 实验室公式、标签和更新函数。默认参数得到 4 GiB/请求、40 GiB 预算下理想并发 10、4096 MiB 的完整逻辑 KV 扫描，三者一致。滑块明确使用标准 MHA/GQA/MQA 的 K+V、全层总账、无 TP 分片，另有不适用于 MLA/KDA 的说明。
+
+“完整逻辑 KV 扫描 / MiB”描述单请求在给定历史长度下全层 K+V 数据各参与一次的逻辑量；它没有被标为 HBM 实测流量。算法正文 `kv-cache/reads` 也明确区分逻辑访问、cache/驻留、跨 query 复用与多卡分片。因此当前没有发现将逻辑 cache 大小直接冒充真实外存事务的 P1/P2。该卡片是单请求、单步、全层口径；不应用它推断整个 batch 的外存流量或每个 query head 独立重读的实现开销。
+
+### KDA 时间顺序、时间线和数学算例
+
+- 递推顺序复核为 decay → 用衰减后状态预测 value → delta 写入 → query 读出；与正文采用的逻辑状态 `[Dk,Dv]` 一致。Delta 示例给出 `[[2,2],[0,1]]`，按通道 decay 示例给出 `[[1.75,2],[0,1]]`，矩阵方向及数值均正确。
+- 论文首次提交时间分别为 [DeltaNet 并行算法 2024-06-10](https://arxiv.org/abs/2406.06484)、[Gated DeltaNet 2024-12-09](https://arxiv.org/abs/2412.06464)、[Kimi Linear / KDA 2025-10-30](https://arxiv.org/abs/2510.26692)。六章中的概念演化顺序没有倒置；没有把 KDA 论文发布时间等同于内部 GLM5Next 部署时间，也没有把上述并行算法论文说成 delta rule 的最初发明。
+- FlashAttention 算例 `[0,ln2,ln3]` 与 value `[2,5,8]` 得到 6；将第三项改为 `ln6` 得到 `20/3`。文中已说明第一个例子局部输出简单平均恰好正确，第二个例子才用于展示反例，不再混淆这两个结论。
+- KDA rec 为 512 KiB、conv 为 36 KiB，每请求每 rank 的 34 层总计 18.1953125 MiB；528-byte latent 的 65536 token 单层为 33 MiB，11 层 CP4 理想均分为 90.75 MiB/rank，均独立复算通过。
+- 45 层示意图中 0–2 为 KDA、3 为 DSA、4–43 为十组 3:1、44 为 KDA，累计 34 KDA/11 DSA；与前三层 dense、后42层 MoE 属于同一组主干层的两条分类轴。
+
+二轮没有新增算法/数学 P1 或 P2。仍未进行浏览器视觉验收、线上发布读回或硬件重测；上述闭环仅覆盖内容正确性与当前源码内链接目标。
+
+## 最终新增章节复验（2026-10-23）
+
+只读复验以下两份新增正文，未发现需要修正的 P1/P2：
+
+- `content/36-real-compiler-case.json`，SHA256=`c8f3f51bc7aad82dfa31e8dd7b57d5ba5dcd7a20c27de5252bdf51d90b919103`。
+- `content/43-compiler-workshop.json`，SHA256=`0abd31200fa9b2ed6872dd6c17cd874d26e25b1469da81a2928460d7d70045b3`。
+
+白板章节：重新计算 diamond 的四轮同步迭代和循环固定点，结果与全部表格一致。φ 输入按前驱边 use、IN 采用 φ 定义前外部值的约定自洽；完整干涉边 `{ab,ac,bc,tc,fc,xc}` 正确。在独立 predicate、NEXT 无额外 clobber、read-before-write 两地址运算、固定私有 spill 槽的教学模型下，所列 R0/R1 序列保持输入顺序，动态一次 store 和一次 reload，true/false 路径分别得到45/25。循环第二轮 `IN[B]` 增加 n、第三轮 `OUT[H]` 包含 n 的叙述也吻合。另核对了 [LLVM φ 边 use 定义](https://llvm.org/docs/LangRef.html#phi-instruction)、[MLIR block argument](https://mlir.llvm.org/docs/LangRef/#blocks)与[两地址/寄存器分配背景](https://llvm.org/docs/CodeGenerator.html#register-allocation)。
+
+真实案例：对 `triton_shared@82613bc2eb30feb9ef7f57aef20584df0ef9e28a` 的主地址分配夹具、PE WAR 和 WAW 夹具、入口驱动测试、`findPaidReusePair`、容量回退、L2 region lowering、区间相交与 ODS 开关逐项读取核验。地址预期 `1024→3072`、`0→0`、`147456→147456`，144 KiB 容量算例，以及两128-byte区间相交64字节均正确。引入提交 `5dd4ddbe47d91ca5a081fd466df2a9d0e389dbe4` 的标题已读回。正文明确区分测试 CHECK 预期与实际执行结果、两个独立夹具与连续 pipeline 输出、legacy planner 编排与通用语义；没有据此宣称新测试 PASS、RTL 通过或收益百分比。
+
+前一轮待补的 `evidence/review-and-validation.md` 现已存在，README 索引目标完整性在本地闭环。本轮仅进行源码审读与教学集合/算术独立复算，没有执行业务编译夹具、编译器测试、RTL 或硬件性能测试；线上来源链接与浏览器验收仍由主任务记录。

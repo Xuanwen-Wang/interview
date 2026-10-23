@@ -23,7 +23,9 @@ jobs:
       - name: Build portable HTML
         run: python3 scripts/build.py
       - name: Validate content and links
-        run: python3 scripts/check.py
+        run: |
+          python3 scripts/check.py
+          node --check web/app.js
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

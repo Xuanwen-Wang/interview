@@ -1,11 +1,11 @@
 # 518 硬件与编译器：源码证据索引
 
-采集日期：2026-10-23。对应正文 `content/30-compiler.json` 的 6 章。
+采集日期：2026-10-23。对应正文 `content/30-compiler.json` 的 6 章，以及第二轮补强的 `content/36-real-compiler-case.json`。
 
 ## 快照与边界
 
 - 仓库：`triton_shared`；本地 HEAD：`82613bc2eb30feb9ef7f57aef20584df0ef9e28a`。
-- 本地 checkout 并非干净：已跟踪文件 `ci/test_job_vcs_case.txt` 有修改，并存在多份未跟踪研究材料。这里引用的 30 处源码/文档定位均逐项核对为已跟踪、相对 HEAD 无改动。未将未跟踪报告当成该 commit 的内容。
+- 本地 checkout 并非干净：已跟踪文件 `ci/test_job_vcs_case.txt` 有修改，并存在多份未跟踪研究材料。首批引用的 30 处源码/文档定位均逐项核对为已跟踪、相对 HEAD 无改动；第二轮新增定位的核对另列于文末。未将未跟踪报告当成该 commit 的内容。
 - 本任务仅只读检查业务源码、项目规范、既有项目文档与公开官方文档，没有编译业务代码、执行模拟器或提交 VCS 作业。教材中的数值例子若未注明出处均是教学示例。
 - `docs/vcs_debug/rtl-instruction-dependency-model.md` 是当前仓库中的 RTL 合同文档。本次核对其描述与编译器调用点，没有重新逐条读取所指 RTL，也没有重测其时序。
 - 数量、参数和 pass 顺序是该 SHA 的事实；不自动代表部署端当前安装版本。MR !1190 等只用于历史机制背景，不声明当前 merge/CI 状态或重现历史收益。
@@ -338,3 +338,103 @@
 3. 精确匹配最终源码 SHA 的代表性 RTL/VCS 记录与实芯片数据。
 4. 518 与 GPU 同输入、同数值合同、同 batch/context/topology 的性能对照。
 5. 当前各部署环境实际 compiler/runtime 版本与本教学快照的差异。
+
+
+## 第二轮补强：真实 PE 地址复用案例
+
+正文：`content/36-real-compiler-case.json`。只读核对日期同上。本轮新增九处定位均已通过 `git ls-files` / `git show` 与工作区差异核对：文件已跟踪、内容与冻结 HEAD 一致。原 checkout 仍有无关的 `ci/test_job_vcs_case.txt` 修改；没有改动业务仓库，没有执行测试、编译、模拟器或 RTL。
+
+本章以真实中端测试为主线，用真实 lowering 源码和独立后端夹具连接机制。后端 8192/8256 地址案例不是中端 1024/3072 案例的本轮生成物。短摘录来自源码；地址时间图、简化占用和叙述中的区间运算属于独立教学推导，不是 trace。测试 CHECK 是仓库预期，不是本轮 PASS。
+
+<a id="c-case-pe-test"></a>
+
+### 三个实际地址分配回归
+
+- 仓库：`triton_shared`
+- 版本：`82613bc2eb30feb9ef7f57aef20584df0ef9e28a`
+- 文件：`test/ZeusV3Midend/Unit/Transforms/address_allocation_pe_inflight_reuse.mlir:1–101`
+- 核对：只读现有源码及测试合同；未执行 RUN。原仓库访问需原有权限。
+
+<a id="c-case-policy"></a>
+
+### PE 付费复用判定与容量回退
+
+- 仓库：`triton_shared`
+- 版本：`82613bc2eb30feb9ef7f57aef20584df0ef9e28a`
+- 文件：`lib/Dialect/ZeusHigh/Transforms/AddressAllocation.cpp:2245–2284,2922–2965,3456–3486`
+- 核对：只读现有源码及测试合同；未执行 RUN。原仓库访问需原有权限。
+
+<a id="c-case-region-lowering"></a>
+
+### 物理 L2 区间贯通 lowering
+
+- 仓库：`triton_shared`
+- 版本：`82613bc2eb30feb9ef7f57aef20584df0ef9e28a`
+- 文件：`lib/Conversion/ZeusHighToZeusLow/ZeusHighToZeusLow.cpp:2966–2994`
+- 核对：只读现有源码及测试合同；未执行 RUN。原仓库访问需原有权限。
+
+<a id="c-case-overlap"></a>
+
+### 按字节区间判定资源冲突
+
+- 仓库：`triton_shared`
+- 版本：`82613bc2eb30feb9ef7f57aef20584df0ef9e28a`
+- 文件：`lib/Dialect/ZeusLow/Transforms/InjectSync/Resources.cpp:70–85,1414–1425`
+- 核对：只读现有源码及测试合同；未执行 RUN。原仓库访问需原有权限。
+
+<a id="c-case-pe-war"></a>
+
+### 真实 PE 同单元 WAR 回归
+
+- 仓库：`triton_shared`
+- 版本：`82613bc2eb30feb9ef7f57aef20584df0ef9e28a`
+- 文件：`test/ZeusV3Backend/Unit/Transforms/inject_sync_same_unit_linear_war.mlir:1–2,75–97`
+- 核对：只读现有源码及测试合同；未执行 RUN。原仓库访问需原有权限。
+
+<a id="c-case-waw"></a>
+
+### 跨单元 WAW 与 no-mail 反例
+
+- 仓库：`triton_shared`
+- 版本：`82613bc2eb30feb9ef7f57aef20584df0ef9e28a`
+- 文件：`test/ZeusV3Backend/Unit/Transforms/inject_sync_static_l2_order_proofs.mlir:1–6,96–136`
+- 核对：只读现有源码及测试合同；未执行 RUN。原仓库访问需原有权限。
+
+<a id="c-case-driver"></a>
+
+### 实际入口必须转发选项
+
+- 仓库：`triton_shared`
+- 版本：`82613bc2eb30feb9ef7f57aef20584df0ef9e28a`
+- 文件：`test/BusinessKernels/driver_pe_inflight_reuse.mlir:1–17`
+- 核对：只读现有源码及测试合同；未执行 RUN。原仓库访问需原有权限。
+
+<a id="c-case-option"></a>
+
+### PE 偏好默认关闭
+
+- 仓库：`triton_shared`
+- 版本：`82613bc2eb30feb9ef7f57aef20584df0ef9e28a`
+- 文件：`include/triton-shared/Dialect/ZeusHigh/Transforms/Passes.td:768–775`
+- 核对：只读现有源码及测试合同；未执行 RUN。原仓库访问需原有权限。
+
+<a id="c-case-pe-timing"></a>
+
+### PE 读写时序的项目合同
+
+- 仓库：`triton_shared`
+- 版本：`82613bc2eb30feb9ef7f57aef20584df0ef9e28a`
+- 文件：`docs/vcs_debug/rtl-instruction-dependency-model.md:727–767`
+- 核对：只读现有源码及测试合同；未执行 RUN。原仓库访问需原有权限。
+
+<a id="c-case-history"></a>
+
+### PE 复用偏好的实际引入提交
+
+- 仓库：`triton_shared`
+- 提交：`5dd4ddbe47d91ca5a081fd466df2a9d0e389dbe4`
+- 标题：`feat(AddressAllocation): support independent PE reuse placement [CONTRACT]`
+- 核验方法：`git log -- test/ZeusV3Midend/Unit/Transforms/address_allocation_pe_inflight_reuse.mlir` 定位，再 `git show --no-patch` 读回完整提交说明；没有查询或修改 MR。
+- 提交说明确认：选项 opt-in，保留 RAW reuse、capacity fallback 与 dependency checks；策略需贯通最终 allocator、ParallelReductionLookahead、StreamTopKGather 的容量探测。
+- 当前快照的转发位置：`lib/Dialect/ZeusHigh/Transforms/ZeusHighPipeline.cpp:500–537`，版本为正文冻结 HEAD；已有 `c-pipe-last` 提供定位。
+- 不核验、不陈述：个人独立作者身份、MR 当前状态、当前 CI 状态、历史性能收益是否可复现。
