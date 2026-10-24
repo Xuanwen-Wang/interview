@@ -1,0 +1,142 @@
+[
+  {
+    "id": "bytedance",
+    "title": "字节跳动",
+    "reports": [
+      "S01",
+      "S02",
+      "S03",
+      "S04"
+    ],
+    "chapters": [
+      "interview-bytedance"
+    ],
+    "description": "图编译、算子优化与项目深挖"
+  },
+  {
+    "id": "cambricon",
+    "title": "寒武纪",
+    "reports": [
+      "S05",
+      "S09",
+      "S22"
+    ],
+    "chapters": [
+      "interview-chipmakers"
+    ],
+    "description": "历史编译器社招与近期高性能库相邻岗位"
+  },
+  {
+    "id": "mthreads",
+    "title": "摩尔线程",
+    "reports": [
+      "S06"
+    ],
+    "chapters": [
+      "interview-chipmakers"
+    ],
+    "description": "GEMM、寄存器、反汇编与现场 GPU 编码"
+  },
+  {
+    "id": "enflame",
+    "title": "燧原",
+    "reports": [
+      "S07"
+    ],
+    "chapters": [
+      "interview-chipmakers"
+    ],
+    "description": "历史社招中的 MLIR 与自动生成取舍"
+  },
+  {
+    "id": "metax",
+    "title": "沐曦",
+    "reports": [
+      "S08"
+    ],
+    "chapters": [
+      "interview-chipmakers"
+    ],
+    "description": "LLVM 后端、寄存器分配与链表题"
+  },
+  {
+    "id": "nvidia",
+    "title": "NVIDIA",
+    "reports": [
+      "S10",
+      "S11",
+      "S12"
+    ],
+    "chapters": [
+      "interview-internet"
+    ],
+    "description": "官方岗位要求：DSL、MLIR 与 GPU 后端"
+  },
+  {
+    "id": "internet",
+    "title": "阿里 · 百度 · 快手 · 美团",
+    "reports": [
+      "S04",
+      "S13"
+    ],
+    "chapters": [
+      "interview-internet"
+    ],
+    "description": "保留同一作者多公司记录的归属边界"
+  },
+  {
+    "id": "li-auto",
+    "title": "理想",
+    "reports": [
+      "S14"
+    ],
+    "chapters": [
+      "interview-internet"
+    ],
+    "description": "图编译实习：MLIR 对象、Pass 和 C++"
+  },
+  {
+    "id": "samsung",
+    "title": "三星西安",
+    "reports": [
+      "S15"
+    ],
+    "chapters": [
+      "interview-internet"
+    ],
+    "description": "图编译、算子融合与图算法"
+  },
+  {
+    "id": "baai",
+    "title": "智源",
+    "reports": [
+      "S16"
+    ],
+    "chapters": [
+      "interview-internet"
+    ],
+    "description": "DFS 与 Conv2D 现场实现"
+  },
+  {
+    "id": "luminal",
+    "title": "Luminal",
+    "reports": [
+      "G01"
+    ],
+    "chapters": [
+      "interview-official-takehomes"
+    ],
+    "description": "官方 SSA→VLIW 编译器作业"
+  },
+  {
+    "id": "anthropic",
+    "title": "Anthropic",
+    "reports": [
+      "G02"
+    ],
+    "chapters": [
+      "interview-official-takehomes"
+    ],
+    "description": "官方历史性能作业与模拟机器优化"
+  }
+]

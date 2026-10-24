@@ -1,0 +1,786 @@
+[
+  {
+    "id": "moe-topology-tradeoffs",
+    "part": "MoE 部署与优化",
+    "order": 24.1,
+    "title": "EP4×TP4：从权重归属推导部署取舍",
+    "subtitle": "同样16个rank，为什么专家更少、矩阵更大，仍不保证更快",
+    "minutes": 34,
+    "level": "深入",
+    "tags": [
+      "TP4×EP4",
+      "TP16",
+      "TP1×EP16",
+      "负载与容量"
+    ],
+    "lead": "先固定同一批进入MoE的token，再改变专家和中间维的归属，才能回答为什么采用EP4×TP4。这一章区分当前实现、历史兼容分支和TP16方案推演；给出可计算的权重、路由、GEMM及通信账，不虚构立项时的决策历史。",
+    "sections": [
+      {
+        "id": "rank-map",
+        "title": "01 / 先把 board、rank、core、专家四层画对",
+        "html": "<p>本章模型身份固定为内部GLM5Next300B：H=4096，专家中间维I=2048，288个Routed、1个Shared、每token选8个。当前dev拓扑world16，rank=4×ep+tp；四个连续rank组成板内TP4，四个board分EP。一个rank再有双核，这是核内工作分配，不能再算成跨rank TP2。DP4是Attention一侧的布局，不把world乘成64。</p><svg viewBox=\"0 0 760 325\" role=\"img\" aria-label=\"TP4EP4专家和中间维归属\"><title>TP4EP4专家和中间维归属</title><g font-family=\"sans-serif\" font-size=\"14\" fill=\"#294838\"><rect x=\"10\" y=\"10\" width=\"175\" height=\"65\" rx=\"8\" fill=\"#d6e3c6\" stroke=\"#7e937b\"/><text x=\"97.5\" y=\"37.5\" text-anchor=\"middle\">EP0 · expert 0–71</text><text x=\"97.5\" y=\"57.5\" text-anchor=\"middle\">rank 0–3</text><rect x=\"205\" y=\"10\" width=\"127\" height=\"65\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"268.5\" y=\"37.5\" text-anchor=\"middle\">r0 · TP0</text><text x=\"268.5\" y=\"57.5\" text-anchor=\"middle\">I[0,512)</text><rect x=\"342\" y=\"10\" width=\"127\" height=\"65\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"405.5\" y=\"37.5\" text-anchor=\"middle\">r1 · TP1</text><text x=\"405.5\" y=\"57.5\" text-anchor=\"middle\">I[512,1024)</text><rect x=\"479\" y=\"10\" width=\"127\" height=\"65\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"542.5\" y=\"37.5\" text-anchor=\"middle\">r2 · TP2</text><text x=\"542.5\" y=\"57.5\" text-anchor=\"middle\">I[1024,1536)</text><rect x=\"616\" y=\"10\" width=\"127\" height=\"65\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"679.5\" y=\"37.5\" text-anchor=\"middle\">r3 · TP3</text><text x=\"679.5\" y=\"57.5\" text-anchor=\"middle\">I[1536,2048)</text><rect x=\"10\" y=\"87\" width=\"175\" height=\"65\" rx=\"8\" fill=\"#edf1e7\" stroke=\"#7e937b\"/><text x=\"97.5\" y=\"114.5\" text-anchor=\"middle\">EP1 · expert 72–143</text><text x=\"97.5\" y=\"134.5\" text-anchor=\"middle\">rank 4–7</text><rect x=\"205\" y=\"87\" width=\"127\" height=\"65\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"268.5\" y=\"114.5\" text-anchor=\"middle\">r4 · TP0</text><text x=\"268.5\" y=\"134.5\" text-anchor=\"middle\">I[0,512)</text><rect x=\"342\" y=\"87\" width=\"127\" height=\"65\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"405.5\" y=\"114.5\" text-anchor=\"middle\">r5 · TP1</text><text x=\"405.5\" y=\"134.5\" text-anchor=\"middle\">I[512,1024)</text><rect x=\"479\" y=\"87\" width=\"127\" height=\"65\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"542.5\" y=\"114.5\" text-anchor=\"middle\">r6 · TP2</text><text x=\"542.5\" y=\"134.5\" text-anchor=\"middle\">I[1024,1536)</text><rect x=\"616\" y=\"87\" width=\"127\" height=\"65\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"679.5\" y=\"114.5\" text-anchor=\"middle\">r7 · TP3</text><text x=\"679.5\" y=\"134.5\" text-anchor=\"middle\">I[1536,2048)</text><rect x=\"10\" y=\"164\" width=\"175\" height=\"65\" rx=\"8\" fill=\"#edf1e7\" stroke=\"#7e937b\"/><text x=\"97.5\" y=\"191.5\" text-anchor=\"middle\">EP2 · expert 144–215</text><text x=\"97.5\" y=\"211.5\" text-anchor=\"middle\">rank 8–11</text><rect x=\"205\" y=\"164\" width=\"127\" height=\"65\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"268.5\" y=\"191.5\" text-anchor=\"middle\">r8 · TP0</text><text x=\"268.5\" y=\"211.5\" text-anchor=\"middle\">I[0,512)</text><rect x=\"342\" y=\"164\" width=\"127\" height=\"65\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"405.5\" y=\"191.5\" text-anchor=\"middle\">r9 · TP1</text><text x=\"405.5\" y=\"211.5\" text-anchor=\"middle\">I[512,1024)</text><rect x=\"479\" y=\"164\" width=\"127\" height=\"65\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"542.5\" y=\"191.5\" text-anchor=\"middle\">r10 · TP2</text><text x=\"542.5\" y=\"211.5\" text-anchor=\"middle\">I[1024,1536)</text><rect x=\"616\" y=\"164\" width=\"127\" height=\"65\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"679.5\" y=\"191.5\" text-anchor=\"middle\">r11 · TP3</text><text x=\"679.5\" y=\"211.5\" text-anchor=\"middle\">I[1536,2048)</text><rect x=\"10\" y=\"241\" width=\"175\" height=\"65\" rx=\"8\" fill=\"#edf1e7\" stroke=\"#7e937b\"/><text x=\"97.5\" y=\"268.5\" text-anchor=\"middle\">EP3 · expert 216–287</text><text x=\"97.5\" y=\"288.5\" text-anchor=\"middle\">rank 12–15</text><rect x=\"205\" y=\"241\" width=\"127\" height=\"65\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"268.5\" y=\"268.5\" text-anchor=\"middle\">r12 · TP0</text><text x=\"268.5\" y=\"288.5\" text-anchor=\"middle\">I[0,512)</text><rect x=\"342\" y=\"241\" width=\"127\" height=\"65\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"405.5\" y=\"268.5\" text-anchor=\"middle\">r13 · TP1</text><text x=\"405.5\" y=\"288.5\" text-anchor=\"middle\">I[512,1024)</text><rect x=\"479\" y=\"241\" width=\"127\" height=\"65\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"542.5\" y=\"268.5\" text-anchor=\"middle\">r14 · TP2</text><text x=\"542.5\" y=\"288.5\" text-anchor=\"middle\">I[1024,1536)</text><rect x=\"616\" y=\"241\" width=\"127\" height=\"65\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"679.5\" y=\"268.5\" text-anchor=\"middle\">r15 · TP3</text><text x=\"679.5\" y=\"288.5\" text-anchor=\"middle\">I[1536,2048)</text></g></svg><p>例如global expert75位于EP1，local expert3；当前I512 per-tensor owner路径由每个TP rank的core1负责其切片。四个TP rank都处理同一专家的命中token，但分别计算不同的I通道。图表达项目逻辑拓扑，不由board名字推断硅片或封装数量。</p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#topology\">核对源码与证据 ↗</a></p>"
+      },
+      {
+        "id": "axis-proof",
+        "title": "02 / TP为什么切I，而不能把Gate和Up各丢一边",
+        "html": "<div class=\"formula\">G=XWgᵀ，U=XWuᵀ，A=SiLU(G)⊙U，Y=A·Wdᵀ<br>I = I₀ ⊔ I₁ ⊔ …；Y = Σp A[:,Ip]·Wd[:,Ip]ᵀ</div><p>Gate和Up必须按相同I区间切分，因为逐元素乘法配对的是同一个中间通道；每个分片可独立完成激活。Down的K维就是I，因此每个TP rank只得到H维输出的部分和，最终必须求和。若按H切输入，Gate/Up投影本身会需要额外归约，非线性还不能任意前移。</p><table><thead><tr><th>对象</th><th>完整shape</th><th>TP4某rank</th><th>矩阵乘角色</th></tr></thead><tbody><tr><td>Gate / Up weight</td><td>[2048,4096]</td><td>[512,4096]</td><td>输出N由2048缩到512</td></tr><tr><td>Down weight</td><td>[4096,2048]</td><td>[4096,512]</td><td>收缩K由2048缩到512</td></tr><tr><td>某expert输入</td><td>[Mₑ,4096]</td><td>仍[Mₑ,4096]</td><td>Mₑ不会自动除4</td></tr><tr><td>Down输出</td><td>[Mₑ,4096]</td><td>[Mₑ,4096] partial</td><td>H没有被分成1024</td></tr></tbody></table><p>这也解释TP切分后的误差来源：实数域相加等价，但局部BF16 partial与跨rank求和改变舍入位置，不保证与单卡完整dot逐位一致。</p>"
+      },
+      {
+        "id": "same-memory",
+        "title": "03 / 同样world16，三种拓扑纯权重容量其实相同",
+        "html": "<table><thead><tr><th>MoE布局</th><th>专家/rank</th><th>I/rank</th><th>FP8每专家slice</th><th>全部Routed矩阵/rank</th></tr></thead><tbody><tr><td>TP4×EP4 当前</td><td>72</td><td>512</td><td>6 MiB</td><td>432 MiB</td></tr><tr><td>TP1×EP16 逻辑配置</td><td>18</td><td>2048</td><td>24 MiB</td><td>432 MiB</td></tr><tr><td>TP16×EP1 推演</td><td>288</td><td>128</td><td>1.5 MiB</td><td>432 MiB</td></tr></tbody></table><div class=\"formula\">Qrank = (E/EP) × 3H(I/TP) × 1B = 3EHI/(EP×TP)<br>EP×TP=16 ⇒ Qrank相同；这里不含scale、padding、metadata、副本或Shared</div><p>把TP4改TP1并不会凭空节省四倍总权重；它让一个rank拥有更少但更完整的专家。Shared另算：当前BF16完整专家48MiB，EP0内TP4每rank12MiB，双核各6MiB。历史UScale或FP8 Shared文档中的字节数属于其他resident格式。</p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#topology\">核对源码与证据 ↗</a></p>"
+      },
+      {
+        "id": "same-work",
+        "title": "04 / 均匀路由下，为什么总MAC也没有随拓扑下降",
+        "html": "<p>固定T24、top8，共192条全局(token,expert) route。若专家均匀分布，本地route期望为TK/EP；每条route的本地有效FLOPs为6H×I/TP。以下为算术推导，不是实测。</p><table><thead><tr><th>布局</th><th>期望route/rank</th><th>每route本地FLOPs</th><th>每rank总FLOPs</th><th>M1权重请求模型</th></tr></thead><tbody><tr><td>TP4EP4</td><td>48</td><td>12,582,912</td><td>603,979,776</td><td>48×6=288 MiB</td></tr><tr><td>TP1EP16</td><td>12</td><td>50,331,648</td><td>603,979,776</td><td>12×24=288 MiB</td></tr><tr><td>TP16EP1</td><td>192</td><td>3,145,728</td><td>603,979,776</td><td>192×1.5=288 MiB</td></tr></tbody></table><p>总算术和逐route权重载荷没有变，变的是矩阵粒度、重复读、owner偏斜、控制开销和通信。TP16把每rank需处理的route约扩大4倍，同时单route矩阵缩为1/4；每次启动、量化与H维输出并不跟着缩成1/4，所以“计算量不变”也不等于“执行时间不变”。</p>"
+      },
+      {
+        "id": "hot-rank",
+        "title": "05 / TP16可能改善热点，但收益不是免费",
+        "html": "<svg viewBox=\"0 0 760 300\" role=\"img\" aria-label=\"EP热点与TP16均衡的教学算例\"><title>EP热点与TP16均衡的教学算例</title><g font-family=\"sans-serif\" font-size=\"14\" fill=\"#294838\"><text x=\"12\" y=\"24\">教学路由：T24 × top8 = 192 条；不代表业务分布</text><text x=\"14\" y=\"70\">EP0</text><rect x=\"80\" y=\"48\" width=\"480\" height=\"28\" fill=\"#ba7850\"/><text x=\"570\" y=\"69\">96</text><text x=\"14\" y=\"116\">EP1</text><rect x=\"80\" y=\"94\" width=\"160\" height=\"28\" fill=\"#96ad83\"/><text x=\"250\" y=\"115\">32</text><text x=\"14\" y=\"162\">EP2</text><rect x=\"80\" y=\"140\" width=\"160\" height=\"28\" fill=\"#96ad83\"/><text x=\"250\" y=\"161\">32</text><text x=\"14\" y=\"208\">EP3</text><rect x=\"80\" y=\"186\" width=\"160\" height=\"28\" fill=\"#96ad83\"/><text x=\"250\" y=\"207\">32</text><text x=\"12\" y=\"252\">TP4×EP4：慢板工作 96×512；TP16：每rank 192×128</text><text x=\"12\" y=\"278\">仅计算理想均衡上界为2倍；还没有计入短GEMM、VP与通信</text></g></svg><p>这个分布里，TP4EP4最慢板承担平均两倍route；完全按I分散后，各rank参与所有命中专家，专家所有权导致的板间负载差异可以消除。但TP16仍需处理192个route-local结果与H4096输出，Gate/Up宽度变小，Down收缩长度变短，VP和指令启动占比可能上升。</p><p>真实判断至少要统计每层每owner的nₑ直方图、M1/M2/M4分组数、padding、慢rank耗时；只看全局U个活跃专家，可能掩盖几个热门专家都落在同一核。EP16也会提高专家放置粒度，却把单个热门专家集中到更少rank，是否改善热点要由真实mapping决定。</p>"
+      },
+      {
+        "id": "compatibility",
+        "title": "06 / 当前为什么能解释，却不能宣称TP16已落地",
+        "html": "<p>从源码可以推导EP4TP4的合理折中：每rank I512提供已有优化形状，板内TP归约、板间EP合并复用固定16-rank通信合同，专家容量保持均衡。这个解释是实现条件下的工程推导，不代表已经查到当年的完整设计动机或证明它是全局最优。</p><p>TP1EP16有冻结兼容配置，但其中SGLang和torch_zeus是较早分支。旧UScale路线的双核I1024与48/768次小dot比较，不能移植到PR588 per-tensor。当前库虽然支持I2048/E18，也不自动证明caller、Shared、Graph和collective接线已按此验收。TP16的I128不在当前Routed pack支持表内，需要同时改pack、scale、kernel、scratch及数值验证。</p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#versions\">核对源码与证据 ↗</a></p>"
+      },
+      {
+        "id": "nv-apples",
+        "title": "07 / 与NV比较前，先写两行拓扑身份",
+        "html": "<table><thead><tr><th>比较对象</th><th>Zeus</th><th>NV</th></tr></thead><tbody><tr><td>代表性decode计时</td><td>16rank，MoE TP4EP4，I512</td><td>4H200，MoE expert-TP1/EP4，I2048</td></tr><tr><td>Shared与路由权重</td><td>BF16 Shared、BF16 router weights</td><td>FP8 Shared、FP32 router weights</td></tr><tr><td>另一份10/19复用审计</td><td>旧M1/M4及w4产物</td><td>H200 TP4，CTA M64，I512</td></tr><tr><td>允许结论</td><td>这组实现/负载下的组件预算差异</td><td>不能归结为纯芯片或纯TP的差异</td></tr></tbody></table><p>同为“4卡”，Zeus板内还有TP4逻辑rank；NV模型TP4也不表示Routed expert-TP4。面试时先拆出Attention TP、expert TP、EP、Shared TP，再问数据在哪个边界分发。需要精确比较TP成本时，固定数值路径、路由、kernel分工和通信窗口做新的配对实验，不能从现有表中反推出一个不存在的通信列。</p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#nv\">核对源码与证据 ↗</a></p>"
+      }
+    ],
+    "questions": [
+      {
+        "id": "topology-axis",
+        "q": "为什么TP4切完I后仍输出4096维？",
+        "a": "Down把每个I分片映射到全部H输出，因此每rank产出H维部分和。TP负责把同一专家的I贡献求和，EP负责把不同专家贡献求和；两者不等同于按H拼接。",
+        "followup": "如果改为H分片，非线性前后的通信会如何改变？"
+      },
+      {
+        "id": "memory-invariant",
+        "q": "TP4EP4改TP1EP16，rank-local专家权重为什么仍432MiB？",
+        "a": "E/EP与I/TP相乘，EP×TP固定16时三矩阵纯权重总量3EHI/16不变。专家数量变少、每个专家变大，scale、padding与Shared需另记。",
+        "followup": "不同packing导致额外容量时，怎样判断是否还能装下？"
+      },
+      {
+        "id": "token-dimension",
+        "q": "一个expert命中10个token，TP16会把M变成10/16吗？",
+        "a": "不会。TP切通道，每个分片仍计算这10行；只要token已经完整分发，M由路由决定。若另外按token做DP/sequence切分，那是另一个维度与通信合同。",
+        "followup": "TP16为什么可能让每rankroute数比TP4EP4多4倍？"
+      },
+      {
+        "id": "hotspot",
+        "q": "为什么TP16消除专家所有权热点后仍可能更慢？",
+        "a": "更短的I增加固定启动和credit占比，更多route-local控制和H维写回增加VP/Reduce负担，collective与精度路径也改变。热点收益需和这些成本一起算最慢完整路径。",
+        "followup": "你会先用哪个单算子或计数器区分短GEMM与路由控制瓶颈？"
+      },
+      {
+        "id": "nv-identity",
+        "q": "NV模型TP4，为什么比较表却说MoE TP1EP4？",
+        "a": "Attention等模块可按TP4运行，Routed采用EP4把72个完整专家放到各GPU，expert intermediate不再跨GPU切；Shared还可能保留TP4。必须读取每模块拓扑。",
+        "followup": "如何设计一个真正仅比较TP1与TP4的A/B？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "md-topology",
+        "label": "模型配置与拓扑合同",
+        "url": "evidence/moe-deep-sources.md#topology",
+        "note": "2026-10-24核验；冻结版本、适用路径与测量范围见证据账本。",
+        "kind": "源码"
+      },
+      {
+        "id": "md-topology-nv",
+        "label": "NV实际对照身份",
+        "url": "evidence/moe-deep-sources.md#nv",
+        "note": "2026-10-24核验；冻结版本、适用路径与测量范围见证据账本。",
+        "kind": "源码"
+      },
+      {
+        "id": "md-topology-doc",
+        "label": "部署HTML版本边界",
+        "url": "evidence/moe-deep-sources.md#versions",
+        "note": "2026-10-24核验；冻结版本、适用路径与测量范围见证据账本。",
+        "kind": "历史记录"
+      }
+    ],
+    "takeaways": [
+      "EP切专家，TP切同一专家I通道；Mₑ由路由决定。",
+      "world固定时纯权重与理想均匀算术量可能不变，粒度和关键路径仍会变化。",
+      "TP16是需要验证的方案，旧TP1EP16配置不能冒充当前全链验收。",
+      "NV模型TP与expert TP必须分别辨认。"
+    ]
+  },
+  {
+    "id": "moe-router-internals",
+    "part": "MoE 部署与优化",
+    "order": 24.2,
+    "title": "Router内部：Sigmoid、TopK与可编译的数值合同",
+    "subtitle": "手算一次biased selection，再追到E288的padding、VP链和Graph状态",
+    "minutes": 30,
+    "level": "深入",
+    "tags": [
+      "Router",
+      "Sigmoid",
+      "TopK",
+      "BF16",
+      "Graph"
+    ],
+    "lead": "Router输出很小，但它决定所有后续专家工作和精度路径。理解它要同时看两套分数、投影舍入、尾部专家屏蔽、设备索引与执行资源；不能把它当成一个廉价的argmax。",
+    "sections": [
+      {
+        "id": "equation",
+        "title": "01 / 把选择分数与混合权重彻底分开",
+        "html": "<svg viewBox=\"0 0 760 290\" role=\"img\" aria-label=\"Router双分数域与输出流\"><title>Router双分数域与输出流</title><g font-family=\"sans-serif\" font-size=\"14\" fill=\"#294838\"><rect x=\"10\" y=\"20\" width=\"150\" height=\"75\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"85\" y=\"52.5\" text-anchor=\"middle\">X[T,4096] BF16</text><text x=\"85\" y=\"72.5\" text-anchor=\"middle\">W[288,4096]</text><path d=\"M160 58L200 58\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"200\" cy=\"58\" r=\"3\" fill=\"#6b8063\"/><rect x=\"200\" y=\"20\" width=\"170\" height=\"75\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"285\" y=\"52.5\" text-anchor=\"middle\">FP32 dot</text><text x=\"285\" y=\"72.5\" text-anchor=\"middle\">→ BF16 logits</text><path d=\"M370 58L410 58\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"410\" cy=\"58\" r=\"3\" fill=\"#6b8063\"/><rect x=\"410\" y=\"20\" width=\"150\" height=\"75\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"485\" y=\"52.5\" text-anchor=\"middle\">sigmoid(z)</text><text x=\"485\" y=\"72.5\" text-anchor=\"middle\">scores: FP32</text><path d=\"M560 58L600 58\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"600\" cy=\"58\" r=\"3\" fill=\"#6b8063\"/><rect x=\"600\" y=\"20\" width=\"150\" height=\"75\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"675\" y=\"52.5\" text-anchor=\"middle\">+ correction bias</text><text x=\"675\" y=\"72.5\" text-anchor=\"middle\">只改变选择</text><path d=\"M675 95L675 150\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"675\" cy=\"150\" r=\"3\" fill=\"#6b8063\"/><rect x=\"595\" y=\"150\" width=\"155\" height=\"65\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"672.5\" y=\"177.5\" text-anchor=\"middle\">Top8 IDs</text><text x=\"672.5\" y=\"197.5\" text-anchor=\"middle\">int32[T,8]</text><path d=\"M485 95L485 182\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"485\" cy=\"182\" r=\"3\" fill=\"#6b8063\"/><path d=\"M595 182L560 182\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"560\" cy=\"182\" r=\"3\" fill=\"#6b8063\"/><rect x=\"390\" y=\"150\" width=\"170\" height=\"65\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"475\" y=\"177.5\" text-anchor=\"middle\">gather原始scores</text><text x=\"475\" y=\"197.5\" text-anchor=\"middle\">归一化 ×2.5</text><path d=\"M390 182L340 182\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"340\" cy=\"182\" r=\"3\" fill=\"#6b8063\"/><rect x=\"145\" y=\"150\" width=\"195\" height=\"65\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"242.5\" y=\"177.5\" text-anchor=\"middle\">weights BF16[T,8]</text><text x=\"242.5\" y=\"197.5\" text-anchor=\"middle\">Reduce只再乘1</text><text x=\"15\" y=\"269\">两个分数域：选择域 scores+bias；混合权重域 scores。</text></g></svg><div class=\"formula\">zₜₑ = BF16(Σh Xₜₕ·Wₑₕ)<br>sₜₑ ≈ sigmoid(FP32(zₜₑ))；Jₜ = TopK(sₜₑ+bₑ)<br>αₜₖ = BF16(2.5 × sₜ,Jₜₖ / Σj∈Jₜ sₜⱼ)</div><p>correction bias用于选谁，不直接加进混合权重。它可以提升某专家被选择的机会，但不等于该专家贡献自动增加相同偏置。当前dev在Router应用factor2.5，Reduce的routed scale设1；重复乘一次会把整个Routed贡献再放大2.5倍。公式sigmoid用于理解，源码为固定近似和具体舍入，不承诺解析函数逐位一致。</p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#router\">核对源码与证据 ↗</a></p>"
+      },
+      {
+        "id": "numeric-router",
+        "title": "02 / 一个能手算的Top2例子",
+        "html": "<p>用4专家、Top2缩小维度，构造无偏scores=[0.8,0.6,0.4,0.2]，对应解析logits=[ln4,ln1.5,−ln1.5,−ln4]。bias=[0,0,0.5,0]后选择域变成[0.8,0.6,0.9,0.2]，选expert2和0。</p><table><thead><tr><th>expert</th><th>无偏score</th><th>bias</th><th>选择score</th><th>被选后的权重</th></tr></thead><tbody><tr><td>0</td><td>0.8</td><td>0</td><td>0.8</td><td>2.5×0.8/1.2=5/3</td></tr><tr><td>1</td><td>0.6</td><td>0</td><td>0.6</td><td>0</td></tr><tr><td>2</td><td>0.4</td><td>0.5</td><td>0.9</td><td>2.5×0.4/1.2=5/6</td></tr><tr><td>3</td><td>0.2</td><td>0</td><td>0.2</td><td>0</td></tr></tbody></table><p>选择排名第一的expert2，混合权重反而只有expert0的一半，这并不矛盾。若错误地用0.9与0.8归一化，会得到约1.3235和1.1765，数值语义完全不同。实数权重和为2.5；独立BF16 store后不要求严格等于2.5。该例不含tie，若分数相等需按实际TopK tie规则验证，不假设跨后端ID顺序一致。</p>"
+      },
+      {
+        "id": "bytes",
+        "title": "03 / 小输出背后，投影实际做了多少工作",
+        "html": "<table><thead><tr><th>T24逻辑对象</th><th>shape / dtype</th><th>字节或有效算术</th></tr></thead><tbody><tr><td>输入hidden</td><td>[24,4096] BF16</td><td>196,608B = 192KiB</td></tr><tr><td>router weight</td><td>[288,4096] BF16</td><td>2,359,296B = 2.25MiB</td></tr><tr><td>logits（若物化）</td><td>[24,288] BF16</td><td>13.5KiB</td></tr><tr><td>topk IDs</td><td>[24,8] int32</td><td>768B</td></tr><tr><td>topk weights</td><td>[24,8] BF16</td><td>384B</td></tr><tr><td>投影有效FLOPs</td><td>2×T×H×E</td><td>56.62MFLOPs</td></tr></tbody></table><p>这些是逻辑payload，不是总线counter。logits可在片上保留，权重可能每个token组再次遍历，双核pack还保存副本。TopK结果只有1152B，并不能推出Router的启动、GEMM、VP和标量索引成本可以忽略。</p>"
+      },
+      {
+        "id": "padding",
+        "title": "04 / E288、compute320、pack384是三个不同数字",
+        "html": "<svg viewBox=\"0 0 760 245\" role=\"img\" aria-label=\"Router有效维度与两层对齐\"><title>Router有效维度与两层对齐</title><g font-family=\"sans-serif\" font-size=\"14\" fill=\"#294838\"><rect x=\"20\" y=\"25\" width=\"210\" height=\"80\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"125\" y=\"60\" text-anchor=\"middle\">逻辑专家 E=288</text><text x=\"125\" y=\"80\" text-anchor=\"middle\">有效结果 288 lanes</text><path d=\"M230 65L270 65\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"270\" cy=\"65\" r=\"3\" fill=\"#6b8063\"/><rect x=\"270\" y=\"25\" width=\"210\" height=\"80\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"375\" y=\"60\" text-anchor=\"middle\">PE / TopK prefix=320</text><text x=\"375\" y=\"80\" text-anchor=\"middle\">32 lanes由bias排除</text><path d=\"M480 65L520 65\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"520\" cy=\"65\" r=\"3\" fill=\"#6b8063\"/><rect x=\"520\" y=\"25\" width=\"220\" height=\"80\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"630\" y=\"60\" text-anchor=\"middle\">pack rows=384</text><text x=\"630\" y=\"80\" text-anchor=\"middle\">每核3MiB weight</text><text x=\"20\" y=\"152\">逻辑FLOPs：2×24×4096×288 = 56,623,104</text><text x=\"20\" y=\"184\">执行prefix：2×24×4096×320 = 62,914,560</text><text x=\"20\" y=\"216\">量化、TopK、搬运、双核weight副本另算；不是只数有效FLOPs</text></g></svg><p>冻结源码pack按128行对齐，把288行存为384行；执行端按BF16可用的64行粒度只消费320行前缀。尾部32个参与计算但无逻辑专家身份的lane，通过持久化FP32负sentinel bias排除。该设计把内存布局与实际计算宽度拆开，不应把padding误说成64个新专家。</p><p>320行prefix的一次BF16权重载荷2.5MiB，每核完整pack为3MiB；两核副本合计6MiB。T24 quad路径每核处理三个4-token组，按源码每组读权重的请求模型为全rank六遍prefix、15MiB；这是无额外跨组cache假设的载荷推导，不是MC实测。</p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#router\">核对源码与证据 ↗</a></p>"
+      },
+      {
+        "id": "schedule",
+        "title": "05 / PE投影之后，为什么还需要完整VP行链调度",
+        "html": "<p>T24使用每核四行一组的quad profile。一次PE产生多行logits，再取零拷贝SRAM row view；每行的sigmoid→bias→TopK→gather→sum→normalize→scale构成完整依赖链。不同token行可独立安排到VP lane，但同一行TopK使用lane内mask状态，不能把其中一段任意搬到别的lane。</p><p>T16另有两组hidden前瞻，生产profile有明确shape守卫。更大M可摊薄weight与投影启动，但也延长logits和输出组的活跃期；过度预取会提高L2压力。源码有stream-topk-gather-wave-overlap等逐入口选项，只说明允许合法调度，是否产生目标重叠仍要看该zbin的trace。</p>"
+      },
+      {
+        "id": "graph-contract",
+        "title": "06 / Graph replay真正要求的是状态与内容都正确",
+        "html": "<p>Graph固定的是调用结构与缓冲地址，token内容和路由可在回放间变化。Router的padded bias必须在capture前准备，并核对源指针和tensor version；需要更新时不能在capture中临时分配。T24的IDs必须由本次hidden重新产生，Routed也必须读取本次IDs，不能缓存上次专家归组。</p><p>测试应至少做两次输入行置换或数值变化后的replay，核对IDs、weights和最终输出；只检查地址未变无法发现stale-plan错误。把int32 IDs以byte view传给内部DMA是metadata视图合同，不允许变成数值cast后另存一个host归组计划。</p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#routed\">核对源码与证据 ↗</a></p>"
+      },
+      {
+        "id": "precision-perf",
+        "title": "07 / 把Router异常分成选择错误和数值近似误差",
+        "html": "<p>若最终输出错，先比同一token的无偏scores、bias后选择域、TopK集合、所选原始分数和最后BF16权重；集合不同与同集合但权重不同是两类故障。BF16 logits在sigmoid前的舍入可能改变很接近的名次，近似函数也可能使tie附近次序变化，跨后端不应仅用排序后的输出误差掩盖路由差别。</p><p>性能侧记录有效T、compute E、M分组、PE/VP/CT时间、路由输出store；精度侧单列固定实现参考、解析sigmoid、真实模型指标。FP32 normalize使用rsqrt平方近似倒数，零分母语义也需保留，不能为了“避免NaN”擅自加epsilon改变模型合同。</p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#router\">核对源码与证据 ↗</a></p>"
+      }
+    ],
+    "questions": [
+      {
+        "id": "selection-weight",
+        "q": "为什么bias最大专家未必混合权重最大？",
+        "a": "bias只进入选择分数。最终权重从未加bias的sigmoid分数gather并归一化，所以一个因bias入选的专家仍可拥有较小贡献权重。",
+        "followup": "给出四专家Top2的反例并算出两个权重。"
+      },
+      {
+        "id": "padding-three",
+        "q": "E288为什么同时出现320和384？",
+        "a": "288是逻辑专家数；pack按128行对齐得到384；计算按64行对齐只用320前缀。参与计算的无效lane由持久化负bias sentinel排除。",
+        "followup": "如果只把无效logit置零，sigmoid后会发生什么？"
+      },
+      {
+        "id": "graph-input",
+        "q": "Graph中路由计划能按shape永久缓存吗？",
+        "a": "不能。shape相同并不代表IDs相同。只有稳定scratch和静态结构可缓存，device-side归组须消费本次Router结果，重放输入变化后仍要验证。",
+        "followup": "如何用两次输入行置换捕捉stale-plan？"
+      },
+      {
+        "id": "bf16-logit",
+        "q": "为什么不把Router全改成FP32以提升精度？",
+        "a": "现有模型和kernel有明确的BF16 logit边界。改变它会改变TopK与后续专家工作；这是数值合同变更，需要模型级评估，不能当作无风险精度修复。",
+        "followup": "同一集合、不同顺序的TopK该怎样公平比较？"
+      },
+      {
+        "id": "topk-cost",
+        "q": "Router输出只有1KiB左右，为什么优化仍有价值？",
+        "a": "输出payload与计算成本无直接等式。投影读取MiB级权重，sigmoid/TopK/gather有依赖链与控制开销，低T时启动和串行尾部占比大。",
+        "followup": "你会怎样区分PE权重供数与TopK链成为瓶颈？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "md-router-code",
+        "label": "冻结Router、packing与Graph合同",
+        "url": "evidence/moe-deep-sources.md#router",
+        "note": "2026-10-24核验；冻结版本、适用路径与测量范围见证据账本。",
+        "kind": "源码"
+      },
+      {
+        "id": "md-router-shapes",
+        "label": "模型配置与尺寸",
+        "url": "evidence/moe-deep-sources.md#topology",
+        "note": "2026-10-24核验；冻结版本、适用路径与测量范围见证据账本。",
+        "kind": "源码"
+      }
+    ],
+    "takeaways": [
+      "选择域含bias，混合权重域不含bias。",
+      "逻辑维度、pack维度和compute维度分开计账。",
+      "多行投影摊销不等于任意VP阶段都能独立并发。",
+      "Graph稳定地址与每次正确重算路由同样重要。"
+    ]
+  },
+  {
+    "id": "moe-shared-dataflow",
+    "part": "MoE 部署与优化",
+    "order": 24.3,
+    "title": "Shared FFN：沿Gate、Up、Down拆开真实流水",
+    "subtitle": "两核I切片、BF16舍入、M8与Down-M4的资源账",
+    "minutes": 32,
+    "level": "深入",
+    "tags": [
+      "Shared",
+      "SwiGLU",
+      "M8",
+      "SRAM",
+      "PE/VP流水"
+    ],
+    "lead": "Shared没有TopK，但绝不是“附带一个普通MLP”就能讲清。它是固定权重、规则token维的融合FFN，最适合把矩阵切分、逐元素非线性、L2生命周期与尾部写回连起来分析；当前300B路径采用BF16，和Routed FP8的精度与带宽预算不同。",
+    "sections": [
+      {
+        "id": "core-split",
+        "title": "01 / Shared两核partial确实对应两段I",
+        "html": "<svg viewBox=\"0 0 760 280\" role=\"img\" aria-label=\"Shared双核按I切分与两输出plane\"><title>Shared双核按I切分与两输出plane</title><g font-family=\"sans-serif\" font-size=\"14\" fill=\"#294838\"><rect x=\"15\" y=\"25\" width=\"140\" height=\"90\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"85\" y=\"65\" text-anchor=\"middle\">X[T,4096]</text><text x=\"85\" y=\"85\" text-anchor=\"middle\">两核读取同一X</text><path d=\"M155 70L200 70\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"200\" cy=\"70\" r=\"3\" fill=\"#6b8063\"/><rect x=\"200\" y=\"10\" width=\"225\" height=\"85\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"312.5\" y=\"47.5\" text-anchor=\"middle\">core0: I[0,256)</text><text x=\"312.5\" y=\"67.5\" text-anchor=\"middle\">Gate / Up → SiLU×Up</text><rect x=\"200\" y=\"115\" width=\"225\" height=\"85\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"312.5\" y=\"152.5\" text-anchor=\"middle\">core1: I[256,512)</text><text x=\"312.5\" y=\"172.5\" text-anchor=\"middle\">Gate / Up → SiLU×Up</text><path d=\"M155 70L200 155\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"200\" cy=\"155\" r=\"3\" fill=\"#6b8063\"/><path d=\"M425 50L470 50\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"470\" cy=\"50\" r=\"3\" fill=\"#6b8063\"/><path d=\"M425 155L470 155\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"470\" cy=\"155\" r=\"3\" fill=\"#6b8063\"/><rect x=\"470\" y=\"10\" width=\"270\" height=\"85\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"605\" y=\"47.5\" text-anchor=\"middle\">Down: [T,256] × [256,4096]</text><text x=\"605\" y=\"67.5\" text-anchor=\"middle\">Shared plane0[T,H]</text><rect x=\"470\" y=\"115\" width=\"270\" height=\"85\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"605\" y=\"152.5\" text-anchor=\"middle\">Down: [T,256] × [256,4096]</text><text x=\"605\" y=\"172.5\" text-anchor=\"middle\">Shared plane1[T,H]</text><text x=\"15\" y=\"250\">Reduce先合两核partial；TP4之后再合四个rank的I512贡献。</text></g></svg><p>一个TP4 rank持有I512；Shared两核各负责I256。两核读取同样的hidden，各自完成Gate、Up、非线性与Down，生成[2,T,H] BF16 partial，交给本地Reduce。此处第一维确实是两核贡献；不要把旧Routed的两数值分组维或当前单plane Routed输出混进来。</p><p>dev模块只有EP0持有真实Shared shard，其他EP用零权重保持某些开发图形结构。历史组件性能报告只计实际EP0 Shared执行。没有证据时不能把零权重harness执行说成生产一定执行，也不能把Shared输出在四个EP各加一遍。</p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#shared\">核对源码与证据 ↗</a></p>"
+      },
+      {
+        "id": "math-example",
+        "title": "02 / 用两通道算清TP可拆、非线性不可随便搬",
+        "html": "<p>纯实数教学例：H=I=2，x=[1,1]，Gate矩阵diag(1,−1)，Up矩阵diag(2,3)，Down矩阵按输出行写为[[1,2],[3,4]]。得到g=[1,−1]，u=[2,3]，a≈[1.462117,−0.806824]。</p><table><thead><tr><th>I分片</th><th>激活</th><th>Down贡献[H0,H1]</th></tr></thead><tbody><tr><td>I0</td><td>2·SiLU(1)≈1.462117</td><td>[1.462117,4.386351]</td></tr><tr><td>I1</td><td>3·SiLU(−1)≈−0.806824</td><td>[−1.613649,−3.227297]</td></tr><tr><td>求和</td><td>—</td><td>[−0.151531,1.159054]</td></tr></tbody></table><p>可以先在每个I分片完成SiLU与Up相乘，再把Down部分和相加；不能先把g的两通道相加，再算SiLU，因为非线性不与求和交换。这一例忽略BF16和LUT误差，仅验证切分的代数结构。真实核要保留每个projection和最终partial的舍入点。</p>"
+      },
+      {
+        "id": "bf16-contract",
+        "title": "03 / 一条隐藏着多个舍入点的融合算式",
+        "html": "<div class=\"formula\">g = BF16(dot(X,Wgᵀ))，u = BF16(dot(X,Wuᵀ))<br>g′ = min(FP32(g),10)，u′ = clamp(FP32(u),−10,10)<br>a = BF16(g′ × sigmoid_fast(g′) × u′)<br>Pcore = BF16(dot(a,Wdᵀ))</div><p>Gate只限制上界，不是对称clamp；Up才限制两侧。将Gate的负值也硬截到−10会改变合同。投影FP32累加后转BF16，随后为了非线性重新转FP32，不代表之前丢掉的精度被恢复。融合kernel只是避免中间全局写回，不能把所有cast消掉称为等价。</p><p>Shared使用fast sigmoid LUT，Routed I512则固定非均匀SiLU LUT。它们数学目标相关，却不是同一实现近似；参考检查要区分固定实现参考和解析SiLU参考。PR588保留过一项Shared解析参考超差，不能用A/B逐位相同宣称模型质量已全部通过。</p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#shared\">核对源码与证据 ↗</a></p>"
+      },
+      {
+        "id": "shape-bytes",
+        "title": "04 / 每个tile的数据量，比“融合省显存”更具体",
+        "html": "<table><thead><tr><th>对象</th><th>一个核、M8主tile</th><th>逻辑载荷</th></tr></thead><tbody><tr><td>hidden</td><td>[8,4096] BF16</td><td>64KiB</td></tr><tr><td>Gate weight</td><td>[256,4096] BF16</td><td>2MiB</td></tr><tr><td>Up weight</td><td>[256,4096] BF16</td><td>2MiB</td></tr><tr><td>Down weight</td><td>[4096,256] BF16</td><td>2MiB</td></tr><tr><td>Gate或Up投影结果</td><td>[8,256] BF16</td><td>4KiB</td></tr><tr><td>一个Down-M4输入</td><td>[4,256] BF16</td><td>2KiB</td></tr><tr><td>一个Down-M4 FP32结果</td><td>[4,4096] FP32</td><td>64KiB</td></tr><tr><td>同一结果BF16 store</td><td>[4,4096] BF16</td><td>32KiB</td></tr></tbody></table><p>权重经weight路径流式供给，不是把6MiB塞进512KiB L2。表中中间tensor也不是全部同时活跃：编译器可复用已死亡缓冲，但异步读尚未完成时不能提前复用。T24完整rank的有效Shared GEMM计算量6×24×4096×512=301,989,888 FLOPs；这个数字不含padding、VP、搬运与控制。</p>"
+      },
+      {
+        "id": "m8-down4",
+        "title": "05 / 为什么Gate按M8，Down却拆成两段M4",
+        "html": "<svg viewBox=\"0 0 760 320\" role=\"img\" aria-label=\"Shared分段Down的PE VP ST依赖示意\"><title>Shared分段Down的PE VP ST依赖示意</title><g font-family=\"sans-serif\" font-size=\"14\" fill=\"#294838\"><text x=\"15\" y=\"20\">依赖示意：横轴不按真实周期缩放；同一PE上的dot不能同时执行</text><text x=\"15\" y=\"85\">PE</text><rect x=\"100\" y=\"60\" width=\"80\" height=\"45\" rx=\"8\" fill=\"#d4e2c4\" stroke=\"#7e937b\"/><text x=\"140\" y=\"87.5\" text-anchor=\"middle\">Gate M8</text><rect x=\"190\" y=\"60\" width=\"80\" height=\"45\" rx=\"8\" fill=\"#d4e2c4\" stroke=\"#7e937b\"/><text x=\"230\" y=\"87.5\" text-anchor=\"middle\">Up low</text><rect x=\"280\" y=\"60\" width=\"80\" height=\"45\" rx=\"8\" fill=\"#d4e2c4\" stroke=\"#7e937b\"/><text x=\"320\" y=\"87.5\" text-anchor=\"middle\">Up high</text><rect x=\"410\" y=\"60\" width=\"110\" height=\"45\" rx=\"8\" fill=\"#d4e2c4\" stroke=\"#7e937b\"/><text x=\"465\" y=\"87.5\" text-anchor=\"middle\">Down low</text><rect x=\"570\" y=\"60\" width=\"110\" height=\"45\" rx=\"8\" fill=\"#d4e2c4\" stroke=\"#7e937b\"/><text x=\"625\" y=\"87.5\" text-anchor=\"middle\">Down high</text><text x=\"15\" y=\"150\">VP</text><rect x=\"280\" y=\"125\" width=\"120\" height=\"45\" rx=\"8\" fill=\"#f0dfcc\" stroke=\"#7e937b\"/><text x=\"340\" y=\"152.5\" text-anchor=\"middle\">low → A₀</text><rect x=\"420\" y=\"125\" width=\"140\" height=\"45\" rx=\"8\" fill=\"#f0dfcc\" stroke=\"#7e937b\"/><text x=\"490\" y=\"152.5\" text-anchor=\"middle\">high → A₁</text><text x=\"15\" y=\"215\">ST</text><rect x=\"530\" y=\"190\" width=\"90\" height=\"45\" rx=\"8\" fill=\"#d5e6e2\" stroke=\"#7e937b\"/><text x=\"575\" y=\"217.5\" text-anchor=\"middle\">写低4行</text><rect x=\"690\" y=\"190\" width=\"55\" height=\"45\" rx=\"8\" fill=\"#d5e6e2\" stroke=\"#7e937b\"/><text x=\"717.5\" y=\"217.5\" text-anchor=\"middle\">高4行</text><text x=\"15\" y=\"270\">每组激活完成后才启动对应Down；Down完成后才store该组。</text><text x=\"15\" y=\"294\">允许窗口：低组Down ↔ 高组VP；低组ST ↔ 高组Down。</text></g></svg><p>Gate和Up共享X，M8可摊薄输入与权重相关启动。Down产生H4096宽输出，若等8行全部完成再写，会拖长尾部并提高活跃内存。当前受守卫保护的profile把Down按token行拆M4，每个输出元素仍是完整I256上的一次dot，没有拆K引入额外累加舍入。</p><p>通过完整行链拆分，第二组激活可在第一组Down期间准备，第一组store可与后续PE工作重叠。它不是两个PE同时跑两个dot。图只画依赖可允许的窗口，源码排列也不保证实际达到；需要看编译后mail、SRAM allocation和PE/VP/ST trace。</p>"
+      },
+      {
+        "id": "sram-failure",
+        "title": "06 / 为什么更激进的双缓冲可能更慢",
+        "html": "<p>一次增加前瞻hidden、两份Gate/Up、两份Down结果，就会延长很多缓冲的同时活跃区间。容量不足可能导致spill、重新物化、额外DT或更保守同步；即便没有溢出，ST与后续LD共享通路也可能争用。优化目标是压缩关键路径，不是让代码中“prefetch”出现更多次。</p><p>当前实现保持连续parent中的Shared plane，按完成的行提前提交store；把输出改成两个物理GDG对象会影响consumer指针、Graph稳定地址、跨核顺序与DMA合并。仅看到一次microbenchmark收益，不足以接受整个ABI变更。沿M拆分保持完整reduction，通常比沿K切dot更容易证明舍入不变。</p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#shared\">核对源码与证据 ↗</a></p>"
+      },
+      {
+        "id": "measure-shared",
+        "title": "07 / 如何把Shared案例讲成可迁移的优化方法",
+        "html": "<p>先把已知shape写成资源表，再定位是Gate供数、Up依赖、Down宽输出还是store尾部；提出只改变一个窗口的方案，确认每个元素算术次序和cast点未变，最后对实际T8/16/24/32以及decode/tail分开验收。T24单层快，不代表T32仍有足够L2。</p><p>报告至少同时保留两核duration、max核耗时、L2 high-water、PE/VP/ST区间并集与原始输出比较。历史42层完整路径汇总中Shared列可能只包含被选中的慢路径恰在EP0的层；不能拿这个列当EP0 Shared独立42层全耗时，更不能当Shared单项加速百分比。</p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#nv\">核对源码与证据 ↗</a></p>"
+      }
+    ],
+    "questions": [
+      {
+        "id": "shared-partials",
+        "q": "Shared输出[2,T,H]与TP4是什么关系？",
+        "a": "2是rank内部两核各I256产生的部分和；TP4是四个rank各I512。先本地合两核，再跨TP合四rank，才得到完整I2048的Shared贡献。",
+        "followup": "如果EP1到EP3也加上同样Shared，会放大几倍？"
+      },
+      {
+        "id": "shared-rounding",
+        "q": "沿M拆Down为什么比沿K拆更容易保持数值？",
+        "a": "每行输出仍按原完整K做一次dot；沿M只分独立元素。沿K会引入新的partial存储与求和结合次序，尤其BF16存partial时可能改变结果。",
+        "followup": "有early-store后必须验证哪些写后读或复用依赖？"
+      },
+      {
+        "id": "shared-clamp",
+        "q": "GLM这条路径的Gate与Up截断一样吗？",
+        "a": "不同。Gate是上界min(g,10)，Up是双侧clamp到[-10,10]；替换为两个对称clamp会改变负Gate处理。",
+        "followup": "解析SiLU与fast LUT分别应该扮演哪种参考？"
+      },
+      {
+        "id": "shared-weight",
+        "q": "单核Shared6MiB权重如何在512KiB L2运行？",
+        "a": "权重走weight DRAM到WL1/PE流式路径，不要求整专家进入可分配L2。L2主要承载activation、结果、元数据和显式scratch，需按live range计容量。",
+        "followup": "如果想提高权重复用，应扩大哪个窗口，代价又在哪？"
+      },
+      {
+        "id": "shared-measure",
+        "q": "为什么不能直接用全链表里的Shared列证明其独立42层耗时？",
+        "a": "全链表先选每层最慢完整rank或EP，Shared只在EP0实际执行；选中其他EP时该列为零。独立Shared总耗时应另沿EP0所有层汇总。",
+        "followup": "如何避免把不同stage各自最慢EP拼成不存在的路径？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "md-shared-code",
+        "label": "Shared BF16具体profile及存储合同",
+        "url": "evidence/moe-deep-sources.md#shared",
+        "note": "2026-10-24核验；冻结版本、适用路径与测量范围见证据账本。",
+        "kind": "源码"
+      },
+      {
+        "id": "md-shared-measure",
+        "label": "Shared计时列与数值边界",
+        "url": "evidence/moe-deep-sources.md#nv",
+        "note": "2026-10-24核验；冻结版本、适用路径与测量范围见证据账本。",
+        "kind": "源码"
+      }
+    ],
+    "takeaways": [
+      "Shared核内切I与跨rank TP是两层归约。",
+      "融合不等于可以删除BF16与LUT边界。",
+      "沿M分段可以缩短宽输出尾部，同时保留完整K累加。",
+      "优化重叠必须同时检查live memory和实际完成事件。"
+    ]
+  },
+  {
+    "id": "moe-routed-dataflow",
+    "part": "MoE 部署与优化",
+    "order": 24.4,
+    "title": "Routed内部：grouped GEMM如何变成518的owner流水",
+    "subtitle": "从九条route的手工分桶，到M1/M2/M4、FP8合同与原slot回写",
+    "minutes": 40,
+    "level": "深入",
+    "tags": [
+      "Grouped GEMM",
+      "Token merge",
+      "FP8",
+      "Owner",
+      "Weight reuse"
+    ],
+    "lead": "通用grouped GEMM是一组不同权重矩阵的乘法，当前518的实现则把路由分类、owner、本地激活缓存与三个投影放在一个kernel里。理解二者的区别，才能解释为什么“把token合并了”不必然减少所有权重流量，更不等于把多条token相加。",
+    "sections": [
+      {
+        "id": "route-key",
+        "title": "01 / (token,slot,expert)是需要一路保留的身份",
+        "html": "<p>Router为每个token产生8个slot，扁平route编号q=t×8+k。Routed计算时可以按expert重排，但输出必须恢复q；Reduce还要用原slot上的α相乘。单个token命中同一expert的重复slot虽非常规，也由当前ABI保留：可只计算一次该token/expert的向量，再写回每个对应slot，不能悄悄丢掉某个权重。</p><p>grouped GEMM的group是expert，不是EP rank、core或M4。不同expert的W不同，不能把它们的activation堆起来调用一次共享W的普通GEMM。通用实现可以先直方图、prefix sum、pad和sort route IDs，再按expert执行；当前PR588路径直接在设备侧构造owner位图，没有独立host分桶。</p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#routed\">核对源码与证据 ↗</a></p>"
+      },
+      {
+        "id": "group-example",
+        "title": "02 / 九条route，三种分组的成本完全不同",
+        "html": "<svg viewBox=\"0 0 760 300\" role=\"img\" aria-label=\"同专家token归组与不同M窗口代价\"><title>同专家token归组与不同M窗口代价</title><g font-family=\"sans-serif\" font-size=\"14\" fill=\"#294838\"><text x=\"15\" y=\"22\">教学路由：expert A命中5行、B命中3行、C命中1行，共9行</text><text x=\"15\" y=\"75\">A</text><rect x=\"55\" y=\"45\" width=\"60\" height=\"40\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"85\" y=\"70\" text-anchor=\"middle\">t0</text><rect x=\"125\" y=\"45\" width=\"60\" height=\"40\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"155\" y=\"70\" text-anchor=\"middle\">t1</text><rect x=\"195\" y=\"45\" width=\"60\" height=\"40\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"225\" y=\"70\" text-anchor=\"middle\">t2</text><rect x=\"265\" y=\"45\" width=\"60\" height=\"40\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"295\" y=\"70\" text-anchor=\"middle\">t3</text><rect x=\"335\" y=\"45\" width=\"60\" height=\"40\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"365\" y=\"70\" text-anchor=\"middle\">t4</text><text x=\"15\" y=\"140\">B</text><rect x=\"55\" y=\"110\" width=\"60\" height=\"40\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"85\" y=\"135\" text-anchor=\"middle\">t0</text><rect x=\"125\" y=\"110\" width=\"60\" height=\"40\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"155\" y=\"135\" text-anchor=\"middle\">t2</text><rect x=\"195\" y=\"110\" width=\"60\" height=\"40\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"225\" y=\"135\" text-anchor=\"middle\">t4</text><text x=\"15\" y=\"205\">C</text><rect x=\"55\" y=\"175\" width=\"60\" height=\"40\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"85\" y=\"200\" text-anchor=\"middle\">t3</text><rect x=\"480\" y=\"45\" width=\"260\" height=\"50\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"610\" y=\"75\" text-anchor=\"middle\">A: M4 + M1 → 2次遍历</text><rect x=\"480\" y=\"110\" width=\"260\" height=\"50\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"610\" y=\"140\" text-anchor=\"middle\">B: M4含1个padding → 1次</text><rect x=\"480\" y=\"175\" width=\"260\" height=\"50\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"610\" y=\"205\" text-anchor=\"middle\">C: M1 → 1次遍历</text><text x=\"15\" y=\"278\">M1: 9窗口/9行；M≤4: 4窗口/10行；M64: 3窗口/192行。</text></g></svg><p>先只算一个TP4 slice：每expert Gate+Up4MiB、Down2MiB。逐route M1请求模型9×6=54MiB；M4/M1混合4×6=24MiB；如果M64窗口能对每expert只遍历一次，则3×6=18MiB。但执行行数分别9、10、192，padding计算量完全不同。</p><p>M≤4方案把A分成4+1，B用3个有效行加1个padding，C保持1行；M2是2行或较大组的2行尾部。当前owner遍历的token顺序可不同，但每行必须保持原输入与输出身份。图是教学分布，不替代真实层的nₑ统计，也不宣称54→24MiB等于延时下降55.6%。</p>"
+      },
+      {
+        "id": "owner-plan",
+        "title": "03 / 为什么采用owner，以及位图怎样消除重复标量读",
+        "html": "<p>当前E72/I512固定expert奇偶owner：core0持有local0,2,…70，core1持有1,3,…71，每核36个专家的完整rank-local切片。原始int32 IDs由设备读取，分类得到“这个专家有哪些token”和“这个token的哪些slot指向它”。第一张位图决定构造M组，第二张位图负责最终scatter。</p><p>T24可用精确24bit token mask；T32的完整32bit不能随意塞进FP32，代码拆两个16bit半字，并在CT侧恢复位图。否则最高bit会因浮点表示或有符号解释丢失，使某些token不计算。计数与bitset打包、popcount、只遍历active experts，是减少scalar gather与CT往返的具体优化。</p><p>限制也很明确：静态expert remap与奇偶owner ABI不同，不能强行走同一个merge入口；非支持shape退回原路径。host只按shape/标量选择入口，不读取本次IDs。</p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#routed\">核对源码与证据 ↗</a></p>"
+      },
+      {
+        "id": "numerical-chain",
+        "title": "04 / 三个FP8投影之间，BF16边界不能省",
+        "html": "<svg viewBox=\"0 0 760 300\" role=\"img\" aria-label=\"Routed三个投影及FP8 BF16舍入路径\"><title>Routed三个投影及FP8 BF16舍入路径</title><g font-family=\"sans-serif\" font-size=\"14\" fill=\"#294838\"><rect x=\"10\" y=\"25\" width=\"145\" height=\"85\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"82.5\" y=\"62.5\" text-anchor=\"middle\">BF16 X</text><text x=\"82.5\" y=\"82.5\" text-anchor=\"middle\">cast FP8；scale1</text><path d=\"M155 67L185 67\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"185\" cy=\"67\" r=\"3\" fill=\"#6b8063\"/><rect x=\"185\" y=\"25\" width=\"175\" height=\"85\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"272.5\" y=\"62.5\" text-anchor=\"middle\">Gate / Up FP8 dot</text><text x=\"272.5\" y=\"82.5\" text-anchor=\"middle\">FP32 ×各自scale</text><path d=\"M360 67L390 67\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"390\" cy=\"67\" r=\"3\" fill=\"#6b8063\"/><rect x=\"390\" y=\"25\" width=\"175\" height=\"85\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"477.5\" y=\"62.5\" text-anchor=\"middle\">BF16 → FP32</text><text x=\"477.5\" y=\"82.5\" text-anchor=\"middle\">clamp + SiLU LUT</text><path d=\"M565 67L595 67\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"595\" cy=\"67\" r=\"3\" fill=\"#6b8063\"/><rect x=\"595\" y=\"25\" width=\"155\" height=\"85\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"672.5\" y=\"62.5\" text-anchor=\"middle\">×Up → BF16</text><text x=\"672.5\" y=\"82.5\" text-anchor=\"middle\">再cast FP8</text><path d=\"M675 110L675 160\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"675\" cy=\"160\" r=\"3\" fill=\"#6b8063\"/><rect x=\"545\" y=\"160\" width=\"205\" height=\"65\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"647.5\" y=\"187.5\" text-anchor=\"middle\">Down FP8 dot ×sd</text><text x=\"647.5\" y=\"207.5\" text-anchor=\"middle\">BF16[T,K,H]</text><path d=\"M545 192L505 192\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"505\" cy=\"192\" r=\"3\" fill=\"#6b8063\"/><rect x=\"270\" y=\"160\" width=\"235\" height=\"65\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"387.5\" y=\"187.5\" text-anchor=\"middle\">scatter原token/slot</text><text x=\"387.5\" y=\"207.5\" text-anchor=\"middle\">尚未乘route weight</text><text x=\"15\" y=\"275\">同一expert合并的是独立行；不相加activation，不合并不同expert权重。</text></g></svg><p>输入X先BF16→E4M3FN，固定activation scale1；每expert有Gate、Up、Down三个weight scale。当前合并路径分别发Gate和Up PE任务，Gate的非线性可与独立Up计算重叠；早期或回退路径可能合并GU，不能只看pack名就认定总是一条GU dot。</p><div class=\"formula\">g=BF16(FP32dot(FP8(X),Wg)·sg)<br>u=BF16(FP32dot(FP8(X),Wu)·su)<br>a=FP8(BF16(SiLU_LUT(clamp_g(g))·clamp_u(u)))<br>R=BF16(FP32dot(a,Wd)·sd)</div><p>固定scale1不是“没有量化误差”；要求边界值符合E4M3FN可表示范围和已验证舍入行为。把BF16(a)直接删掉再转FP8会改变双舍入结果。M1与merged逐位一致只证明重排保持当前实现，不替代解析SiLU或整模质量验收。</p>"
+      },
+      {
+        "id": "matrix-and-local",
+        "title": "05 / M4一次计算究竟搬了哪些东西",
+        "html": "<table><thead><tr><th>M4、TP4 owner单expert</th><th>shape</th><th>逻辑量</th></tr></thead><tbody><tr><td>输入FP8矩阵</td><td>[4,4096]</td><td>16KiB</td></tr><tr><td>Gate / Up weight各自</td><td>[512,4096]</td><td>各2MiB</td></tr><tr><td>两个投影结果FP32各自</td><td>[4,512]</td><td>各8KiB</td></tr><tr><td>BF16激活 → FP8</td><td>[4,512]</td><td>4KiB → 2KiB</td></tr><tr><td>Down weight</td><td>[4096,512]</td><td>2MiB</td></tr><tr><td>Down FP32结果</td><td>[4,4096]</td><td>64KiB</td></tr><tr><td>最终BF16输出</td><td>[4,4096]</td><td>32KiB</td></tr></tbody></table><p>该group有效GEMM计算量6×4×4096×512=50,331,648 FLOPs，理想只读一次6MiB权重时weight-only AI=8 FLOP/B。实际还要加输入cache、scale、结果、padding与重复遍历。M1/M2/M4的SRAM压力、PE minitile和VP分段不同，不能把外层M4只理解成“四个M1 launch一起发”。</p>"
+      },
+      {
+        "id": "gpu-vs-zeus",
+        "title": "06 / CUDA grouped GEMM与518融合kernel差在哪一层",
+        "html": "<p>通用GPU实现会把同expert route整理成M tile，多个CTA可并行处理不同expert和N tile；persistent/grouped调度把小GEMM任务分配给固定CTA集合。518当前权重按owner驻留，设备kernel在每核内部遍历owner分组，PE、VP、DT、ST异步协同，跨owner迁移通常涉及权重可达性和布局。</p><p>历史H200 TP4审计中的CTA是M64/N128/K128，4warps、3stages；它每次只把16KiB权重tile搬到shared pipeline，让同一M64窗口的行消费，绝不是把6MiB整个expert缓存到shared。518 WL1的内部w窗口也做片上重放，但w窗口结束后可能重新请求权重。两者的“复用”要比较同一存储层级。</p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#reuse\">核对源码与证据 ↗</a></p><p><a href=\"https://triton-lang.org/main/getting-started/tutorials/08-grouped-gemm.html\" target=\"_blank\" rel=\"noopener\">Triton官方grouped GEMM示例</a>用于理解一组GEMM的调度结构；其中benchmark、tile和SM配置不是当前518或H200生产数据。</p>"
+      },
+      {
+        "id": "merge-profit",
+        "title": "07 / 决定merge收益的不是一句“重复很多”",
+        "html": "<div class=\"formula\">预估收益 ≈ 节省的权重请求/有效带宽 + 少掉的投影启动<br>− 分类与gather/scatter − padding计算 − SRAM压力 − 额外同步/尾部排空</div><p>COUNT4可能只是四条独立M1链的展开，不等于同expert M4；外层M16也可能被内部w4拆成四次权重遍历。要证明真正合并，需要源码/IR确认输入形状、expert身份和相同W被多行消费，再从实际指令读取w与W循环。</p><p>PR588在真实T16/24/32选择M≤4，保留M1回退，改善Gate/Up重叠和设备归组。真实收益须用相同输入、权重、路由、compiler、计时口径对照；低重复随机路由曾出现Routed回退，正说明元数据成本不能忽略。最新优化没有把所有拓扑和任意T都宣称为已支持。</p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#routed\">核对源码与证据 ↗</a></p>"
+      }
+    ],
+    "questions": [
+      {
+        "id": "merge-meaning",
+        "q": "token merge究竟合并了什么，是否先把activation相加？",
+        "a": "合并同expert的独立token行到更大的M矩阵，W相同但每行结果独立；不先求和activation，也不把不同expert权重合成。最后scatter回原token/slot。",
+        "followup": "如果同token的两个slot选同expert，如何保留两份权重语义？"
+      },
+      {
+        "id": "m-versus-w",
+        "q": "为什么M16的一条dot仍可能重复读四遍权重？",
+        "a": "外层矩阵M16和硬件内部w是两层。若w4且跨W窗口不保留完整权重，四个窗口分别遍历相同W；静态dot或PE_CONV条数不代表请求遍数。",
+        "followup": "扩大w后AL1驻留和输出容量会怎样变化？"
+      },
+      {
+        "id": "owner-bits",
+        "q": "T32的token mask为什么不能直接用一个FP32保存？",
+        "a": "FP32只保证有限范围整数逐一精确，32bit位图可能失低位或符号解释异常。当前路径拆两个16bit半字再在CT恢复，bit31也必须被测试。",
+        "followup": "为什么T24的24bit整数边界也要避免再塞额外count？"
+      },
+      {
+        "id": "route-return",
+        "q": "为什么Routed不直接输出按expert排序的行给Reduce？",
+        "a": "当前稳定ABI按原token/slot保存，Reduce据当前IDs与weights消费。改输出顺序就需同时改metadata、consumer、Graph和验证，不能视为局部免费优化。",
+        "followup": "何时一个新的packed ABI值得承担迁移成本？"
+      },
+      {
+        "id": "group-cost",
+        "q": "同expert重复次数越大，M越大就一定越快吗？",
+        "a": "更大M可能增加padding、内部W遍历、activation重载、SRAM压力和固定控制成本。需要按每expert分布及真实minitile核算，再用同输入性能验证。",
+        "followup": "请用5、3、1次命中的例子比较M1、M4和M64。"
+      }
+    ],
+    "sources": [
+      {
+        "id": "md-routed-code",
+        "label": "PR588 owner归组与量化合同",
+        "url": "evidence/moe-deep-sources.md#routed",
+        "note": "2026-10-24核验；冻结版本、适用路径与测量范围见证据账本。",
+        "kind": "源码"
+      },
+      {
+        "id": "md-routed-traffic",
+        "label": "历史CUDA/Zeus权重复用审计",
+        "url": "evidence/moe-deep-sources.md#reuse",
+        "note": "2026-10-24核验；冻结版本、适用路径与测量范围见证据账本。",
+        "kind": "历史记录"
+      }
+    ],
+    "takeaways": [
+      "route身份包含token、slot与expert，重排后必须恢复。",
+      "同expert M合并与多条M1并发展开不同。",
+      "当前merged路径可拆Gate/Up以暴露PE/VP重叠。",
+      "权重复用由内部w与驻留策略决定，不能只看外层M。"
+    ]
+  },
+  {
+    "id": "moe-combine-reduce",
+    "part": "MoE 部署与优化",
+    "order": 24.5,
+    "title": "Reduce内部：有效行、带宽与舍入次序",
+    "subtitle": "为什么它不只是sum，为什么零填充和slot洞会改变性能",
+    "minutes": 33,
+    "level": "深入",
+    "tags": [
+      "Reduce",
+      "Valid rows",
+      "带宽",
+      "FP32累加",
+      "NaN"
+    ],
+    "lead": "本地Reduce是Routed与Shared之间的数值和存储合同，也是最容易被名字误导的阶段。当前实现负责筛选本地route、乘路由权重、按顺序FP32累加并合Shared；它既不是跨rank AllReduce，也不是单纯对一个已加权tensor求和。",
+    "sections": [
+      {
+        "id": "local-equation",
+        "title": "01 / 先写出本rank到底贡献什么",
+        "html": "<div class=\"formula\">Yᵣ[t,h] = BF16( Sᵣ[t,h] + Σk∈Local(r,t) FP32(α[t,k])·FP32(Rᵣ[t,k,h]) )<br>Sᵣ = FP32(Shared₀)+FP32(Shared₁)；非Shared owner时Sᵣ=0</div><p>当前Routed的[ T,8,H ]已经是单个owner算出的rank-local I切片结果，没有两核partial维。Shared仍保留[2,T,H]。同rank两核Reduce各自处理完整token行，最终得到[ T,H ] BF16，再由caller做TP/EP集体通信。</p><svg viewBox=\"0 0 760 292\" role=\"img\" aria-label=\"Reduce有效route加权与Shared合并算例\"><title>Reduce有效route加权与Shared合并算例</title><g font-family=\"sans-serif\" font-size=\"14\" fill=\"#294838\"><text x=\"12\" y=\"22\">教学token：只有slot0与slot2属于本rank；slot1内容未定义</text><rect x=\"10\" y=\"45\" width=\"225\" height=\"65\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"122.5\" y=\"72.5\" text-anchor=\"middle\">Shared core0 [1,2]</text><text x=\"122.5\" y=\"92.5\" text-anchor=\"middle\">Shared core1 [−0.5,1]</text><path d=\"M235 77L275 77\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"275\" cy=\"77\" r=\"3\" fill=\"#6b8063\"/><rect x=\"275\" y=\"45\" width=\"210\" height=\"65\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"380\" y=\"72.5\" text-anchor=\"middle\">FP32初值</text><text x=\"380\" y=\"92.5\" text-anchor=\"middle\">[0.5,3]</text><rect x=\"10\" y=\"145\" width=\"225\" height=\"70\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"122.5\" y=\"175\" text-anchor=\"middle\">slot0: α=.5, R=[2,−2]</text><text x=\"122.5\" y=\"195\" text-anchor=\"middle\">slot2: α=.5, R=[6,2]</text><path d=\"M235 180L275 180\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"275\" cy=\"180\" r=\"3\" fill=\"#6b8063\"/><rect x=\"275\" y=\"145\" width=\"210\" height=\"70\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"380\" y=\"175\" text-anchor=\"middle\">按slot0 → slot2加入</text><text x=\"380\" y=\"195\" text-anchor=\"middle\">[0.5,3]+[1,−1]+[3,1]</text><path d=\"M485 180L530 180\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"530\" cy=\"180\" r=\"3\" fill=\"#6b8063\"/><rect x=\"530\" y=\"145\" width=\"215\" height=\"70\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"637.5\" y=\"175\" text-anchor=\"middle\">BF16 output</text><text x=\"637.5\" y=\"195\" text-anchor=\"middle\">[4.5,3]</text><text x=\"12\" y=\"270\">slot1即使存NaN，也不能以 NaN×0 进入累加；这里只画rank-local结果。</text></g></svg><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#reduce\">核对源码与证据 ↗</a></p>"
+      },
+      {
+        "id": "slot-layout",
+        "title": "02 / Valid-row ABI为什么允许scratch里残留NaN",
+        "html": "<p>Routed只定义当前IDs属于本rank专家范围的slot，远端slot可能保留上次Graph回放内容、未初始化值或测试用NaN。这个约定省掉大量无意义清零，但要求consumer根据本次IDs筛选。没有这个consumer合同，未清零输出就不是合法优化。</p><p>如果把所有slot都先乘一个0/1 mask，NaN×0仍是NaN，之后sum被污染。合法做法是在进入乘加前排除无效行，或使用真实不会读入算术的数据选择语义；不能拿Python伪码的直觉替代VP lowering。重复slot在各自位置乘各自α，顺序也应保留。</p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#reduce\">核对源码与证据 ↗</a></p>"
+      },
+      {
+        "id": "bandwidth-ledger",
+        "title": "03 / T24的Reduce最低payload，先独立算一遍",
+        "html": "<table><thead><tr><th>项目</th><th>计算</th><th>全rank逻辑payload</th></tr></thead><tbody><tr><td>Routed完整scratch容量</td><td>24×8×4096×2B</td><td>1536KiB</td></tr><tr><td>均匀EP4的有效route读</td><td>48×4096×2B</td><td>384KiB</td></tr><tr><td>EP0 Shared两个plane读</td><td>2×24×4096×2B</td><td>384KiB</td></tr><tr><td>最终output写</td><td>24×4096×2B</td><td>192KiB</td></tr><tr><td>IDs + route weights</td><td>24×8×(4+2)B</td><td>1152B</td></tr></tbody></table><p>忽略metadata与重复加载，EP0最低数据接口payload为384+384+192=960KiB；无Shared的EP为576KiB。48条本地route的乘加约393,216 FLOPs，Shared两plane相加再加98,304 FLOPs，约0.5 FLOP/B。它说明矩阵算力并不是这个阶段的主要资源，却不自动证明外存带宽是实际唯一瓶颈：CT控制、VP发射、片上往返和同步也可能占大头。</p><p>以上48是均匀分布的期望，真实层必须用本地有效route数V替换。完整scratch容量不等于每次真的读完；有效payload也不等于总线实际传输。</p>"
+      },
+      {
+        "id": "span-holes",
+        "title": "04 / 连续DMA减少小请求，却可能把洞一起搬进来",
+        "html": "<svg viewBox=\"0 0 760 282\" role=\"img\" aria-label=\"有效slot与连续DMA跨度不同\"><title>有效slot与连续DMA跨度不同</title><g font-family=\"sans-serif\" font-size=\"14\" fill=\"#294838\"><text x=\"15\" y=\"25\">同一token，H4096 BF16，每slot一行8KiB</text><rect x=\"15\" y=\"60\" width=\"82\" height=\"65\" rx=\"8\" fill=\"#bdd4b4\" stroke=\"#7e937b\"/><text x=\"56\" y=\"87.5\" text-anchor=\"middle\">slot0</text><text x=\"56\" y=\"107.5\" text-anchor=\"middle\">有效</text><rect x=\"106\" y=\"60\" width=\"82\" height=\"65\" rx=\"8\" fill=\"#ede9df\" stroke=\"#7e937b\"/><text x=\"147\" y=\"87.5\" text-anchor=\"middle\">slot1</text><text x=\"147\" y=\"107.5\" text-anchor=\"middle\">未定义</text><rect x=\"197\" y=\"60\" width=\"82\" height=\"65\" rx=\"8\" fill=\"#ede9df\" stroke=\"#7e937b\"/><text x=\"238\" y=\"87.5\" text-anchor=\"middle\">slot2</text><text x=\"238\" y=\"107.5\" text-anchor=\"middle\">未定义</text><rect x=\"288\" y=\"60\" width=\"82\" height=\"65\" rx=\"8\" fill=\"#ede9df\" stroke=\"#7e937b\"/><text x=\"329\" y=\"87.5\" text-anchor=\"middle\">slot3</text><text x=\"329\" y=\"107.5\" text-anchor=\"middle\">未定义</text><rect x=\"379\" y=\"60\" width=\"82\" height=\"65\" rx=\"8\" fill=\"#ede9df\" stroke=\"#7e937b\"/><text x=\"420\" y=\"87.5\" text-anchor=\"middle\">slot4</text><text x=\"420\" y=\"107.5\" text-anchor=\"middle\">未定义</text><rect x=\"470\" y=\"60\" width=\"82\" height=\"65\" rx=\"8\" fill=\"#ede9df\" stroke=\"#7e937b\"/><text x=\"511\" y=\"87.5\" text-anchor=\"middle\">slot5</text><text x=\"511\" y=\"107.5\" text-anchor=\"middle\">未定义</text><rect x=\"561\" y=\"60\" width=\"82\" height=\"65\" rx=\"8\" fill=\"#ede9df\" stroke=\"#7e937b\"/><text x=\"602\" y=\"87.5\" text-anchor=\"middle\">slot6</text><text x=\"602\" y=\"107.5\" text-anchor=\"middle\">未定义</text><rect x=\"652\" y=\"60\" width=\"82\" height=\"65\" rx=\"8\" fill=\"#bdd4b4\" stroke=\"#7e937b\"/><text x=\"693\" y=\"87.5\" text-anchor=\"middle\">slot7</text><text x=\"693\" y=\"107.5\" text-anchor=\"middle\">有效</text><path d=\"M15 148V160H734V148\" stroke=\"#9b674d\" fill=\"none\" stroke-width=\"2\"/><text x=\"130\" y=\"190\">连续DMA跨度：8行 = 64KiB</text><text x=\"130\" y=\"221\">算术有效行：2行 = 16KiB</text><text x=\"130\" y=\"252\">跨度中的洞可被搬入，但必须被mask阻止进入浮点运算。</text></g></svg><p>当前代码先找某token本地slot最小lo、最大hi和mask，再加载连续范围[lo,hi]，使多个小行搬运合并。slot0与7的例子只需两行参加算术，连续跨度却覆盖八行，payload放大4倍。它可能仍比两次碎片DMA加描述符/启动更快，也可能因带宽浪费更慢，必须结合真实slot分布。</p><p>这也是“token多次命中同一expert”之外还需要统计slot空间位置的原因。改变Router排序或输出ABI可能缩短跨度，却会改变TopK关联、sum次序和Graph接口，不能只在Routed里任意压实后假设Reduce仍能读懂。</p>"
+      },
+      {
+        "id": "pipeline",
+        "title": "05 / 两组累加器是为隐藏等待，不是多算一次输出",
+        "html": "<p>T24每个Reduce core拥有12个完整H4096 token行，再分成A/B各6行，两组FP32累加器分别占96KiB。代码可让一组等待下一条route搬运时，另一组进行VP运算，处理完的完整行提前store。它没有按H把两个核分成2048维；当前快路径LOCAL_H仍是4096。</p><p>EP0还要staging两份Shared。T32每核16行、两组各8行，两个FP32累加器共256KiB；若再把两plane全部token的Shared同时保持，容易挤满512KiB及其他scratch，因此存在按半块staging的专门策略。容量要按同一时刻live对象计算，不能把所有分配之和或最终输出大小当high-water。</p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#reduce\">核对源码与证据 ↗</a></p>"
+      },
+      {
+        "id": "rounding",
+        "title": "06 / Shared-first和slot升序为什么是数值合同",
+        "html": "<p>浮点加法不满足严格结合律。教学FP32反例：((2²⁴+1)−2²⁴)=0，而2²⁴+(1−2²⁴)=1。现实模型值未必如此极端，但证明重排不逐位等价只需一个合法反例。把Shared最后加、按expert重新排序slot、改树形归约，都可能改变最后BF16。</p><p>当前路径先用Shared初始化FP32累加器，再按原slot递增加入route×weight，最后一次BF16输出。这样还能省掉单独zero-fill与末尾Shared add，但收益须建立在保持次序的前提下。若要换更并行的树形sum，应作为明确数值变更，用误差与模型质量验证，而不是包装成bit-exact重排。</p>"
+      },
+      {
+        "id": "nv-combine",
+        "title": "07 / 约7倍Reduce差距，为什么不能归因于TP4通信",
+        "html": "<table><thead><tr><th>T24、42层九观测均值</th><th>Zeus</th><th>NV</th></tr></thead><tbody><tr><td>表内Reduce</td><td>1.516663ms</td><td>0.218179ms</td></tr><tr><td>Routed</td><td>3.159819ms</td><td>5.208906ms</td></tr><tr><td>Routed + Reduce</td><td>4.676482ms</td><td>5.427085ms</td></tr><tr><td>权重乘法计入哪里</td><td>Reduce</td><td>Down/Routed</td></tr></tbody></table><p>NV的Down在FP32 accumulator上融合route weight，再写回相应结果；Zeus在本地Reduce读取未加权BF16 Routed结果后乘α。两者不仅工作归属不同，舍入位置、scale和dtype也不同。表内两边都排除了通信，所以它无法测出TP4 AllReduce贵了多少。</p><p>这些是冻结的代表性真实decode非通信预算，不是本轮重测；原诊断矩阵有#592参考失败，后来仅对原反例修参考和补测。正确使用方法是解释工作边界与待测假设，不能从合计列推出纯硬件优劣。</p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#nv\">核对源码与证据 ↗</a></p>"
+      }
+    ],
+    "questions": [
+      {
+        "id": "reduce-undefined",
+        "q": "无效slot为何不能统一乘0再sum？",
+        "a": "NaN或Inf进入乘法后不会变成可靠的零，NaN×0仍为NaN。valid-row ABI要求基于本次IDs排除无效行进入算术，不能假设scratch旧值干净。",
+        "followup": "怎样用NaN sentinel让错误的consumer在测试中暴露？"
+      },
+      {
+        "id": "reduce-bandwidth",
+        "q": "T24 EP0的Reduce最低有效payload是多少？",
+        "a": "在均匀48条本地route假设下，Routed读384KiB、Shared两plane读384KiB、输出写192KiB，共960KiB，另加1152B IDs/weights。未包含跨度洞、片上往返或重复加载。",
+        "followup": "如果slot仅0与7有效，实际连续DMA读量是多少？"
+      },
+      {
+        "id": "reduce-order",
+        "q": "为什么Shared-first不能随意换成最后再加？",
+        "a": "FP32也不严格满足结合律，改变初值及slot累加次序可能改变最终BF16。当前合同指定Shared-first与slot升序；改变必须重新定义误差与验证边界。",
+        "followup": "怎样用2²⁴、1、−2²⁴构造反例？"
+      },
+      {
+        "id": "reduce-cores",
+        "q": "当前Reduce双核是按H还是按token切？",
+        "a": "限定快路径按完整token行切，每核处理T/2行、LOCAL_H=4096。其内部A/B累加器是两段token，旧形参BLOCK_H不代表实际H切分。",
+        "followup": "为什么T32需要更保守的Shared staging？"
+      },
+      {
+        "id": "reduce-nv",
+        "q": "Zeus Reduce比NV慢约7倍是否说明TP4 all-reduce很慢？",
+        "a": "不成立。该列是本地kernel，collective在窗口之外；NV把route乘法计入Down，Zeus留在Reduce。要评估TP通信，需单独测collective及overlap。",
+        "followup": "为何即使Routed+Reduce对齐，也仍不能称纯硬件比较？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "md-reduce-code",
+        "label": "当前Reduce源码与mask语义",
+        "url": "evidence/moe-deep-sources.md#reduce",
+        "note": "2026-10-24核验；冻结版本、适用路径与测量范围见证据账本。",
+        "kind": "源码"
+      },
+      {
+        "id": "md-reduce-nv",
+        "label": "真实NV组件计时身份",
+        "url": "evidence/moe-deep-sources.md#nv",
+        "note": "2026-10-24核验；冻结版本、适用路径与测量范围见证据账本。",
+        "kind": "源码"
+      },
+      {
+        "id": "md-reduce-math",
+        "label": "字节计算口径",
+        "url": "evidence/moe-deep-sources.md#arithmetic",
+        "note": "2026-10-24核验；冻结版本、适用路径与测量范围见证据账本。",
+        "kind": "历史记录"
+      }
+    ],
+    "takeaways": [
+      "Reduce是本地有效route加权归约，collective另算。",
+      "有效payload、连续DMA跨度与scratch容量是三件事。",
+      "无效行不得以乘0方式进入浮点算术。",
+      "累加次序既影响精度，也影响调度与初始化成本。"
+    ]
+  },
+  {
+    "id": "moe-communication-overlap",
+    "part": "MoE 部署与优化",
+    "order": 24.6,
+    "title": "TP/EP通信：把归约对象、字节和重叠窗口说清",
+    "subtitle": "从2×2小算例到T24的192KiB输出与board-replicated合同",
+    "minutes": 36,
+    "level": "深入",
+    "tags": [
+      "AllGather",
+      "AllReduce",
+      "ReduceScatter",
+      "AllToAll",
+      "Overlap"
+    ],
+    "lead": "MoE中的通信不是统一一个AllToAll。它取决于token原本由谁持有、哪些rank有专家切片、Shared由谁贡献，以及下一个Attention希望拿到什么布局。先给数值对象命名，再计算通信，最后讨论哪段可以与计算重叠。",
+    "sections": [
+      {
+        "id": "ownership-algebra",
+        "title": "01 / 三次不同的“合并”，不能只叫Reduce",
+        "html": "<div class=\"formula\">本地：Y[e,p] = Shared[e,p] + Σlocal route α·ExpertPartial[e,p]<br>TP：B[e] = Σp Y[e,p]，合齐同expert的I通道<br>EP：O = Σe B[e]，合齐不同expert；再按token分片</div><p>本地Reduce消费的是当前rank的tensor；TP AllReduce消费各TP rank不同I切片的结果；EP ReduceScatter消费各board不同专家集合的结果。Shared只在约定owner贡献一次，才能让上述求和正确。TP与EP在实数域可交换某些和式，但实际dtype、布局与网络算法限制并未自动消失。</p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#communication\">核对源码与证据 ↗</a></p>"
+      },
+      {
+        "id": "two-two",
+        "title": "02 / 用四个rank算一次，观察数据何时完整",
+        "html": "<svg viewBox=\"0 0 760 375\" role=\"img\" aria-label=\"TP与EP两级归约数值例\"><title>TP与EP两级归约数值例</title><g font-family=\"sans-serif\" font-size=\"14\" fill=\"#294838\"><text x=\"12\" y=\"22\">教学2×2拓扑：每个rank有两个token；不代表实际world16配置</text><rect x=\"10\" y=\"45\" width=\"175\" height=\"55\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"97.5\" y=\"67.5\" text-anchor=\"middle\">EP0/TP0</text><text x=\"97.5\" y=\"87.5\" text-anchor=\"middle\">[1,10]</text><rect x=\"10\" y=\"115\" width=\"175\" height=\"55\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"97.5\" y=\"137.5\" text-anchor=\"middle\">EP0/TP1</text><text x=\"97.5\" y=\"157.5\" text-anchor=\"middle\">[2,20]</text><rect x=\"10\" y=\"205\" width=\"175\" height=\"55\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"97.5\" y=\"227.5\" text-anchor=\"middle\">EP1/TP0</text><text x=\"97.5\" y=\"247.5\" text-anchor=\"middle\">[3,30]</text><rect x=\"10\" y=\"275\" width=\"175\" height=\"55\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"97.5\" y=\"297.5\" text-anchor=\"middle\">EP1/TP1</text><text x=\"97.5\" y=\"317.5\" text-anchor=\"middle\">[4,40]</text><path d=\"M185 72L265 106\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"265\" cy=\"106\" r=\"3\" fill=\"#6b8063\"/><path d=\"M185 142L265 106\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"265\" cy=\"106\" r=\"3\" fill=\"#6b8063\"/><path d=\"M185 232L265 266\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"265\" cy=\"266\" r=\"3\" fill=\"#6b8063\"/><path d=\"M185 302L265 266\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"265\" cy=\"266\" r=\"3\" fill=\"#6b8063\"/><rect x=\"265\" y=\"75\" width=\"200\" height=\"65\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"365\" y=\"102.5\" text-anchor=\"middle\">TP AllReduce</text><text x=\"365\" y=\"122.5\" text-anchor=\"middle\">EP0两rank均[3,30]</text><rect x=\"265\" y=\"235\" width=\"200\" height=\"65\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"365\" y=\"262.5\" text-anchor=\"middle\">TP AllReduce</text><text x=\"365\" y=\"282.5\" text-anchor=\"middle\">EP1两rank均[7,70]</text><path d=\"M465 106L520 175\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"520\" cy=\"175\" r=\"3\" fill=\"#6b8063\"/><path d=\"M465 266L520 175\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"520\" cy=\"175\" r=\"3\" fill=\"#6b8063\"/><rect x=\"520\" y=\"135\" width=\"225\" height=\"85\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"632.5\" y=\"162.5\" text-anchor=\"middle\">EP ReduceScatter</text><text x=\"632.5\" y=\"182.5\" text-anchor=\"middle\">EP0得到token0=10</text><text x=\"632.5\" y=\"202.5\" text-anchor=\"middle\">EP1得到token1=100</text><text x=\"260\" y=\"350\">每个TP lane跨EP做相同语义；输出在board内复制。</text></g></svg><p>图中每个长度2向量表示两个token的标量partial。TP后EP0得到[3,30]，EP1得到[7,70]；EP再相加得到完整[10,100]，只把相应token片段交回拥有它的board。实际TP4EP4把这个结构扩为四个TP lane和四个board，不改变“先通道、再专家、最后token归属”的含义。</p><p>如果没有TP第一步就直接把某一lane跨EP相加，只得到[4,40]或[6,60]的一部分；如果把同board内已经复制的TP结果在一个world16 SUM中重复计入，会把完整结果乘4。通信组的集合定义与张量复制身份必须同时说明。</p>"
+      },
+      {
+        "id": "actual-layout",
+        "title": "03 / T24的输入输出在board间如何变化",
+        "html": "<table><thead><tr><th>阶段</th><th>每rank逻辑shape</th><th>BF16字节</th></tr></thead><tbody><tr><td>Attention侧一个board的token片</td><td>[6,4096]</td><td>48KiB</td></tr><tr><td>跨board gather后</td><td>[24,4096]</td><td>192KiB</td></tr><tr><td>本地四kernel输出</td><td>[24,4096] partial</td><td>192KiB</td></tr><tr><td>板内TP4 AllReduce后</td><td>[24,4096] board完整专家贡献</td><td>192KiB</td></tr><tr><td>跨board EP4 ReduceScatter后</td><td>[6,4096]</td><td>48KiB</td></tr></tbody></table><p>实际helper固定world16、每board4rank，lane0为[0,4,8,12]，其他lane依次平移。BoardReplicated算法使同board内的复制状态与跨board通信配套。T必须能按四个board分片；dev的T24进入MoE不应被误称成每rank24个独立请求，来源每board只有6行。</p><p>输入gather属于上游数据分发，不能仅因为某个四kernel benchmark没有调用它，就声称模型不需要输入通信。反过来，benchmark本来计时的只是一段local chain，也不应把它宣称成含gather的E2E。</p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#communication\">核对源码与证据 ↗</a></p>"
+      },
+      {
+        "id": "ring-budget",
+        "title": "04 / 用理想ring估算量级，但不冒充ZECL实测",
+        "html": "<div class=\"formula\">AllReduce(p,S) ≈ 2(p−1)α + 2(p−1)S/(pβ)<br>ReduceScatter(p,S) ≈ (p−1)α + (p−1)S/(pβ)<br>AllGather(p,S/p) ≈ (p−1)α + (p−1)S/(pβ)</div><p>S是最终完整tensor字节，β为该模型中每rank单向有效发送带宽，α为每步启动项。T24的S=192KiB，p=4：ring AR每rank发送288KiB，RS发送144KiB，AG发送144KiB；不是发送与接收的和，也不是所有rank的总网络字节。</p><p>这只是教材ring，实际BoardReplicated算法的链路拓扑、板内复制、协议分步、并发lane与共享链路会改变物理流量与时延。小tensor往往被α、同步和拷贝支配，不能只用192KiB除峰值带宽。正式测量要同时记录算法、组、count/dtype、原位与否、stream和可见性。</p><p><a href=\"https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/usage/collectives.html\" target=\"_blank\" rel=\"noopener\">NCCL官方定义</a>可用于核对集合语义；这里没有把NCCL实现视为ZECL实现。</p>"
+      },
+      {
+        "id": "dispatch-choice",
+        "title": "05 / 为什么EP4也可能合理地采用gather分发",
+        "html": "<p>选择性AllToAll可以只把token送到命中的专家owner，但一个token选8个专家，多个expert可能位于同一board。若先按目标board去重，发送份数取决于“命中board数”，不是直接等于top8。假设每次选择独立、均匀落在p个board，期望命中数d≈p[1−(1−1/p)^K]。这是教学近似，真实TopK无放回且路由不均匀。</p><p>p=4、K=8时d≈3.60，已覆盖约90%的board；相对全gather4份，选择性发送的理论份数节省有限，还要付计数交换、prefix、pack/unpack和非均匀消息成本。p=16、K=8时d≈6.45，潜在稀疏性更大，但专家热点和网络启动仍需分析。不能由“有EP”自动推断实际一定使用AllToAll。</p><p>低并发decode关注延时，规则gather可能降低动态调度复杂度；更大batch或EP数可能使选择性dispatch更划算。应按真实nₑ和目标board覆盖率评估，而不是把某一种通信名称当先进程度。</p>"
+      },
+      {
+        "id": "overlap",
+        "title": "06 / 哪些段在数据依赖上可以重叠",
+        "html": "<svg viewBox=\"0 0 760 325\" role=\"img\" aria-label=\"MoE Shared与Routed并行窗口和通信边界\"><title>MoE Shared与Routed并行窗口和通信边界</title><g font-family=\"sans-serif\" font-size=\"14\" fill=\"#294838\"><text x=\"12\" y=\"22\">依赖示意，不按实测周期缩放；不宣称当前生产已实现这些overlap</text><rect x=\"15\" y=\"50\" width=\"135\" height=\"50\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"82.5\" y=\"80\" text-anchor=\"middle\">输入AllGather</text><path d=\"M150 75L180 75\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"180\" cy=\"75\" r=\"3\" fill=\"#6b8063\"/><rect x=\"180\" y=\"50\" width=\"130\" height=\"50\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"245\" y=\"80\" text-anchor=\"middle\">Router</text><path d=\"M310 75L345 75\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"345\" cy=\"75\" r=\"3\" fill=\"#6b8063\"/><rect x=\"345\" y=\"50\" width=\"160\" height=\"50\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"425\" y=\"80\" text-anchor=\"middle\">Routed</text><path d=\"M150 75L180 155\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"180\" cy=\"155\" r=\"3\" fill=\"#6b8063\"/><rect x=\"180\" y=\"130\" width=\"325\" height=\"50\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"342.5\" y=\"160\" text-anchor=\"middle\">Shared：只依赖输入X</text><path d=\"M505 75L550 115\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"550\" cy=\"115\" r=\"3\" fill=\"#6b8063\"/><path d=\"M505 155L550 115\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"550\" cy=\"115\" r=\"3\" fill=\"#6b8063\"/><rect x=\"550\" y=\"90\" width=\"190\" height=\"50\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"645\" y=\"120\" text-anchor=\"middle\">local Reduce</text><path d=\"M645 140L645 190\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"645\" cy=\"190\" r=\"3\" fill=\"#6b8063\"/><rect x=\"550\" y=\"190\" width=\"190\" height=\"50\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"645\" y=\"220\" text-anchor=\"middle\">TP AR → EP RS</text><text x=\"12\" y=\"270\">Shared与Routed数据依赖独立，但可能争用同一PE、VP和存储通路。</text><text x=\"12\" y=\"298\">跨chunk通信可早启：每个chunk仍须满足全rank一致顺序与完成可见性。</text></g></svg><p>Shared与Router都只需X，在依赖图上可并行；Routed必须等IDs；local Reduce必须等对应Routed/Shared数据。若资源完全独立，理想本地分支预算可写max(Lshared,Lrouter+Lrouted)+Lreduce；518上它们共享PE/VP/存储，这个max只是依赖下界，不是预期实测。</p><p>若按token chunk划分，可在chunk0 Reduce完成后启动它的TP/EP通信，同时计算chunk1。但需要所有rank遵守相同collective顺序、正确chunk计数、独立buffer与完成事件。非阻塞API返回仅表示已提交，不表示通信完成或buffer可复用；跨chunk的归组还可能损失same-expert weight reuse。</p>"
+      },
+      {
+        "id": "critical-path",
+        "title": "07 / 怎样实测overlap，而不把duration求和当wall",
+        "html": "<p>同时记录kernel与collective时间线，标出第一输入可用到最后输出可用的wall，分别报告Σduration与区间并集。两个stream各跑10μs且完全重叠，duration和20μs，wall10μs；逐层各取最快轮次再累加又是另一种计算预算。NV历史对照属于非通信kernel预算，明确包含双stream重叠，不能直接当层间连续执行的实际时延。</p><p>对比应给串行基线、重叠方案、有效输出、总wall、通信独占窗口与被覆盖窗口。若collective不在关键路径，减小其duration可能不降低TPOT；若通信抢占GDG/DT导致Routed变慢，即便“overlap百分比提高”也可能总时延回退。</p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#nv\">核对源码与证据 ↗</a></p>"
+      }
+    ],
+    "questions": [
+      {
+        "id": "three-reductions",
+        "q": "Local Reduce、TP AllReduce、EP ReduceScatter分别求什么？",
+        "a": "Local合本rank有效route及Shared；TP合同专家不同I切片；EP合不同专家owner贡献，并按token把完整结果分片。三个对象和数据归属不同。",
+        "followup": "为何world16直接SUM可能把board复制值重复累加？"
+      },
+      {
+        "id": "ring-volume",
+        "q": "T24/H4096 BF16的TP4 ring AllReduce每rank发送多少？",
+        "a": "完整S=192KiB，理想ring发送2(p−1)/p×S=288KiB，另有6步启动。它不是总发送加接收，更不是ZECL实际链路counter。",
+        "followup": "如果换成FP32归约或不同ring/tree，哪些账会改变？"
+      },
+      {
+        "id": "alltoall",
+        "q": "EP4 top8为什么选择性dispatch不一定比AllGather便宜？",
+        "a": "按owner去重后的目标board可能接近全覆盖，独立均匀近似约3.60/4；动态计数和pack/unpack的固定成本可能抵消少传的payload。需测真实board覆盖率与低T延时。",
+        "followup": "哪些模型或拓扑变化更可能让AllToAll有优势？"
+      },
+      {
+        "id": "overlap-contract",
+        "q": "非阻塞all_reduce返回后为什么不能立刻复用输入？",
+        "a": "返回可能只代表提交。底层仍读写该buffer，必须用stream依赖或完成事件保证生命周期；同时全rank调用顺序与count必须一致。",
+        "followup": "怎样把token chunk做成独立buffer且不破坏Graph replay？"
+      },
+      {
+        "id": "duration-wall",
+        "q": "两stream kernel duration和能否代表层延时？",
+        "a": "不能。有重叠时求和重复计算同时段；还可能遗漏通信与host。应报告实际依赖范围的wall，并保留duration和/union解释资源使用。",
+        "followup": "逐层min10再求和与一个完整42层最快round又有何差别？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "md-comm-code",
+        "label": "BoardReplicated通信helper",
+        "url": "evidence/moe-deep-sources.md#communication",
+        "note": "2026-10-24核验；冻结版本、适用路径与测量范围见证据账本。",
+        "kind": "源码"
+      },
+      {
+        "id": "md-comm-nv",
+        "label": "历史NV duration聚合口径",
+        "url": "evidence/moe-deep-sources.md#nv",
+        "note": "2026-10-24核验；冻结版本、适用路径与测量范围见证据账本。",
+        "kind": "源码"
+      }
+    ],
+    "takeaways": [
+      "通信前先定义token与partial归属。",
+      "TP与EP归约的张量含义不同，组错就会重复或漏算。",
+      "ring公式只作量级模型，实际算法必须另测。",
+      "overlap需要依赖、资源和buffer生命周期同时允许。"
+    ]
+  },
+  {
+    "id": "moe-hardware-budget",
+    "part": "MoE 部署与优化",
+    "order": 24.7,
+    "title": "从字节到延时：518与H200的可核验成本账",
+    "subtitle": "复用、padding、owner热点和通信共同决定收益；让每个性能结论都有分母。",
+    "minutes": 36,
+    "level": "深入",
+    "tags": [
+      "Roofline",
+      "H200",
+      "权重复用",
+      "性能归因",
+      "低并发",
+      "实测边界"
+    ],
+    "lead": "架构理解的深度，不在于记住两张峰值规格表，而在于解释为什么同一算式换一种映射会多读权重、为什么读少了仍可能没有变快、为什么同名Reduce相差数倍也不能直接比较通信。这里把前六章的数据流合成一张预算表，再用真实历史对照检验哪些推论成立。",
+    "sections": [
+      {
+        "id": "four-byte-levels",
+        "title": "01 / 先区分四种字节，才能谈带宽",
+        "html": "<p>对同一层、某一TP slice、某个命中的expert，三矩阵的独特FP8权重为3HIₗ字节；H4096、Iₗ512时是6MiB。它描述参数集合，并没有说明kernel读了几遍。将nₑ行分成若干窗口后，请求载荷还要乘权重遍历次数；进入具体存储层后，又受缓存命中、对齐事务、连续跨度里的洞和其他数据影响。最后，只有未被计算覆盖、确实挡住输出的等待才进入关键路径。</p><svg viewBox=\"0 0 760 310\" role=\"img\" aria-label=\"权重从逻辑集合经过请求窗口与存储层再变成关键路径时间\"><title>权重从逻辑集合经过请求窗口与存储层再变成关键路径时间</title><g font-family=\"sans-serif\" font-size=\"14\" fill=\"#294838\"><rect x=\"20\" y=\"36\" width=\"165\" height=\"75\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"102.5\" y=\"68.5\" text-anchor=\"middle\">独特逻辑权重</text><text x=\"102.5\" y=\"88.5\" text-anchor=\"middle\">Σ expert bytes</text><path d=\"M185 72L205 72\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"205\" cy=\"72\" r=\"3\" fill=\"#6b8063\"/><rect x=\"205\" y=\"36\" width=\"165\" height=\"75\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"287.5\" y=\"68.5\" text-anchor=\"middle\">kernel请求载荷</text><text x=\"287.5\" y=\"88.5\" text-anchor=\"middle\">Σ window bytes</text><path d=\"M370 72L390 72\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"390\" cy=\"72\" r=\"3\" fill=\"#6b8063\"/><rect x=\"390\" y=\"36\" width=\"165\" height=\"75\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"472.5\" y=\"68.5\" text-anchor=\"middle\">物理存储事务</text><text x=\"472.5\" y=\"88.5\" text-anchor=\"middle\">cache / 对齐 / 洞</text><path d=\"M555 72L575 72\" stroke=\"#6b8063\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"575\" cy=\"72\" r=\"3\" fill=\"#6b8063\"/><rect x=\"575\" y=\"36\" width=\"165\" height=\"75\" rx=\"8\" fill=\"#e7eddd\" stroke=\"#7e937b\"/><text x=\"657.5\" y=\"68.5\" text-anchor=\"middle\">暴露在关键路径</text><text x=\"657.5\" y=\"88.5\" text-anchor=\"middle\">资源竞争与overlap</text><text x=\"22\" y=\"145\">每层权重不同，不能跨层去重</text><text x=\"206\" y=\"170\">w窗口内重放 ≠ 再次外存请求</text><text x=\"391\" y=\"195\">请求字节 ≠ HBM/MC counter</text><rect x=\"68\" y=\"223\" width=\"624\" height=\"61\" rx=\"8\" fill=\"#f3eadb\" stroke=\"#7e937b\"/><text x=\"380\" y=\"258.5\" text-anchor=\"middle\">低字节不自动等于低延时：还要看有效MAC、空行、VP与同步</text></g></svg><div class=\"formula\">Q_unique = Σ命中expert 3HIₗb；Q_request = Σexpert Lₑ·3HIₗb；Q_physical ≠ Q_request；L_wall ≠ Q_request / 标称带宽</div><p>这里b是每个权重元素的字节数。Q_unique按层求和时必须保留层身份：layer3/expert7与layer4/expert7不是同一套参数。Q_request只统计weight payload，不能顺手叫总内存流量。把Q_request除以kernel时间可得到该口径的请求吞吐，但不能据此声称物理HBM或MC已经达到相同比例。</p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#reuse\">核对源码与证据 ↗</a></p>"
+      },
+      {
+        "id": "roofline-accounting",
+        "title": "02 / 一次矩阵乘的强度：有效行与执行行要分账",
+        "html": "<div class=\"formula\">GEMM: A[M_exec,K]×B[K,N]。F_exec = 2M_execKN；F_useful = 2M_validKN；η = M_valid/M_exec。Q_weight = KNb。</div><div class=\"formula\">一次权重遍历：AI_weight,exec = 2M_exec/b；AI_weight,useful = 2M_valid/b。若同一权重重复遍历L次，两种weight-only强度的分母都须再乘L。</div><p>这里M_exec是硬件实际计算的行数，M_valid是其中服务真实route的有效行数，b是每个权重元素的字节数。对相同K、N的多窗口合计，M_exec和M_valid也必须按所有窗口求和，再用L次权重遍历作分母；不能保留单窗口分子却重复除以总L。若M64窗口只有M_valid=3行，执行强度仍是128 FLOP/B（FP8），但有效强度只有6 FLOP/B，有效行比例为3/64。硬件可以把padding也算得很忙，模型有用工作却很少。反过来，三条M1没有空行，但每行重新读一遍权重，weight-only有效强度只有2 FLOP/B。真实强度还要加入输入、输出、scale、路由和临时buffer，通常低于只计权重的估计。</p><table><thead><tr><th>同一expert的3条有效route</th><th>权重遍历L</th><th>执行行数合计</th><th>有效/执行FLOPs</th><th>weight-only有效AI</th></tr></thead><tbody><tr><td>逐条M1</td><td>3</td><td>3</td><td>100%</td><td>2 FLOP/B</td></tr><tr><td>一次M4</td><td>1</td><td>4</td><td>75%</td><td>6 FLOP/B</td></tr><tr><td>一次M64</td><td>1</td><td>64</td><td>4.6875%</td><td>6 FLOP/B</td></tr></tbody></table><div class=\"formula\">L_lower ≥ max(F_exec / F_peak, Q_physical / B_eff)；分界AI* = F_peak / B_eff。</div><p>这是资源下界而非预测公式。F_peak与B_eff必须属于同一核数、频率、数据类型和并发范围；三条矩阵乘有先后依赖，若各阶段瓶颈不同，应分别计算后按合法重叠关系组合，不能把全部算力和带宽混成一次完美重叠。当前不重新核验RTL峰值、不填入一个看似精确的总TOPS，避免把旧设计模型伪装成此次实测。</p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#arithmetic\">核对源码与证据 ↗</a></p>"
+      },
+      {
+        "id": "historical-reuse",
+        "title": "03 / 一份真实路由，为什么能从126降到50.508 GiB",
+        "html": "<p>10月19日的独立审计，用PR567保存的T16、top8、42层路由得到5376条route和1471个“层内不同expert”的总数。以下把四个TP slice的weight payload相加，刻意保持与当时报告相同的分母。CUDA M64模型中，所有同expert行落在一个窗口；旧Zeus逐route M1每条重读；固定M4/w4则按ceil(nₑ/4)得到2155个窗口。</p><table><thead><tr><th>42层、4个TP slice合计</th><th>等价权重遍历数/TP slice</th><th>模型payload</th><th>相对CUDA请求模型</th></tr></thead><tbody><tr><td>CUDA M64完整归组</td><td>1471</td><td>1471×6MiB×4 = 34.4765625GiB</td><td>1</td></tr><tr><td>旧Zeus M1</td><td>5376</td><td>5376×6MiB×4 = 126GiB</td><td>3.6547</td></tr><tr><td>固定M4 / 内部w4</td><td>2155</td><td>2155×6MiB×4 = 50.5078125GiB</td><td>1.4650</td></tr></tbody></table><p>这些是同一路由下的请求模型，不是三次硬件性能测试；既没有这一批输入的CUDA全42层HBM counter，也不能把旧M1说成当前PR588。当前owner merge已在受支持shape里做M1/M2/M4分组。用旧模型说明复用原理，用新源码说明今天的实现，两个版本的职责应分开。</p><p>GPU一遍权重并不要求6MiB整expert驻留shared：M64/N128/K128 CTA在每个K阶段读取16KiB B tile，让同一个tile服务该M窗口。Gate+Up的8×32个tile合计4MiB，Down的32×4合计2MiB。518的WL1窗口内重放同样有复用，但外层M16若内部w4仍可能分四遍；只改外层M不等于增加片内复用跨度。</p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#reuse\">核对源码与证据 ↗</a></p>"
+      },
+      {
+        "id": "resource-conflicts",
+        "title": "04 / 更大w、更高TP为什么仍需重新算资源",
+        "html": "<p>假设固定同样的16行，内部w从4增到16，理想MAC工作量不变；权重遍历可能从4降为1。若原来计算已是更高下界，减少带宽下界并不能继续压低计算下界。与此同时，更多行的activation与FP32累加器会占用片内空间，迫使c/k减小、破坏原先AL1驻留、增加activation重载或控制窗口。这解释了“流量账更漂亮、实测却持平或变慢”为什么并不矛盾。</p><p>TP4改TP16则让Iₗ从512变128。每条本地route的计算和权重各缩小四倍，但每个rank持有的expert数从72增288，均匀期望route数增四倍；rank总有效MAC和容量并未自动减小。Down reduction维缩短会改变PE利用率与启动占比；Gate/Up的输出宽度也变窄。分摊热点可能有利，更多TP同步及更短dot可能不利，必须用具体映射验证。</p><table><thead><tr><th>候选改动</th><th>理论收益</th><th>必须同步检查</th></tr></thead><tbody><tr><td>增加内部w</td><td>减少跨W窗口权重请求</td><td>AL1驻留、片内容量、padding、合法c/k</td></tr><tr><td>提高TP、降低EP</td><td>热点expert工作分散更多rank</td><td>窄矩阵效率、TP通信、当前I128支持</td></tr><tr><td>增加并发T</td><td>同expert合并与启动摊销</td><td>owner热点、计数元数据、Reduce staging、KV容量</td></tr><tr><td>更大连续DMA跨度</td><td>减少小请求与启动</td><td>洞字节、NaN mask、总线竞争</td></tr></tbody></table><aside class=\"callout\">这部分是由当前shape与资源合同推导的取舍，不声称它就是项目立项时选择EP4×TP4的历史决策原因，也不声称w16或TP16已有当前端到端验收。</aside><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#topology\">核对源码与证据 ↗</a></p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#reuse\">核对源码与证据 ↗</a></p>"
+      },
+      {
+        "id": "real-nv-budget",
+        "title": "05 / 真实T24对照：可说6.151 ms，不能直接说TPOT",
+        "html": "<p>另一套10月22日真实decode归档使用NV四张H200、模型TP4但MoE expert-TP1/EP4；Zeus是16逻辑rank的TP4EP4。T24的九个观测均值如下。Zeus取双核duration最大值、逐rank完整链、逐层慢rank；NV取每层max-rank后min10轮Graph。两者都是42层四算子duration预算，NV还包含不同stream的重叠，因此图中堆叠不是统一意义的实际wall。</p><svg viewBox=\"0 0 760 320\" role=\"img\" aria-label=\"T24历史四算子duration预算，不能作为端到端wall时间\"><title>T24历史四算子duration预算，不能作为端到端wall时间</title><g font-family=\"sans-serif\" font-size=\"14\" fill=\"#294838\"><text x=\"20\" y=\"83\">Zeus 16 rank</text><rect x=\"155\" y=\"58\" width=\"50.38068\" height=\"36\" fill=\"#a4bd9b\"/><rect x=\"205.38067999999998\" y=\"58\" width=\"233.8265977786\" height=\"36\" fill=\"#71956f\"/><rect x=\"439.2072777786\" y=\"58\" width=\"58.7104488856\" height=\"36\" fill=\"#d8c79e\"/><rect x=\"497.91772666419996\" y=\"58\" width=\"112.23308666419999\" height=\"36\" fill=\"#bda3a3\"/><text x=\"618.1508133284\" y=\"83\">6.151 ms</text><text x=\"20\" y=\"188\">NV 4×H200</text><rect x=\"155\" y=\"163\" width=\"43.741844\" height=\"36\" fill=\"#a4bd9b\"/><rect x=\"198.74184400000001\" y=\"163\" width=\"385.4590768856\" height=\"36\" fill=\"#71956f\"/><rect x=\"584.2009208856\" y=\"163\" width=\"61.772092\" height=\"36\" fill=\"#d8c79e\"/><rect x=\"645.9730128856\" y=\"163\" width=\"16.1452131144\" height=\"36\" fill=\"#bda3a3\"/><text x=\"670.118226\" y=\"188\">6.853 ms</text><text x=\"155\" y=\"111\">Router .681  /  Routed 3.160  /  Shared .793  /  Reduce 1.517</text><text x=\"155\" y=\"216\">Router .591  /  Routed 5.209  /  Shared .835  /  Reduce .218</text><text x=\"25\" y=\"263\">27个历史观测按T各九次均值；两侧数值、拓扑、组件边界不同</text><text x=\"25\" y=\"288\">双stream重叠与通信未还原到统一wall；诊断矩阵不升级为全量新验收</text></g></svg><p>Zeus总量6.150687ms，NV6.852949ms：只能在该历史口径下说前者预算低约10.25%。不能把比值改称整模型加速比，因为未覆盖Attention、通信、host及统一关键路径，而且NV的FP8 block量化、FP32 router weights和FP8 Shared与Zeus数值合同不同。三个T档的输入生成history也并非全部一致，不是严格只改batch的对照实验。</p><p>同名Reduce为1.516663与0.218179ms，差约6.95倍；但Zeus在这里做route-weight乘法，NV已经在Down完成。先合并Routed+Reduce后，预算变成4.676482与5.427085ms，差距解读就发生变化。两者均未把TP4 AllReduce时间塞进该Reduce列。Shared列又是逐层已选完整路径上的分量，不能当独立EP0 Shared总量。</p><aside class=\"callout\">原归档仍标diagnostic_only与performance_baseline_accepted=false；后来修参考并补测原反例，不等于这张矩阵被全量重跑。这里展示历史诊断价值，不升级验收等级。</aside><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#nv\">核对源码与证据 ↗</a></p>"
+      },
+      {
+        "id": "concurrency-curves",
+        "title": "06 / 从低并发到饱和：怎样回答芯片与模型共同演变",
+        "html": "<div class=\"formula\">同一测量边界下：吞吐 R(T)=T/L(T)。若L(T)≈固定开销+字节时间，合并可使每token成本下降；若有效工作随T增长且计算饱和，则L(T)近似随T增长、R(T)趋于平台。</div><p>低并发时，GPU某些SM空闲是可能机制，但不能只凭低batch推断所有kernel都由SM不足决定：CTA分解、expert数、padding、内存延迟和通信同样影响利用率。518在较小T出现饱和，也应拆成PE、VP、owner倾斜和存储供给四种可能。当前已见M合并降低重复权重请求的源码机制，尚不足以用它单独解释完整设备的并发曲线。</p><p>模型变化会同时改变容量与每步字节。传统GQA在保持所有历史token参与注意力时，KV容量随active tokens和上下文长度增长。例如每层KV cache的逻辑容量为2×T×S×n_kv×d_head×b，乘注意力层数后才是总量；这里2代表K与V。固定显存预算下，较长S会降低可容纳的T，容量墙可先于算力饱和出现。decode中按查询访问历史KV还消耗带宽，L(T)未必是一条水平线。此式只适用于该常规GQA缓存表示，不替代压缩、分页或其他Attention的实际布局。</p><p>减少KV体积可能把容量墙向右移；索引稀疏Attention可减少被选择的KV读取，但仍需存储与访问索引、候选数据；线性或状态Attention则改变状态形式。更少Attention字节可能让MoE或通信占比上升，因而同一芯片从一个模型迁到另一个模型，饱和点与优势区间会改变。具体GLM路径应回到算法章节已核对的架构，不能把DSA、KDA都当“KV压缩”。</p><p>面试时给一张二维图通常比一个峰值数字更有说服力：横轴实际active tokens T，纵轴同时看step wall与tokens/s，并注明固定上下文、请求类型、量化、TP/EP、频率和通信边界。容量不足的点标无法运行，不能当无限延时拟合；对历史三档均值只画已观测预算点，不拟合未经控制的设备饱和结论。</p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#nv\">核对源码与证据 ↗</a></p>"
+      },
+      {
+        "id": "profiling-experiment",
+        "title": "07 / 把架构判断写成可证伪的实验",
+        "html": "<table><thead><tr><th>观察</th><th>待检验的解释</th><th>需要的对照与证据</th></tr></thead><tbody><tr><td>merge后time下降</td><td>权重请求减少</td><td>同输入/同SHA族；nₑ、M桶、w、请求数；分开metadata成本</td></tr><tr><td>PE很忙但吞吐低</td><td>空行或owner不均衡</td><td>有效/执行FLOPs；每owner route与busy区间；慢rank</td></tr><tr><td>流量下降但time不降</td><td>计算或VP已主导</td><td>PE/VP时间轴、DMA等待、同步与关键路径</td></tr><tr><td>Reduce请求效率低</td><td>slot跨度洞与重复load</td><td>有效行bytes、跨度bytes、物理事务；mask数值回归</td></tr><tr><td>双stream求和更长但wall更短</td><td>成功重叠或计时边界变化</td><td>同一begin/end区间、events完成语义、交叠并集</td></tr><tr><td>TP16预测很快</td><td>只计算了矩阵缩水</td><td>I128实现、所有collectives、packing、慢rank与正确性</td></tr></tbody></table><p>一份可复核的优化记录应同时保留：输入身份与实际T；模型层/TP/EP与quant；kernel、compiler、runtime与模拟器SHA；编译配置和minitile；数值参考、误差门槛及失败shape；raw计时定义；基线和候选是否同输入重测。复用历史性能时应附加载字节等价或明确变化范围，不能用新文档发布日期暗示重新测量。</p><p>最终陈述可以具体到：“在I512/T16–32的owner merge路径，把同expert行归组以减少权重遍历；验证了route身份、重复slot、FP8/BF16舍入与Graph replay；收益按双核慢核、完整rank路径记录，通信尚需另测。”这样的说法能把算法、指令、调度和验收连成一条证据链，而不依赖夸大一个倍率。</p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#versions\">核对源码与证据 ↗</a></p><p class=\"small\"><a href=\"evidence/moe-deep-sources.md#routed\">核对源码与证据 ↗</a></p>"
+      }
+    ],
+    "questions": [
+      {
+        "id": "budget-q1",
+        "q": "为什么减少75%的权重请求，不保证kernel快4倍？",
+        "a": "总延时还受有效MAC、padding、VP、同步、activation重载与owner不均衡限制；已被计算覆盖的请求时间即使消失也不压低关键路径。需要比较每阶段的计算与带宽下界，再看实际overlap。",
+        "followup": "构造一个计算下界15μs、带宽下界12μs降为3μs的例子，解释下界为何仍为15μs。"
+      },
+      {
+        "id": "budget-q2",
+        "q": "CUDA M64只有3个有效token，为什么可能仍有竞争力？",
+        "a": "小B tile可服务全部行，一次权重遍历；但执行64行会产生大量padding。是否更快取决于GPU资源配比、CTA调度和实际route分布，不能仅用有效行比例判定，也不能仅用权重复用率判定。",
+        "followup": "用F_exec与F_use分别计算利用率，解释为何GPU指令忙与模型有效工作忙不同。"
+      },
+      {
+        "id": "budget-q3",
+        "q": "34.477GiB可以称作H200的实测HBM流量吗？",
+        "a": "不能。它是旧TP4形状、PR567路由与已核对CUDA分组机制结合的weight请求模型，按四个TP slice合计；缺同42层CUDA重放与HBM/L2 counter。",
+        "followup": "列出至少三种导致物理HBM字节与请求payload不同的机制。"
+      },
+      {
+        "id": "budget-q4",
+        "q": "如何解释T24中Zeus Reduce约为NV的6.95倍？",
+        "a": "先对齐工作边界：Zeus Reduce含route-weight乘法，NV Down已完成；二者均不含这里被误归因的TP AllReduce。再比较Routed+Reduce预算，并继续核对量化、拓扑、Shared与计时规则。",
+        "followup": "为什么合并两个组件后仍不能直接得出端到端硬件优劣？"
+      },
+      {
+        "id": "budget-q5",
+        "q": "低并发优势能否外推到高并发？",
+        "a": "不能直接外推。增加T会同时改变权重复用、padding、可用并行度、VP/PE饱和、热点、通信与KV容量；要在固定业务条件下测step wall和吞吐并标出容量不可运行点。",
+        "followup": "模型从大KV注意力演变到稀疏或状态结构后，MoE占比和饱和点可能怎样变化？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "budget-reuse",
+        "label": "旧TP4权重请求审计",
+        "url": "evidence/moe-deep-sources.md#reuse",
+        "note": "2026-10-24核验；冻结版本、适用路径与测量范围见证据账本。",
+        "kind": "历史记录"
+      },
+      {
+        "id": "budget-nv",
+        "label": "真实decode NV与Zeus诊断矩阵",
+        "url": "evidence/moe-deep-sources.md#nv",
+        "note": "2026-10-24核验；冻结版本、适用路径与测量范围见证据账本。",
+        "kind": "历史记录"
+      },
+      {
+        "id": "budget-topology",
+        "label": "当前部署拓扑与shape",
+        "url": "evidence/moe-deep-sources.md#topology",
+        "note": "2026-10-24核验；冻结版本、适用路径与测量范围见证据账本。",
+        "kind": "源码"
+      },
+      {
+        "id": "budget-routed",
+        "label": "当前owner merge源码",
+        "url": "evidence/moe-deep-sources.md#routed",
+        "note": "2026-10-24核验；冻结版本、适用路径与测量范围见证据账本。",
+        "kind": "源码"
+      }
+    ],
+    "takeaways": [
+      "容量、请求、物理事务、暴露等待是四种口径，不能用一个字节数替代。",
+      "有效FLOPs与padding执行FLOPs分别计算；权重复用与计算利用率可能朝相反方向变化。",
+      "NV历史对照提供机制线索；拓扑、数值、组件和计时范围对齐后才能讨论端到端胜负。",
+      "当前不新增硬件测试；所有历史数值保留冻结身份与诊断等级。"
+    ]
+  }
+]

@@ -1,0 +1,1029 @@
+[
+  {
+    "id": "hw-memory-hierarchy",
+    "title": "518 硬件全景：从一条命令走到一次物理读写",
+    "part": "518 硬件与同步",
+    "order": 37,
+    "subtitle": "把执行单元、存储层次、MAC 数量与时钟口径放进同一张图",
+    "minutes": 42,
+    "level": "深入",
+    "tags": [
+      "518",
+      "PE",
+      "AL1",
+      "WL1",
+      "OL1",
+      "L2",
+      "RTL",
+      "时钟"
+    ],
+    "lead": "资深编译器工程师需要说清的不是“芯片有多少算力”，而是一个张量由谁保存、哪条命令把它移到哪里、何时可复用、哪种输入组合真的能执行。先建立这张硬件地图，后面的 tiling、地址分配和同步才有明确对象。",
+    "sections": [
+      {
+        "id": "hw-map",
+        "title": "1. 先分清存储的角色，再谈层级",
+        "html": "<p>这里的 L2 不是可以凭 CPU/GPU 常识套用的一致性 cache。编译器显式规划 core-local SRAM 地址，用 DMA/计算指令推进数据。目标头文件给出的单核 L2 是 <strong>512 KiB</strong>；末尾 4 KiB 页面同时涉及 BReg spill 与 runtime 参数安排，能否用于普通 buffer 必须遵守具体模式和可用性属性。不能把“物理容量 512 KiB”直接当成所有 kernel 的无条件分配预算。</p>\n<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 335\" role=\"img\" aria-label=\"数据去哪儿：角色示意，不按容量比例绘制；示意只表达功能路径；不是芯片 floorplan，也不承诺所有路径可同时满速。\"><rect width=\"800\" height=\"335\" rx=\"16\" fill=\"#f5f2e9\"/><text x=\"22\" y=\"32\" fill=\"#273d35\" font-size=\"20\" font-family=\"system-ui,sans-serif\">数据去哪儿：角色示意，不按容量比例绘制</text><rect x=\"25\" y=\"70\" width=\"185\" height=\"65\" rx=\"9\" fill=\"#315c4c\"/><text x=\"39\" y=\"96\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">外部 / GDG 数据</text><text x=\"39\" y=\"119\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">LD / ST 搬运</text><rect x=\"290\" y=\"70\" width=\"205\" height=\"65\" rx=\"9\" fill=\"#315c4c\"/><text x=\"304\" y=\"96\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">core-local L2 SRAM</text><text x=\"304\" y=\"119\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">activation / 中间结果</text><rect x=\"580\" y=\"70\" width=\"190\" height=\"65\" rx=\"9\" fill=\"#315c4c\"/><text x=\"594\" y=\"96\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">VP / DT / SI / SO</text><text x=\"594\" y=\"119\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">向量、转置、通信</text><path d=\"M210 102 L290 102\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M495 102 L580 102\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><rect x=\"25\" y=\"220\" width=\"185\" height=\"65\" rx=\"9\" fill=\"#315c4c\"/><text x=\"39\" y=\"246\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">LDG 权重存储侧</text><text x=\"39\" y=\"269\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">hub / MC 供数</text><rect x=\"290\" y=\"220\" width=\"205\" height=\"65\" rx=\"9\" fill=\"#315c4c\"/><text x=\"304\" y=\"246\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">WL1 → PE 阵列</text><text x=\"304\" y=\"269\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">权重重放 + MAC</text><rect x=\"580\" y=\"220\" width=\"190\" height=\"65\" rx=\"9\" fill=\"#315c4c\"/><text x=\"594\" y=\"246\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">AL1 / OL1</text><text x=\"594\" y=\"269\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">输入驻留 / 累加</text><path d=\"M210 252 L290 252\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M495 252 L580 252\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M391 135 L391 220\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><text x=\"405\" y=\"176\" fill=\"#273d35\" font-size=\"14\" font-family=\"system-ui,sans-serif\">L2 经 PE 控制路径读入 AL1</text><text x=\"405\" y=\"198\" fill=\"#273d35\" font-size=\"14\" font-family=\"system-ui,sans-serif\">OL1 结果经写响应回到 L2</text><text x=\"22\" y=\"317\" fill=\"#53685c\" font-size=\"13\" font-family=\"system-ui,sans-serif\">示意只表达功能路径；不是芯片 floorplan，也不承诺所有路径可同时满速。</text></svg>\n<p>AL1 位于 PE 数据通路内，负责 activation 的分块与 ping/pong 驻留；WL1 是权重请求、缓存与格式化/重放路径；OL1 保存局部累加结果，再输出到 L2。它们的可用空间、读写节奏和寻址方法不同，不能把三者当成一个任意切分的大 SRAM。普通 weight load 的来源与 PE 消费时的 LDG/WL1 供数链也应分开：一次权重装载完成，不等于整次 GEMM 后续读取没有带宽约束。<a href=\"./evidence/hardware-sync-sources.md#hs-target\">源码与证据定位</a>、<a href=\"./evidence/hardware-sync-sources.md#hs-rtl-model\">数据效果合同</a>。</p>"
+      },
+      {
+        "id": "hw-command-map",
+        "title": "2. 控制前端与八条异步队列",
+        "html": "<p>同步模型区分 CT 和 LD、LW、ST、SO、SI、PE、DT、VP 共九种单元。CT 执行控制与配置，并参与全局 dispatch；其余单元有各自的命令队列和完成路径。一条指令经过前端解码与 descriptor snapshot，才能进入单元队列；发射还要等 inbox、内部 credit、outbox 等条件。</p><p>因此“程序里 PE 在 LD 后面”只说明发令顺序，不能证明 PE 读数据时 LD 已写完。反过来，不能为每个相邻指令都放全局 barrier：若只改变 BR descriptor，前端 snapshot 顺序通常已经足够。编译器必须把依赖放在正确的事件之间，而非仅比较文本行号。</p><table><thead><tr><th>角色</th><th>编译器最关心的约束</th><th>常见错误</th></tr></thead><tbody><tr><td>CT / 前端</td><td>配置可见、snapshot、控制流、sticky recv</td><td>把 CT 等待当成只阻塞一个计算 lane</td></tr><tr><td>LD / ST / LW</td><td>搬运方向、描述符布局、完成响应、物理区域</td><td>发完地址就当数据可用</td></tr><tr><td>PE</td><td>w/c/k、AL1/WL1、OL1、L2 读写响应</td><td>认为同 PE 的所有阶段严格串行</td></tr><tr><td>VP / DT</td><td>公共队列与 lane 的分别建模、写退休</td><td>把 unit 相同等同于 lane 相同</td></tr><tr><td>SI / SO</td><td>本地退休与跨核配对、可见性合同</td><td>mail 收到就认定远端数据必然正确</td></tr></tbody></table><p>这里是固定版本合同概览，不能据此声称一般 NPU 都有相同队列深度或完成语义。<a href=\"./evidence/hardware-sync-sources.md#hs-chain\">硬件公理与队列模型</a>。</p>"
+      },
+      {
+        "id": "hw-mac-tree",
+        "title": "3. 从实例层次重新数 MAC，避免一个漏层差八倍",
+        "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 320\" role=\"img\" aria-label=\"每个 core 的 MAC 实例层次；由 RTL 实例与 generate 循环核对；group、PE、core 是不同层级。\"><rect width=\"800\" height=\"320\" rx=\"16\" fill=\"#f5f2e9\"/><text x=\"22\" y=\"32\" fill=\"#273d35\" font-size=\"20\" font-family=\"system-ui,sans-serif\">每个 core 的 MAC 实例层次</text><rect x=\"25\" y=\"85\" width=\"140\" height=\"65\" rx=\"9\" fill=\"#315c4c\"/><text x=\"39\" y=\"111\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">1 个 PE 阵列</text><text x=\"39\" y=\"134\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">per core</text><rect x=\"190\" y=\"85\" width=\"150\" height=\"65\" rx=\"9\" fill=\"#315c4c\"/><text x=\"204\" y=\"111\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">8 个 group</text><text x=\"204\" y=\"134\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">含 mirror 版本</text><rect x=\"365\" y=\"85\" width=\"150\" height=\"65\" rx=\"9\" fill=\"#315c4c\"/><text x=\"379\" y=\"111\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">8 个 PE/group</text><text x=\"379\" y=\"134\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">generate ×8</text><rect x=\"540\" y=\"85\" width=\"230\" height=\"65\" rx=\"9\" fill=\"#315c4c\"/><text x=\"554\" y=\"111\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">16 ALU × 8 MAC/PE</text><text x=\"554\" y=\"134\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">两层 generate</text><path d=\"M165 117 L190 117\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M340 117 L365 117\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M515 117 L540 117\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><text x=\"48\" y=\"215\" fill=\"#273d35\" font-size=\"25\" font-family=\"system-ui,sans-serif\">8 × 8 × 16 × 8 = 8,192 个 MAC cell / core</text><text x=\"48\" y=\"260\" fill=\"#273d35\" font-size=\"17\" font-family=\"system-ui,sans-serif\">一个 cell 每拍的有效乘积数，仍须按 conv mode 重新计算。</text><text x=\"22\" y=\"302\" fill=\"#53685c\" font-size=\"13\" font-family=\"system-ui,sans-serif\">由 RTL 实例与 generate 循环核对；group、PE、core 是不同层级。</text></svg>\n<p><code>pegroup518_x8_top.v</code> 内有八个 group；普通与 mirror group 内都继续生成八个 <code>pe518_top</code>；每个 PE 生成十六个 ALU，每个 ALU 生成八个 MAC cell。只看到顶层八个 group、忘记 group 里的八个 PE，会把 8192 错算成 1024。</p><p>但 <strong>8192 是 cell 个数，不是所有格式的 MAC/cycle</strong>。一个 cell 可能用多个局部乘法构成一个较宽乘积，也可能同时形成多个窄乘积。必须继续沿 conv mode 数据路数有效乘积，不能数 <code>mac_data0..3</code> 的端口数量。完整层级与文件指纹见 <a href=\"./evidence/hardware-sync-sources.md#hs-group8\">源码与证据定位</a>、<a href=\"./evidence/hardware-sync-sources.md#hs-group\">源码与证据定位</a>、<a href=\"./evidence/hardware-sync-sources.md#hs-pe\">源码与证据定位</a>、<a href=\"./evidence/hardware-sync-sources.md#hs-alu\">源码与证据定位</a>。</p>"
+      },
+      {
+        "id": "hw-format",
+        "title": "4. 四种输入组合，不能由 dtype 名字自由拼装",
+        "html": "<p><code>pe518_alu_ctrl.v:87–90</code> 是本次读取到的组合选择点：INT8×INT8、FP8×FP8、BF16×BF16 分别匹配显式条件，其余落入 FP8×INT4 路径。这是硬件 fallback，<strong>不是对其余任意组合的支持</strong>；错误的 dtype pair 可能静默按错误模式计算，软件应在 lowering/descriptor 验证阶段拒绝。</p><table><thead><tr><th>activation × weight</th><th>有效 MAC/cell/pe_clk</th><th>MAC/core/pe_clk</th><th>每 MAC 按 2 operations</th></tr></thead><tbody><tr><td>BF16 × BF16</td><td>1</td><td>8192</td><td>16384 operations/cycle</td></tr><tr><td>FP8 × FP8</td><td>2</td><td>16384</td><td>32768 operations/cycle</td></tr><tr><td>INT8 × INT8</td><td>2</td><td>16384</td><td>32768 operations/cycle</td></tr><tr><td>FP8 × INT4</td><td>4</td><td>32768</td><td>65536 operations/cycle</td></tr></tbody></table><p>BF16 路径的多个分片乘积最终拼成一个乘积；FP8 路径只有两路有效独立结果；INT8 的 nibble 分片要合成为两个 INT8 乘积；FP8×INT4 才对应四个独立有效乘积。输入 pair、累加精度、输出转换是三个问题。输出为 FP32，并不能据此声称 PE 有 FP32×FP32 的输入乘法模式。<a href=\"./evidence/hardware-sync-sources.md#hs-mode\">源码与证据定位</a>、<a href=\"./evidence/hardware-sync-sources.md#hs-mac\">源码与证据定位</a>。</p>"
+      },
+      {
+        "id": "hw-clocks",
+        "title": "5. 从 MAC/cycle 到利用率，先把时钟和区间统一",
+        "html": "<div class=\"formula\">峰值 operations/s = core 数 × 每 core 每 pe_clk 的有效 MAC × 2 × f_PE<br/>有效利用率 = 业务实际需要的 operations / 同一范围内可提供的峰值 operations</div><p>假设仅作算例：一个 core、<code>f_PE=400 MHz</code>，BF16×BF16 条件峰值为 6.5536 TOPS；FP8×FP8 为 13.1072 TOPS；FP8×INT4 为 26.2144 TOPS。整数模式通常称 TOPS，浮点模式可按相应精度称 TFLOP/s。它们不是本轮测得的产品频率或吞吐。</p><p><code>zeus_crm.v</code> 有分频、mux 与 gate，<code>pe_clk</code> 和 trace 时间单位不能凭名称假定相同。若 trace 给的是 ns，要用已确认的 PE 频率换成 pe cycles；若给的是另一个时钟域的 cycle，要带上实际比值。把 1 ns 的 trace tick 当成 400 MHz PE 的一拍，会直接改变利用率分母。</p><p>区间同样重要：所有 PE 活跃区间的 union 衡量 PE 忙时；首 PE 到末 PE 的 span 含中间空泡；kernel wall time 还含其他单元与启动、同步。多条指令重叠时不能把各自 duration 简单相加当 wall time。有效工作量应使用逻辑 M×N×K，若另报 padding 后实际执行量，明确那是硬件工作量效率的另一口径。<a href=\"./evidence/hardware-sync-sources.md#hs-clock\">源码与证据定位</a>、<a href=\"./evidence/hardware-sync-sources.md#hs-design\">计时边界说明</a>。</p>"
+      },
+      {
+        "id": "hw-compiler-contract",
+        "title": "6. 每层硬件事实如何成为编译器的合法性条件",
+        "html": "<p>硬件知识最终要落到可检查的契约。目标头文件提供寄存器种类、数量和保留寄存器；地址分配处理 SRAM 容量、对齐、活跃期和在途复用；BReg 分配处理描述符的物理 ID、copy snapshot 和 spill；InjectSync 在最终物理资源上分析依赖；代码生成再核对字段位宽和 allocator 的真实选择。只在一个 pass 的注释里写“保证无冲突”，不足以保护后续 pass 的变换。</p><p>L2 bank 几何也不是一句“按 128 字节对齐”即可概括。当前共享定义描述 128 个 SRAM 按 16 字节 word 交织，一次完整 VP 访问占相邻八个 SRAM；交织周期是 2048 字节，访问宽度是 128 字节。行 padding 与 base placement 必须使用同一几何，才能同时解释行步长冲突与多个 buffer 的起始 bank。<a href=\"./evidence/hardware-sync-sources.md#hs-bank\">源码与证据定位</a>。</p><p>一个有深度的面试回答应给出一条失败链：tensor shape 合法 → layout 改变 stride → DMA descriptor 仍沿用旧字段 → 地址范围分析遗漏跨行字节 → 同步看似完整而实际读取错误。修复不应停在“加一个 wait”，而要在布局、descriptor、资源范围和验证用例四处闭环。对硬件提出 ISA 改进，也应说明能减少哪类软件证明负担，而非仅增加一条指令。</p>"
+      },
+      {
+        "id": "hw-evolution",
+        "title": "7. 用模型变化反问硬件：容量、带宽、计算谁先撞墙",
+        "html": "<p>大 KV 的 decode 会同时消耗缓存容量与反复读取带宽；减少 KV head 或压缩状态可以推迟容量上限，却可能让瓶颈转到权重读取、稀疏索引、向量处理或 PE 计算。MoE 把总参数量和每 token 激活工作量分开，进一步引入专家 token 数分布：低 token 专家难摊销供数与固定启动，热点专家又可能先把 PE 算力用满。这些是从访问结构推导的趋势，不是没有 shape 与 trace 就能宣称的 518/GPU 排名。</p><p>面对“GPU 低并发有很多 SM 空闲，518 更早饱和”，先检查是否同一个模型、精度、缓存量、并发定义与 latency SLA；然后分别看权重每 token 摊销、AL1 重用、minitile 重放、有效 kernel 并行、调度开销。低延迟既受带宽也受启动和同步链限制，高吞吐既受计算也受可容纳请求数限制。将下一章的 w/c/k 和下下章的 credit 模型放进去，才能解释曲线弯折，而非把所有变化归成“算力不够”。</p><aside class=\"callout\">本章展示的是现存源码可核验的硬件合同与条件推导。它不代替实物规格书，不推断个人负责了哪个 RTL 模块，也不把用户关于流片前参与指令设计的经历扩写成未经核验的设计归属。</aside>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "L2 512 KiB 为什么不等于每个 kernel 能随意分配 512 KiB？",
+        "a": "物理容量与 ABI 可用预算不同。末尾页面可能服务参数 backing 和 BReg spill；无 stack 模式能否复用也要通过可用性属性传到代码生成。还要考虑对齐、碎片和同时活跃的 buffer，不能只把逻辑 tensor 字节相加。",
+        "followup": "怎样证明后续 RegAlloc 引入 spill 后不会覆盖原来的普通 buffer？"
+      },
+      {
+        "q": "你如何证明 8192 MAC cell，而不是抄目标常数？",
+        "a": "沿单核阵列→8 group→每组8 PE→每PE16 ALU→每ALU8 MAC 的实例与 generate 逐层计数，并检查 mirror group。再从 conv mode 数据通路计算每 cell 的独立有效乘积数。",
+        "followup": "为什么 INT8 的四路局部乘积不能直接算四个 INT8 MAC？"
+      },
+      {
+        "q": "FP32 输出能否证明支持 FP32 输入 GEMM？",
+        "a": "不能。输入乘法组合、内部累加和输出转换分别由不同字段与路径决定。当前核对到的输入 pair 只有四类；必须检查组合匹配，硬件 fallback 甚至可能静默接受并算错非法 pair。",
+        "followup": "你会把 dtype pair 的拒绝放在前端、合法化、descriptor 校验中的哪几层？"
+      },
+      {
+        "q": "性能报告里 80% PE 利用率需要哪些信息才可信？",
+        "a": "至少需要输入 pair、有效 MAC 分子、core 范围、已确认 PE 时钟、trace 时间单位、union/span/wall 分母及 padding 口径。还要确认重叠指令没有被 duration 求和重复计时。",
+        "followup": "同一 trace 的忙时利用率很高，kernel 吞吐却低，怎样进一步拆解？"
+      },
+      {
+        "q": "GQA 变成更小状态的 attention 后，为什么硬件竞争关系可能改变？",
+        "a": "容量墙和缓存带宽压力会变化；释放的预算并不会自动变成 PE 收益，可能暴露权重带宽、索引/归约、通信或计算瓶颈。需要同参数测量并发曲线，再结合访问量与资源占用解释。",
+        "followup": "怎样区分 GPU SM 增加参与、kernel 内摊销与请求调度三个来源？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "hs-target",
+        "label": "寄存器、L2 与 ABI 保留窗口",
+        "url": "./evidence/hardware-sync-sources.md#hs-target",
+        "note": "triton_shared/include/triton-shared/Target/ZeusV3/TargetInfo.h:11；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-bank",
+        "label": "L2 bank 几何",
+        "url": "./evidence/hardware-sync-sources.md#hs-bank",
+        "note": "triton_shared/include/triton-shared/Target/ZeusV3/L2BankGeometry.h:7；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-design",
+        "label": "只读 RTL 副本的来源与时钟/计时边界",
+        "url": "./evidence/hardware-sync-sources.md#hs-design",
+        "note": "design/README.md:1；本地文件指纹见索引",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-group8",
+        "label": "8 个 PE group",
+        "url": "./evidence/hardware-sync-sources.md#hs-group8",
+        "note": "design/rtl/zeus518/pegroup/pegroup518_x8_top.v:990；本地文件指纹见索引",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-group",
+        "label": "每 group 8 个 PE",
+        "url": "./evidence/hardware-sync-sources.md#hs-group",
+        "note": "design/rtl/zeus518/pegroup/pegroup518_top.v:365；本地文件指纹见索引",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-pe",
+        "label": "每 PE 16 个 ALU",
+        "url": "./evidence/hardware-sync-sources.md#hs-pe",
+        "note": "design/rtl/zeus518/pegroup/pe518_top.v:198；本地文件指纹见索引",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-alu",
+        "label": "每 ALU 8 个 MAC cell",
+        "url": "./evidence/hardware-sync-sources.md#hs-alu",
+        "note": "design/rtl/zeus518/pegroup/pe518_alu.v:78；本地文件指纹见索引",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-mode",
+        "label": "四种合法输入组合与 fallback",
+        "url": "./evidence/hardware-sync-sources.md#hs-mode",
+        "note": "design/rtl/zeus518/pegroup/pe518_alu_ctrl.v:80；本地文件指纹见索引",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-mac",
+        "label": "MAC 数据路径的有效乘积数",
+        "url": "./evidence/hardware-sync-sources.md#hs-mac",
+        "note": "design/rtl/zeus518/pegroup/pe518_mac.v:600；本地文件指纹见索引",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-clock",
+        "label": "时钟分频、选择与 PE gate",
+        "url": "./evidence/hardware-sync-sources.md#hs-clock",
+        "note": "design/rtl/zeus518/zeus_top/zeus_crm.v:510；本地文件指纹见索引",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-chain",
+        "label": "mailbox 公理、阶梯、容量、循环与三项条件",
+        "url": "./evidence/hardware-sync-sources.md#hs-chain",
+        "note": "triton_shared/docs/mailbox-sync-chain-model/mailbox-sync-chain-model.tex:168；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-rtl-model",
+        "label": "指令时序、descriptor、PE/VP/DT/DMA 同步合同",
+        "url": "./evidence/hardware-sync-sources.md#hs-rtl-model",
+        "note": "triton_shared/docs/vcs_debug/rtl-instruction-dependency-model.md:51；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-group-mirror",
+        "label": "mirror group 同样生成 8 个 PE",
+        "url": "./evidence/hardware-sync-sources.md#hs-group-mirror",
+        "note": "design/rtl/zeus518/pegroup/m_pegroup518_top.v:372；本地RTL指纹见索引",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-core",
+        "label": "每 core 的 PE array 实例",
+        "url": "./evidence/hardware-sync-sources.md#hs-core",
+        "note": "design/rtl/zeus518/zeus_top/zeus_core_top_pwr.v:8520；本地RTL指纹见索引",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-ol1",
+        "label": "OL1 ping/pong",
+        "url": "./evidence/hardware-sync-sources.md#hs-ol1",
+        "note": "design/rtl/zeus518/pegroup/pe518_ol1_buffer.v:30；本地RTL指纹见索引",
+        "kind": "源码"
+      }
+    ],
+    "takeaways": [
+      "存储名称不是行为证明：L2、AL1、WL1、OL1 各有自己的地址和完成合同。",
+      "MAC 实例数、dtype pair 吞吐、时钟、计时范围必须逐层统一。",
+      "高级硬件理解应能转成编译器合法性检查、可重现故障和有边界的性能解释。"
+    ]
+  },
+  {
+    "id": "hw-pe-minitile",
+    "title": "PE minitile：w/c/k 如何同时约束计算、驻留和重放",
+    "part": "518 硬件与同步",
+    "order": 37.2,
+    "subtitle": "从 GEMM shape、16 KiB miniblock，一直算到真实搜索器的代价",
+    "minutes": 52,
+    "level": "深入",
+    "tags": [
+      "minitile",
+      "GEMM",
+      "packing",
+      "INT4",
+      "AL1",
+      "WL1",
+      "cost model"
+    ],
+    "lead": "“调大 tile 提高复用”只讲了一半。在 518 上，调大 w 会减少权重重读，却挤小 c、可能破坏 AL1 驻留，还会延长 credit 回路。理解这组相互牵制，才能解释同一个 FFN 内 Gate/Up 和 Down 为什么需要不同配置。",
+    "sections": [
+      {
+        "id": "mt-notation",
+        "title": "1. 先翻译符号：数学 K 在硬件里叫 C",
+        "html": "<p>常见 GEMM 写作 A[M,K]×B[K,N]→Y[M,N]。本章统一将它映射为 PE 的 <code>(W,C,Kout)=(M,K,N)</code>，小写 <code>(w,c,k)</code> 是硬件 minitile 参数。特别注意：硬件 K 是输出通道，数学 GEMM 的 K 是归约维；混写会让带宽与循环次数全部错位。</p><table><thead><tr><th>参数</th><th>KC 模式含义</th><th>为什么不等于原始元素数</th></tr></thead><tbody><tr><td>w</td><td>token/行方向的行数</td><td>KC 下每单位前进一行</td></tr><tr><td>c</td><td>归约方向 base-unit 数</td><td>BF16 activation 每单位64元素，8bit activation 每单位128元素</td></tr><tr><td>k</td><td>输出方向 base-unit 数</td><td>普通权重每单位128通道，INT4 权重每单位256通道</td></tr></tbody></table><div class=\"formula\">Cᵤ = C / C_unit，Kᵤ = Kout / K_unit<br/>N_TW = ceil(W/w)，N_TC = ceil(Cᵤ/c)，N_TK = ceil(Kᵤ/k)</div><p>图示与后续算例都限定 KC、整除形状；尾块必须保留实际覆盖长度。KW 有不同的 W/C 前进单位，不可把这组公式直接搬过去。<a href=\"./evidence/hardware-sync-sources.md#hs-coord\">RTL 坐标更新</a> 与 <a href=\"./evidence/hardware-sync-sources.md#hs-model\">编译器单位定义</a>。</p>"
+      },
+      {
+        "id": "mt-packing",
+        "title": "2. 三种格式为什么都能得到 16 KiB miniblock",
+        "html": "<p>对当前合法的 KC 输入组合，一块 <code>1 C_unit × 1 K_unit</code> 权重矩阵，按逻辑 payload 算正好是 16 KiB：BF16 为 64×128×2；FP8/INT8 为 128×128×1；FP8 activation 配 INT4 weight 为 128×256×0.5。INT4 的收益同时包含字节压缩与输出通道 packing 改变，不能只把原公式最后除以二。</p>\n<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 320\" role=\"img\" aria-label=\"同为一个 miniblock，元素几何随格式改变；KC 的合法输入组合与整块算例；不是任意 dtype pair 都成立。\"><rect width=\"800\" height=\"320\" rx=\"16\" fill=\"#f5f2e9\"/><text x=\"22\" y=\"32\" fill=\"#273d35\" font-size=\"20\" font-family=\"system-ui,sans-serif\">同为一个 miniblock，元素几何随格式改变</text><rect x=\"30\" y=\"75\" width=\"230\" height=\"96\" rx=\"9\" fill=\"#315c4c\"/><text x=\"44\" y=\"101\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">BF16 × BF16</text><text x=\"44\" y=\"124\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">64 C × 128 K × 2 B</text><text x=\"44\" y=\"147\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">= 16,384 B</text><rect x=\"285\" y=\"75\" width=\"230\" height=\"96\" rx=\"9\" fill=\"#315c4c\"/><text x=\"299\" y=\"101\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">FP8 / INT8 同类型</text><text x=\"299\" y=\"124\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">128 C × 128 K × 1 B</text><text x=\"299\" y=\"147\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">= 16,384 B</text><rect x=\"540\" y=\"75\" width=\"230\" height=\"96\" rx=\"9\" fill=\"#315c4c\"/><text x=\"554\" y=\"101\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">FP8 × INT4</text><text x=\"554\" y=\"124\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">128 C × 256 K × 0.5 B</text><text x=\"554\" y=\"147\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">= 16,384 B</text><text x=\"45\" y=\"225\" fill=\"#273d35\" font-size=\"18\" font-family=\"system-ui,sans-serif\">c × k 个 miniblock 构成一个 minitile 的权重覆盖；w 决定内部重放。</text><text x=\"45\" y=\"263\" fill=\"#273d35\" font-size=\"16\" font-family=\"system-ui,sans-serif\">UScale、padding、元数据和跨 W-minitile 重读不包含在上面的纯矩阵字节里。</text><text x=\"22\" y=\"302\" fill=\"#53685c\" font-size=\"13\" font-family=\"system-ui,sans-serif\">KC 的合法输入组合与整块算例；不是任意 dtype pair 都成立。</text></svg>\n<p>真实物理排布还要考虑 blocked layout、行跨度、hub/MC 地址映射及 tail。相同总字节不意味着相同请求时序；特别是 <code>k&gt;1</code> 时沿输出通道跳转会跨过整行 Cᵤ 个 miniblock。若要比较 FP8 与 INT4 带宽，既要对齐 miniblock 数，还应报告输出形状和 drain 的差异。<a href=\"./evidence/hardware-sync-sources.md#hs-model-doc\">源码与证据定位</a>。</p>"
+      },
+      {
+        "id": "mt-residency",
+        "title": "3. AL1 的两份驻留与 WL1 的 w 次重放是两件事",
+        "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 345\" role=\"img\" aria-label=\"KC 数据复用：两条回路各自有代价；功能与 credit 示意，非 RTL 波形；AL1 驻留不等于权重永久驻留。\"><rect width=\"800\" height=\"345\" rx=\"16\" fill=\"#f5f2e9\"/><text x=\"22\" y=\"32\" fill=\"#273d35\" font-size=\"20\" font-family=\"system-ui,sans-serif\">KC 数据复用：两条回路各自有代价</text><rect x=\"25\" y=\"75\" width=\"215\" height=\"70\" rx=\"9\" fill=\"#315c4c\"/><text x=\"39\" y=\"101\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">L2 activation</text><text x=\"39\" y=\"124\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">按 (tk,tc) 装载</text><rect x=\"300\" y=\"70\" width=\"205\" height=\"90\" rx=\"9\" fill=\"#315c4c\"/><text x=\"314\" y=\"96\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">AL1 ping / pong</text><text x=\"314\" y=\"119\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">N_TC ≤ 2 可驻留</text><text x=\"314\" y=\"142\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">结束才归还 credit</text><rect x=\"575\" y=\"75\" width=\"200\" height=\"70\" rx=\"9\" fill=\"#315c4c\"/><text x=\"589\" y=\"101\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">ALU</text><text x=\"589\" y=\"124\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">消费 w 行</text><path d=\"M240 110 L300 110\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M505 110 L575 110\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><rect x=\"25\" y=\"215\" width=\"215\" height=\"70\" rx=\"9\" fill=\"#315c4c\"/><text x=\"39\" y=\"241\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">LDG / hub</text><text x=\"39\" y=\"264\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">取一个权重块</text><rect x=\"300\" y=\"205\" width=\"205\" height=\"90\" rx=\"9\" fill=\"#315c4c\"/><text x=\"314\" y=\"231\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">WL1 FIFO</text><text x=\"314\" y=\"254\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">同块重放 w 次</text><text x=\"314\" y=\"277\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">末次握手后 pop</text><path d=\"M240 250 L300 250\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M505 250 L675 145\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M675 75 L675 50\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M675 50 L400 50\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><text x=\"315\" y=\"41\" fill=\"#273d35\" font-size=\"14\" font-family=\"system-ui,sans-serif\">credit 回程，非零延迟</text><text x=\"548\" y=\"236\" fill=\"#273d35\" font-size=\"14\" font-family=\"system-ui,sans-serif\">W 下一块仍会重新读权重</text><text x=\"22\" y=\"327\" fill=\"#53685c\" font-size=\"13\" font-family=\"system-ui,sans-serif\">功能与 credit 示意，非 RTL 波形；AL1 驻留不等于权重永久驻留。</text></svg>\n<p><code>flag_only=(one_cmtile &amp;&amp; minitile_k_cnt≥2)||(two_cmtile &amp;&amp; minitile_k_cnt≥1)</code> 是关键门控。N_TC=1 时，前两个 K-minitile 将同一份 activation 分别装进 ping/pong，后面可仅传控制；N_TC=2 时，第一轮的两个 C-minitile 已填满两份 buffer；N_TC&gt;2 时不能用两份 buffer 保住整个 C 方向，后续仍要重装。这里是 RTL 机制；模型把装载量计成 N_TC=1 双份、N_TC=2 单份，是对应的近似。</p><p>WL1 则由 <code>r_mtw</code> 计数，只有 valid/ready 成功且到最后一个 w 才 pop 当前数据。内部重放减少一块权重服务多行时的供数需求；但不同 W-minitile 仍重新经过权重读取链。不能把“每块重放 w 次”说成“整条 PE 指令只读一次权重”。<a href=\"./evidence/hardware-sync-sources.md#hs-act\">源码与证据定位</a>、<a href=\"./evidence/hardware-sync-sources.md#hs-replay\">源码与证据定位</a>。</p>"
+      },
+      {
+        "id": "mt-tradeoff",
+        "title": "4. Gate/Up 与 Down：同是 FFN，驻留条件却不同",
+        "html": "<p>以 FP8 activation、<code>W=16</code> 作教学比较：Gate/Up 类归约维 <code>C=4096</code>，所以 Cᵤ=32。输入容量约束 <code>w×c≤64</code> 下，w=4 可选 c=16，N_TC=2；w=8 时 c 至多8，N_TC 至少4；w=16 时 c 至多4，N_TC 至少8。后两者虽然把 W 分块数从4降成2或1，却失去两份 AL1 驻留的条件。</p><table><thead><tr><th>w，取允许的最大 c</th><th>C=4096：N_TC</th><th>C=512：N_TC</th><th>解释</th></tr></thead><tbody><tr><td>w4,c16</td><td>2，可驻留</td><td>覆盖即可，无需真的取16</td><td>常见较稳健的搜索上界</td></tr><tr><td>w8,c8</td><td>4，需重装</td><td>1，可驻留</td><td>Down 的短归约有不同取舍</td></tr><tr><td>w16,c4</td><td>8，需重装</td><td>1，可驻留</td><td>还要检查输出容量与 replay 代价</td></tr></tbody></table><p>表只推导输入驻留，<strong>不是说 w8/w16 在 Down 一定更快</strong>。输出 buffer 的 <code>w×k</code> 约束、实际供数、credit 回程和模型覆盖域仍须满足；当前自动搜索也不会为了这个推导自行扩到 w16。用户 pin 大 w 后，需要独立正确性与匹配形状的时序证据。MoE 还要用每个 expert 实际 token 数看 W，不能用全局 batch 替代。</p>"
+      },
+      {
+        "id": "mt-cost",
+        "title": "5. 把真实代价函数算一遍，区分物理事实与拟合参数",
+        "html": "<p>当前 <code>scoreMinitile</code> 使用逐 W-minitile 的模型。硬件事实决定结构；97、3.84、1.6、0.43、9.8、2.3 等是源码保存的历史校准系数，<strong>不是能从 RTL 一行常量读出的固定延迟</strong>。本轮仅复算公式，没有执行 PE 指令。</p><div class=\"formula\">t_supply = 3.84 − 1.6 / ceil(Cᵤ)；安全白名单上的 k&gt;1 再乘 0.85<br/>t_block = max(t_supply, w)<br/>t_mt = max(c_actual × k_actual × t_block + reload, 9.8 + w)<br/>reload = N_TC&gt;2 ? 2.3w : 0<br/>T_model = 97 + Σ_Wtile (initial_load + Σ_(Ktile,Ctile) t_mt)</div><p>算例一：<code>W4,C4096,Kout2048，FP8×FP8，w4,c16,k1</code>。Cᵤ=32、Kᵤ=16、N_TC=2；t_supply=3.79，t_block=4；initial_load=0.43×32×4=55.04；32 个 minitile 各64 cycle，得到 <strong>2200.04 模型 cycle</strong>。改 c8 后 N_TC=4，64 个 minitile 各 <code>max(8×4+9.2,13.8)=41.2</code>，得到 2733.8 模型 cycle。不能把这两个小数当成 VCS 输出。</p><p>算例二：短归约 <code>W4,C512,Kout4096</code>。w4c2k1 时 N_TC=2，每块纯数据项8 cycle，却被13.8的 credit 下限限制；总模型987.08。w4c4k1 时 N_TC=1，虽多装一份 activation，块数减半、每块16 cycle，总模型622.76。这个例子说明：双份初始装载未必是主要问题，过多小 minitile 可能更贵。<a href=\"./evidence/hardware-sync-sources.md#hs-spec\">源码与证据定位</a>、<a href=\"./evidence/hardware-sync-sources.md#hs-model\">源码与证据定位</a>。</p>"
+      },
+      {
+        "id": "mt-search",
+        "title": "6. 合法域、搜索域、经验表是三道不同的门",
+        "html": "<p>硬件字段在真实维度上要求 w≤16、k≤16、c≤64。<code>PE_SETM_M</code> 某些名义字段比 RTL sticky register 消费的位数宽；超界会截断，所以不能只看 ISA 字段声明。输入容量限制 w×c≤64 不随 activation 字节数缩半；输出容量当前模型仍按 <code>16×weightBytes/actBytes</code> 缩放，这是现有建模约束，不应包装成已完全独立验证的普适 SRAM 公式。</p><p>自动搜索更窄：w≤4，k≤2且只枚举2的幂；k&gt;1只在 Cᵤ∈{1,2,3,4,8,16,32} 放行，N_TC&gt;2且k&gt;1模型直接排除。这些是保守搜索策略，不代表其他组合都违反硬件 ISA。近同分3%带内按 C 无尾块、小 k、大 w、较低分排序，承认模型误差比微小分差更大。</p><p>优先级是显式 pin → 精确 shape/dtype 覆盖表 → 模型搜索。任一维度 pin 时跳过表，未固定维度走约束搜索；全部 pin 也必须验证字段和容量。覆盖表不是运行时 autotune；minitile 搜索也不等于同时搜索 Triton BLOCK_M/N/K。KC 的模型不能外推到 KW；当前显式 KW 路径的支持合同另有限制。<a href=\"./evidence/hardware-sync-sources.md#hs-model-doc\">搜索、pin 和模式边界</a>。</p>"
+      },
+      {
+        "id": "mt-workflow",
+        "title": "7. 一个能够面对追问的调参顺序",
+        "html": "<ol><li>把真实 expert 的 W、C、Kout、dtype pair、UScale 分组和布局写清，先确认合法化与 packing。</li><li>列出候选 w/c/k、N_TW/N_TC/N_TK、input/output buffer 约束；标出 activation 驻留是否发生翻转。</li><li>用模型解释预计受 supply、replay、reload 还是 credit floor 主导。解释不了的突变先标为未知，不给它编一个“bank conflict”原因。</li><li>若后续授权实测，再固定输入、时钟、wafer mode、编译器 SHA，只改一个因素；同时取算子正确性、PE interval、总 kernel duration、请求/回包与 stall 证据。</li><li>收益成立后更新覆盖表或模型域，并保留邻近 shape、tail、模式组合的回归，不把单点最优当全部 FFN 最优。</li></ol><p>还要警惕“减了 50% 权重字节，怎么没快两倍”：UScale、元数据与重复读取没有按比例下降；INT4 的输出单位变化影响 tile 数；credit floor、启动、OL1 drain、VP 量化或后续同步可能成为新下限。优化最有价值的结论是指出下一堵墙在哪里，而不是只保存一个更快的配置。</p>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "为什么 w 更大不一定更快？",
+        "a": "它减少 W-minitile 次数和权重重读，但会通过 w×c≤64 挤小 c，使 N_TC 超过2、失去 activation 驻留；同时重放与 credit 周期变长，还受输出容量限制。要把这些项一同代入。",
+        "followup": "给 C4096 FP8、W16，比较 w4 和 w8 的驻留条件。"
+      },
+      {
+        "q": "AL1 已驻留为什么 PE 还可能在等？",
+        "a": "AL1 只解决 activation 的部分装载，WL1 供数、w 次重放、minitile credit 回程、输出 drain 和指令启动仍存在。AL1 的 accept 在 minitile 最后点真正进入 ALU 时才归还，不是装载请求发出时。",
+        "followup": "怎样从 trace 区分缺权重和有权重却缺 activation credit？"
+      },
+      {
+        "q": "所有格式每块16 KiB，为什么实际性能仍不同？",
+        "a": "同一个16 KiB代表不同元素几何和有效MAC数；布局跳转、尾部、输出通道数、UScale和计算模式也不同。相同字节只能控制部分变量。",
+        "followup": "FP8和INT4做等字节对照，输出形状需要怎样改变？"
+      },
+      {
+        "q": "模型输出2200.04 cycle的含义是什么？",
+        "a": "是冻结代码的经验公式对一个指定形状和配置的预测；小数来自拟合系数。它不是RTL固定latency或本轮VCS结果，也不包含多指令重叠与端到端通信。",
+        "followup": "若测量比预测慢30%，先核对哪些口径而非立即重拟合？"
+      },
+      {
+        "q": "为什么合法的 k3 或 w8 不进入默认搜索？",
+        "a": "硬件可编码与性能模型可信域不同。默认域用历史覆盖和保守规则限制风险；显式pin仍可进入合法性检查，但不能把域外预测当已验证最优。",
+        "followup": "完全pin与部分pin各自如何影响覆盖表和搜索？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "hs-coord",
+        "label": "C/K 元素遍历单位",
+        "url": "./evidence/hardware-sync-sources.md#hs-coord",
+        "note": "design/rtl/zeus518/pegroup/pe518_al1_mt_coord_cal.v:190；本地文件指纹见索引",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-act",
+        "label": "flag-only 与 AL1 credit",
+        "url": "./evidence/hardware-sync-sources.md#hs-act",
+        "note": "design/rtl/zeus518/pe_ctrl/pe_ctrl_logic.v:340；本地文件指纹见索引",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-replay",
+        "label": "WL1 weight 重放与 FIFO pop",
+        "url": "./evidence/hardware-sync-sources.md#hs-replay",
+        "note": "design/rtl/zeus518/wl1/wl1_518_weight_data_format.v:1120；本地文件指纹见索引",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-spec",
+        "label": "硬件边界与经验模型系数：两种证据不可混为一谈",
+        "url": "./evidence/hardware-sync-sources.md#hs-spec",
+        "note": "triton_shared/include/triton-shared/Dialect/ZeusHigh/Transforms/PeHWSpec.h:35；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-model",
+        "label": "单指令 minitile 评分和搜索",
+        "url": "./evidence/hardware-sync-sources.md#hs-model",
+        "note": "triton_shared/lib/Dialect/ZeusHigh/Transforms/PeMinitileModel.cpp:65；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-model-doc",
+        "label": "minitile 模型适用域与历史校准",
+        "url": "./evidence/hardware-sync-sources.md#hs-model-doc",
+        "note": "triton_shared/docs/architecture/pe_minitile_cost_model.md:1；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-snapshot",
+        "label": "PE 描述符锁存与命令 snapshot",
+        "url": "./evidence/hardware-sync-sources.md#hs-snapshot",
+        "note": "design/rtl/zeus518/inst_ctrl/inst518_pe_inst_predecode.v:120；本地文件指纹见索引",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-al1-return",
+        "label": "AL1 最后点握手归还 credit",
+        "url": "./evidence/hardware-sync-sources.md#hs-al1-return",
+        "note": "design/rtl/zeus518/pegroup/pe518_al1.v:190；本地RTL指纹见索引",
+        "kind": "源码"
+      }
+    ],
+    "takeaways": [
+      "数学 GEMM 的 K 映射到硬件 C；先统一符号，再推导字节和循环次数。",
+      "w/c/k 同时决定驻留、重放、credit 和地址跨度，任何单项优化都可能改变瓶颈。",
+      "经验模型有明确覆盖域；预测、历史校准、真实测量与 ISA 合法性分别记录。"
+    ]
+  },
+  {
+    "id": "hw-bandwidth-credit",
+    "title": "带宽不是一根管子：LDG、hub 与 credit 闭环",
+    "part": "518 硬件与同步",
+    "order": 37.4,
+    "subtitle": "逐步推导 46/15，并解释为什么 2.137 TB/s 必须带条件",
+    "minutes": 48,
+    "level": "深入",
+    "tags": [
+      "LDG",
+      "WL1",
+      "带宽",
+      "credit",
+      "UScale",
+      "计量",
+      "性能模型"
+    ],
+    "lead": "接口一拍有多宽、最多有多少请求在途、多久返还一个 credit，是三个不同问题。只有把它们合起来，才能判断 PE 为什么等权重，以及一个看似合理的“带宽利用率”分母是否真的成立。",
+    "sections": [
+      {
+        "id": "bw-fanout",
+        "title": "1. 从 MC 读宽度数到每核汇聚宽度",
+        "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 330\" role=\"img\" aria-label=\"双 hub 配置的聚合：每一层都要写进分母；双 hub 条件下的结构推导；不是所有 wafer mode 的无条件宽度。\"><rect width=\"800\" height=\"330\" rx=\"16\" fill=\"#f5f2e9\"/><text x=\"22\" y=\"32\" fill=\"#273d35\" font-size=\"20\" font-family=\"system-ui,sans-serif\">双 hub 配置的聚合：每一层都要写进分母</text><rect x=\"25\" y=\"75\" width=\"215\" height=\"85\" rx=\"9\" fill=\"#315c4c\"/><text x=\"39\" y=\"101\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">8 个 WL1</text><text x=\"39\" y=\"124\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">每个连接 2 hub</text><text x=\"39\" y=\"147\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">合计 16 hub</text><rect x=\"295\" y=\"75\" width=\"215\" height=\"85\" rx=\"9\" fill=\"#315c4c\"/><text x=\"309\" y=\"101\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">每 hub 16 MC</text><text x=\"309\" y=\"124\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">每 MC 每读 256 bit</text><text x=\"309\" y=\"147\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">32 B / request</text><rect x=\"565\" y=\"75\" width=\"210\" height=\"85\" rx=\"9\" fill=\"#315c4c\"/><text x=\"579\" y=\"101\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">256 MC / core</text><text x=\"579\" y=\"124\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">一次并行 round</text><text x=\"579\" y=\"147\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">8192 B = 8 KiB</text><path d=\"M240 118 L295 118\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M510 118 L565 118\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><text x=\"42\" y=\"224\" fill=\"#273d35\" font-size=\"23\" font-family=\"system-ui,sans-serif\">16 KiB 权重 miniblock ÷ 8 KiB / round = 2 rounds</text><text x=\"42\" y=\"266\" fill=\"#273d35\" font-size=\"17\" font-family=\"system-ui,sans-serif\">hub 回包要等 16 路 valid 聚齐；一个慢 MC 可拖住这一组。</text><text x=\"22\" y=\"312\" fill=\"#53685c\" font-size=\"13\" font-family=\"system-ui,sans-serif\">双 hub 条件下的结构推导；不是所有 wafer mode 的无条件宽度。</text></svg>\n<p><code>wl1_518_hub_weight_req_distribute.v</code> 的 MC 数据宽度默认256 bit；请求选中16路，回包 valid 用16路 AND，形成4096 bit。每核八个 WL1，在双 hub 模式下形成256个 MC 的并行读路径。只数某一层的总线宽度，会把 hub 到 WL1 的聚合与 WL1 到 PE 的接口误当成同一个可持续带宽。</p><p>更关键的是 wafer mode：权重控制器明确分支，1+1 使用一个 hub、每 miniblock 四轮；1+2/1+4 使用双 hub、每块两轮。旧模型注释曾将“四轮”写成一般描述，本章按实际条件分支限定。保留的二进制值2'b10是 reserved，不能因为代码用非零判定就视为对外合法模式。<a href=\"./evidence/hardware-sync-sources.md#hs-hub\">源码与证据定位</a>、<a href=\"./evidence/hardware-sync-sources.md#hs-wafer\">源码与证据定位</a>。</p>"
+      },
+      {
+        "id": "bw-credit",
+        "title": "2. 15 是 outstanding 阈值，23 是条件周转参数",
+        "html": "<p><code>gdg_flowctrl.v</code> 的读 outstanding 在请求被送出时加一，在读数据被接收时减一；二者同拍则计数保持。读计数达到15会停发，写计数达到512也能触发同一个 halt。因此推导纯读带宽时默认没有写侧门控额外阻塞，这个条件不能省略。</p>\n<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 345\" role=\"img\" aria-label=\"理想 credit 回路：C=15、R=23 的教学时间轴；仅为理想周期模型，非采样波形；真实 credit 返还可受多级背压影响。\"><rect width=\"800\" height=\"345\" rx=\"16\" fill=\"#f5f2e9\"/><text x=\"22\" y=\"32\" fill=\"#273d35\" font-size=\"20\" font-family=\"system-ui,sans-serif\">理想 credit 回路：C=15、R=23 的教学时间轴</text><rect x=\"35\" y=\"68\" width=\"185\" height=\"60\" rx=\"9\" fill=\"#315c4c\"/><text x=\"49\" y=\"94\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">发请求：q ← q+1</text><text x=\"49\" y=\"117\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">q ≥ 15 停止发新请求</text><rect x=\"300\" y=\"68\" width=\"200\" height=\"60\" rx=\"9\" fill=\"#315c4c\"/><text x=\"314\" y=\"94\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">数据穿过返回路径</text><text x=\"314\" y=\"117\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">R 定义为完整可复用周转</text><rect x=\"575\" y=\"68\" width=\"190\" height=\"60\" rx=\"9\" fill=\"#315c4c\"/><text x=\"589\" y=\"94\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">接收：q ← q−1</text><text x=\"589\" y=\"117\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">释放下一次请求能力</text><path d=\"M220 98 L300 98\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M500 98 L575 98\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><rect x=\"60\" y=\"165\" width=\"24\" height=\"36\" rx=\"3\" fill=\"#315c4c\"/><text x=\"64\" y=\"222\" fill=\"#273d35\" font-size=\"11\" font-family=\"system-ui,sans-serif\">0</text><rect x=\"88\" y=\"165\" width=\"24\" height=\"36\" rx=\"3\" fill=\"#315c4c\"/><text x=\"92\" y=\"222\" fill=\"#273d35\" font-size=\"11\" font-family=\"system-ui,sans-serif\">1</text><rect x=\"116\" y=\"165\" width=\"24\" height=\"36\" rx=\"3\" fill=\"#315c4c\"/><text x=\"120\" y=\"222\" fill=\"#273d35\" font-size=\"11\" font-family=\"system-ui,sans-serif\">2</text><rect x=\"144\" y=\"165\" width=\"24\" height=\"36\" rx=\"3\" fill=\"#315c4c\"/><text x=\"148\" y=\"222\" fill=\"#273d35\" font-size=\"11\" font-family=\"system-ui,sans-serif\">3</text><rect x=\"172\" y=\"165\" width=\"24\" height=\"36\" rx=\"3\" fill=\"#315c4c\"/><text x=\"176\" y=\"222\" fill=\"#273d35\" font-size=\"11\" font-family=\"system-ui,sans-serif\">4</text><rect x=\"200\" y=\"165\" width=\"24\" height=\"36\" rx=\"3\" fill=\"#315c4c\"/><text x=\"204\" y=\"222\" fill=\"#273d35\" font-size=\"11\" font-family=\"system-ui,sans-serif\">5</text><rect x=\"228\" y=\"165\" width=\"24\" height=\"36\" rx=\"3\" fill=\"#315c4c\"/><text x=\"232\" y=\"222\" fill=\"#273d35\" font-size=\"11\" font-family=\"system-ui,sans-serif\">6</text><rect x=\"256\" y=\"165\" width=\"24\" height=\"36\" rx=\"3\" fill=\"#315c4c\"/><text x=\"260\" y=\"222\" fill=\"#273d35\" font-size=\"11\" font-family=\"system-ui,sans-serif\">7</text><rect x=\"284\" y=\"165\" width=\"24\" height=\"36\" rx=\"3\" fill=\"#315c4c\"/><text x=\"288\" y=\"222\" fill=\"#273d35\" font-size=\"11\" font-family=\"system-ui,sans-serif\">8</text><rect x=\"312\" y=\"165\" width=\"24\" height=\"36\" rx=\"3\" fill=\"#315c4c\"/><text x=\"316\" y=\"222\" fill=\"#273d35\" font-size=\"11\" font-family=\"system-ui,sans-serif\">9</text><rect x=\"340\" y=\"165\" width=\"24\" height=\"36\" rx=\"3\" fill=\"#315c4c\"/><text x=\"344\" y=\"222\" fill=\"#273d35\" font-size=\"11\" font-family=\"system-ui,sans-serif\">10</text><rect x=\"368\" y=\"165\" width=\"24\" height=\"36\" rx=\"3\" fill=\"#315c4c\"/><text x=\"372\" y=\"222\" fill=\"#273d35\" font-size=\"11\" font-family=\"system-ui,sans-serif\">11</text><rect x=\"396\" y=\"165\" width=\"24\" height=\"36\" rx=\"3\" fill=\"#315c4c\"/><text x=\"400\" y=\"222\" fill=\"#273d35\" font-size=\"11\" font-family=\"system-ui,sans-serif\">12</text><rect x=\"424\" y=\"165\" width=\"24\" height=\"36\" rx=\"3\" fill=\"#315c4c\"/><text x=\"428\" y=\"222\" fill=\"#273d35\" font-size=\"11\" font-family=\"system-ui,sans-serif\">13</text><rect x=\"452\" y=\"165\" width=\"24\" height=\"36\" rx=\"3\" fill=\"#315c4c\"/><text x=\"456\" y=\"222\" fill=\"#273d35\" font-size=\"11\" font-family=\"system-ui,sans-serif\">14</text><rect x=\"480\" y=\"165\" width=\"24\" height=\"36\" rx=\"3\" fill=\"#b7945c\"/><text x=\"484\" y=\"222\" fill=\"#273d35\" font-size=\"11\" font-family=\"system-ui,sans-serif\">15</text><rect x=\"508\" y=\"165\" width=\"24\" height=\"36\" rx=\"3\" fill=\"#b7945c\"/><text x=\"512\" y=\"222\" fill=\"#273d35\" font-size=\"11\" font-family=\"system-ui,sans-serif\">16</text><rect x=\"536\" y=\"165\" width=\"24\" height=\"36\" rx=\"3\" fill=\"#b7945c\"/><text x=\"540\" y=\"222\" fill=\"#273d35\" font-size=\"11\" font-family=\"system-ui,sans-serif\">17</text><rect x=\"564\" y=\"165\" width=\"24\" height=\"36\" rx=\"3\" fill=\"#b7945c\"/><text x=\"568\" y=\"222\" fill=\"#273d35\" font-size=\"11\" font-family=\"system-ui,sans-serif\">18</text><rect x=\"592\" y=\"165\" width=\"24\" height=\"36\" rx=\"3\" fill=\"#b7945c\"/><text x=\"596\" y=\"222\" fill=\"#273d35\" font-size=\"11\" font-family=\"system-ui,sans-serif\">19</text><rect x=\"620\" y=\"165\" width=\"24\" height=\"36\" rx=\"3\" fill=\"#b7945c\"/><text x=\"624\" y=\"222\" fill=\"#273d35\" font-size=\"11\" font-family=\"system-ui,sans-serif\">20</text><rect x=\"648\" y=\"165\" width=\"24\" height=\"36\" rx=\"3\" fill=\"#b7945c\"/><text x=\"652\" y=\"222\" fill=\"#273d35\" font-size=\"11\" font-family=\"system-ui,sans-serif\">21</text><rect x=\"676\" y=\"165\" width=\"24\" height=\"36\" rx=\"3\" fill=\"#b7945c\"/><text x=\"680\" y=\"222\" fill=\"#273d35\" font-size=\"11\" font-family=\"system-ui,sans-serif\">22</text><text x=\"60\" y=\"255\" fill=\"#273d35\" font-size=\"17\" font-family=\"system-ui,sans-serif\">0…14：发出15个请求</text><text x=\"425\" y=\"255\" fill=\"#273d35\" font-size=\"17\" font-family=\"system-ui,sans-serif\">15…22：等待返还</text><text x=\"60\" y=\"287\" fill=\"#273d35\" font-size=\"16\" font-family=\"system-ui,sans-serif\">23 起：首个 credit 可复用；注册时序须计入实际 R 定义</text><text x=\"22\" y=\"327\" fill=\"#53685c\" font-size=\"13\" font-family=\"system-ui,sans-serif\">仅为理想周期模型，非采样波形；真实 credit 返还可受多级背压影响。</text></svg>\n<p><strong>15 可直接定位到 RTL 门控；23 不能从这个模块读出。</strong>完整周转 R 要包含发出、MC 服务、返回缓冲、跨时钟与 backpressure、credit 再次可用的事件边界。10/15 的带宽图解明确把 R=23 当作条件参数，并指出完整 RTT 仍需实际量测。某个行为 PHY 的10周期返回延迟不是整个回路的 R；同样，不能从一次平均耗时倒推一个普遍固定的23周期硬件延迟。<a href=\"./evidence/hardware-sync-sources.md#hs-credit\">源码与证据定位</a>、<a href=\"./evidence/hardware-sync-sources.md#hs-bandwidth-doc\">来源追踪与条件说明</a>。</p>"
+      },
+      {
+        "id": "bw-derive",
+        "title": "3. 亲手推导 46/15 cycle/块，检查量纲",
+        "html": "<p>假设每个 MC 理想情况下每周期最多接受一次读，且有 C 个在途 credit、周转 R 周期，稳态读率不超过 <code>min(1,C/R)</code> read/cycle。双 hub、纯读、全部 MC 有足够独立请求、回包与汇聚不额外损失时：</p><div class=\"formula\">B_model = 256 MC × 32 B/read × min(1, C/R) read/cycle<br/>C=15，R=23 ⇒ B_model = 5342.6087 B/cycle<br/>T_16KiB = 16384 / B_model = 46/15 ≈ 3.0667 cycle/块<br/>若 f=400 MHz：B_model × f = 2.137043×10¹² B/s ≈ 2.137 TB/s</div><p>这里 TB 使用十进制10¹²字节，KiB使用1024字节。R与f必须属于同一个供数计时域；若credit计数与PE接口跨时钟，先按实际配置折算周转，不能把某域的23拍直接乘另一个域的400 MHz。3.0667是长期连续供数时平均每块的<strong>启动间隔</strong>，不是一块从发起到返回只需三拍。第一块仍要走完整延迟，短指令还受启动和尾部排空影响。</p><p>若只看接口每 MC 每拍一读的上限，则是8192 B/cycle，在同一400 MHz假设下为3.2768 TB/s。加入 credit 模型才得到2.137。若 R 改变、单 hub、读写混合、MC 行命中或聚合背压改变，分母也应改变。正确表述是“<strong>R=23、400 MHz、双 hub 等条件下的模型上界</strong>”，不能称为已证实的硅后带宽。<a href=\"./evidence/hardware-sync-sources.md#hs-bandwidth-doc\">源码与证据定位</a>。</p>"
+      },
+      {
+        "id": "bw-frontier",
+        "title": "4. 更宽的 PE 入口不代表上游能填满",
+        "html": "<p>WL1 到 PE 的汇聚接口可以比 MC 持续返回更宽。宽接口用于分发、拼接和配合内部重放；它不会凭空增加 LDG 的长期供数。反过来，内部 w 次 replay 让一个返回块服务多行计算，可能把瓶颈从 MC 转向 MAC 或 AL1 credit。应把上游 bytes/cycle、下游块重放周期和有效 MAC/cycle 三条上限分别列出，再取实际瓶颈。</p><p>上一章经验 <code>t_supply=3.84−1.6/Cᵤ</code> 与本章理想46/15并不矛盾：前者是特定历史测试域中拟合的供数项，含该配置所暴露的地址/调度影响；后者是带条件的闭环吞吐上界。不能拿经验系数证明一个 RTL 常量，也不能强行把经验模型全改为46/15就声称预测更“物理”。</p><p>地址维度会影响 MC 的行命中、请求分布、等待和汇聚，但本次没有完整证明所有 k-stride 性能突变的根因。当前搜索器只对有历史覆盖的 Cᵤ 开放 k2，是对未知机制的保守处理。高级工程判断应能保留“已观察到但尚未定位”的边界，而不是给每个断崖都贴上 DRAM bank conflict。</p>"
+      },
+      {
+        "id": "bw-uscale",
+        "title": "5. INT4 的四本账：逻辑权重、scale、总线和容量",
+        "html": "<p>假设 INT4 权重矩阵 C×Kout，每 G 个权重共享一个 BF16 scale，且没有尾部和额外重读，纯权重字节为 C×Kout/2，scale字节为2×C×Kout/G，两者之比为4/G。G=32时，scale相对权重多12.5%；若与权重竞争同一带宽预算，纯权重 payload 的理想有效上限是总量上限除以1.125。</p><div class=\"formula\">B_weight,eff ≤ B_total / (1+4/G)<br/>条件总量 2.137043 TB/s、G=32 ⇒ 条件纯权重有效上限约 1.899594 TB/s</div><p>这是简化算例，不是当前所有 UScale 路径的实测修正系数。真实路径还可能有 scale padding、重复读取、对齐和独立阶段。报告至少列四本账：①数学权重 payload；②权重+scale 的逻辑传输量；③固定总线边界按 valid&amp;ready 计数的物理字节；④模型在存储中实际占用的 footprint。容量账不能直接拿来除以时间当总线流量，逻辑字节也不能证明物理链路已经满载。</p><p>等权重字节的对照可用 C4096、INT4 Kout1024 与 FP8 Kout512：都为2 MiB、128个16 KiB块。但输出通道数不同，输出 drain 与数值路径并未控制。若为了连scale都对齐而改FP8 Kout为576，又引入非整块输出；应承认控制实验仍有残余差异。</p>"
+      },
+      {
+        "id": "bw-measure",
+        "title": "6. 什么证据才足以叫“接近带宽上限”",
+        "html": "<p>先固定统计边界：是某一个 MC、一个 hub、全核WL1，还是两个core合计；是有效权重、含scale，还是物理总线。物理计数应在同一边界只累计成功握手，不能把 request、response 与下游转发各计一次。若单个请求拆成多拍，必须乘实际有效拍数/byte-enable，而非用请求次数乘错宽度。</p><p>时间上同时保留 kernel wall、PE busy/span 与供数稳态窗口。给出请求间隔、outstanding分布、halt占比、回包空洞和PE缺权重等待，才能判断是credit窗口用满、MC服务不足、汇聚拖尾，还是下游背压。仅有“字节/PE总耗时=某TB/s”无法区分这些原因。</p><p>VCS证据需记录行为memory模型和时钟配置；CycleSim有自己的时序与合法性覆盖；真实芯片还有实际时序、refresh与系统竞争。三者各能回答不同问题。本章没有重新运行这些验证，也不把现有RTL副本的README当成硅后规格。后续实测应保存原始trace来源、工具版本、命令shape与完整区间，让别人能复算相同分母。</p>"
+      },
+      {
+        "id": "bw-architecture",
+        "title": "7. 如果修改芯片，先问能缓解哪条闭环",
+        "html": "<p>增加 read credit C 在 C&lt;R 时可能提高并行请求数，但若MC服务或返回聚合已经满，收益会停止；更深缓冲还增加面积、延迟和验证复杂度。缩短R既可能提高供数，也可能帮助短指令延迟，但要指出缩短的是哪段流水/CDC/反馈。增加hub或接口宽度若不同时处理MC服务与bank分布，可能只增加峰值规格而不增加有效吞吐。</p><p>AL1容量或驻留策略的改动能改变N_TC阈值，使某些w配置不再反复装activation；WL1更强的跨W块复用能改变权重重读量；更明确的完成事件能减少不必要同步。这些改动服务不同负载：大batch GEMM、高并发MoE、低并发decode与稀疏attention的收益权重不同。架构提案应给出受益shape集合、额外状态、可编程接口、编译器可表达性和验证成本，而不只报一条理想带宽公式。</p>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "为什么2.137 TB/s不能直接当固定分母？",
+        "a": "它由双hub、256MC、32B、C15、R23和400MHz推得。C15有RTL门控证据，R23是完整周转的条件参数；频率、模式和背压也必须匹配。没有这些前提就不能称实际峰值。",
+        "followup": "如果R=30或只有一个hub，哪些项改变，哪些项不变？"
+      },
+      {
+        "q": "46/15约3.067周期，是否说明DRAM读延迟只有3周期？",
+        "a": "不是。它是很多请求在途后每16KiB的平均稳态启动间隔；单请求RTT可以远大于此。区分latency与throughput是credit模型的核心。",
+        "followup": "小矩阵为什么可能远达不到同样的有效带宽？"
+      },
+      {
+        "q": "outstanding达到15时同时有一个回包，计数如何更新？",
+        "a": "这个RTL中一发一收同拍计数保持；新的发出能否被接受还取决于halt和上下游注册时序。定义周转R必须包含credit重新可用的边界，不能从计数公式单独猜测同拍穿透能力。",
+        "followup": "测量时应观察哪两个实际握手事件？"
+      },
+      {
+        "q": "INT4 G32 的scale占比怎么算？",
+        "a": "权重每元素0.5B，scale每32元素2B，比例为2/32÷0.5=12.5%。只有在同预算、无额外padding和重读的简化条件下，纯权重有效上限才等于总量上限除以1.125。",
+        "followup": "为什么容量里只存一次scale，传输中可能读多次？"
+      },
+      {
+        "q": "把credit翻倍一定能把带宽翻倍吗？",
+        "a": "只有credit窗口是唯一限制且C/R仍低于每拍服务能力时，简化模型才给线性收益；MC吞吐、hub聚合、写侧halt、返回背压或PE消费都能先成为上限。",
+        "followup": "如何设计一个能证伪credit瓶颈判断的测量？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "hs-hub",
+        "label": "MC 位宽、16 路广播与回包聚合",
+        "url": "./evidence/hardware-sync-sources.md#hs-hub",
+        "note": "design/rtl/zeus518/wl1/wl1_518_hub_weight_req_distribute.v:10；本地文件指纹见索引",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-wafer",
+        "label": "单 hub 四次与双 hub 两次读取",
+        "url": "./evidence/hardware-sync-sources.md#hs-wafer",
+        "note": "design/rtl/zeus518/wl1/wl1_518_weight_ctrl.v:1370；本地文件指纹见索引",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-credit",
+        "label": "15 read outstanding 的更新与门控",
+        "url": "./evidence/hardware-sync-sources.md#hs-credit",
+        "note": "design/rtl/gdg/gdg_unit/gdg_flowctrl.v:20；本地文件指纹见索引",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-bandwidth-doc",
+        "label": "带宽来源追踪：23 cycle 条件假设",
+        "url": "./evidence/hardware-sync-sources.md#hs-bandwidth-doc",
+        "note": "triton_shared/docs/ldg-bandwidth-explained-2026-10-15.html:1；本地文件指纹见索引",
+        "kind": "历史记录"
+      },
+      {
+        "id": "hs-design",
+        "label": "只读 RTL 副本的来源与时钟/计时边界",
+        "url": "./evidence/hardware-sync-sources.md#hs-design",
+        "note": "design/README.md:1；本地文件指纹见索引",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-spec",
+        "label": "硬件边界与经验模型系数：两种证据不可混为一谈",
+        "url": "./evidence/hardware-sync-sources.md#hs-spec",
+        "note": "triton_shared/include/triton-shared/Dialect/ZeusHigh/Transforms/PeHWSpec.h:35；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-model-doc",
+        "label": "minitile 模型适用域与历史校准",
+        "url": "./evidence/hardware-sync-sources.md#hs-model-doc",
+        "note": "triton_shared/docs/architecture/pe_minitile_cost_model.md:1；82613bc2eb30",
+        "kind": "源码"
+      }
+    ],
+    "takeaways": [
+      "15 outstanding 是RTL事实；23-cycle完整周转与400MHz是需要显式保留的条件。",
+      "峰值接口宽度、闭环稳态上界、经验模型与实测有效带宽分别命名。",
+      "量化收益用四本字节账和统一计时边界解释，不能只看权重bit数。"
+    ]
+  },
+  {
+    "id": "sync-resource-events",
+    "title": "InjectSync 的起点：资源、事件与真实依赖",
+    "part": "518 硬件与同步",
+    "order": 38,
+    "subtitle": "为什么 SSA、同队列和 descriptor snapshot 都不能替代物理完成证明",
+    "minutes": 50,
+    "level": "深入",
+    "tags": [
+      "InjectSync",
+      "RAW",
+      "WAR",
+      "WAW",
+      "BReg",
+      "snapshot",
+      "资源模型"
+    ],
+    "lead": "同步不是给每个 use-def edge 配一条 mail。它先回答谁在什么时刻读写了哪段资源，再选择能实现该顺序的硬件事件。对事件理解错一层，即使 mail 数量完全配平，也可能得到数值错误或死锁。",
+    "sections": [
+      {
+        "id": "se-events",
+        "title": "1. 一条 PE 指令至少有六个不同的时点",
+        "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 335\" role=\"img\" aria-label=\"同一指令的不同事件：不能用一个“完成”概括；事件相对顺序示意，不表示固定间隔；outbox release 可晚于本条 done。\"><rect width=\"800\" height=\"335\" rx=\"16\" fill=\"#f5f2e9\"/><text x=\"22\" y=\"32\" fill=\"#273d35\" font-size=\"20\" font-family=\"system-ui,sans-serif\">同一指令的不同事件：不能用一个“完成”概括</text><rect x=\"20\" y=\"85\" width=\"115\" height=\"76\" rx=\"9\" fill=\"#315c4c\"/><text x=\"34\" y=\"111\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">dispatch</text><text x=\"34\" y=\"134\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">识别/接受</text><rect x=\"150\" y=\"85\" width=\"125\" height=\"76\" rx=\"9\" fill=\"#315c4c\"/><text x=\"164\" y=\"111\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">snapshot</text><text x=\"164\" y=\"134\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">锁存 BR</text><rect x=\"290\" y=\"85\" width=\"115\" height=\"76\" rx=\"9\" fill=\"#315c4c\"/><text x=\"304\" y=\"111\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">queue</text><text x=\"304\" y=\"134\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">命令入队</text><rect x=\"420\" y=\"85\" width=\"110\" height=\"76\" rx=\"9\" fill=\"#315c4c\"/><text x=\"434\" y=\"111\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">issue</text><text x=\"434\" y=\"134\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">条件满足</text><rect x=\"545\" y=\"85\" width=\"110\" height=\"76\" rx=\"9\" fill=\"#315c4c\"/><text x=\"559\" y=\"111\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">done</text><text x=\"559\" y=\"134\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">数据完成</text><rect x=\"670\" y=\"85\" width=\"110\" height=\"76\" rx=\"9\" fill=\"#315c4c\"/><text x=\"684\" y=\"111\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">release</text><text x=\"684\" y=\"134\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">顺序发 mail</text><path d=\"M135 123 L150 123\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M275 123 L290 123\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M405 123 L420 123\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M530 123 L545 123\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M655 123 L670 123\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M165 205 L265 205\" stroke=\"#b7945c\" stroke-width=\"2.5\" fill=\"none\"/><text x=\"32\" y=\"236\" fill=\"#273d35\" font-size=\"17\" font-family=\"system-ui,sans-serif\">descriptor WAR 只需保护到 snapshot</text><path d=\"M310 205 L735 205\" stroke=\"#b25130\" stroke-width=\"2.5\" fill=\"none\"/><text x=\"318\" y=\"270\" fill=\"#273d35\" font-size=\"17\" font-family=\"system-ui,sans-serif\">L2 数据 RAW / WAR 要覆盖真实读写生命周期</text><text x=\"22\" y=\"317\" fill=\"#53685c\" font-size=\"13\" font-family=\"system-ui,sans-serif\">事件相对顺序示意，不表示固定间隔；outbox release 可晚于本条 done。</text></svg>\n<p>PE predecode 的接受条件包含自身 valid、ready 与 CT ready；只有接受沿才锁存描述符。源码随后将本地寄存器打包成命令，queue保存的是snapshot，不会在PE实际计算时再回头读取BR file。因此已经snapshot的指令不受后续BR改写影响，但它引用的L2内容仍可能在很晚才被读取。</p><p>issue以后，地址生成结束、读数据分发结束、ALU最后一次握手、L2写响应完成仍是不同事件。当前普通PE的send经done FIFO和有序outbox释放；晚指令即使先完成，也不能让其send越过前一个outbox项。这一有序释放合同是后面用“较晚send覆盖较早producer”的基础。<a href=\"./evidence/hardware-sync-sources.md#hs-snapshot\">RTL snapshot</a>、<a href=\"./evidence/hardware-sync-sources.md#hs-rtl-model\">PE release 合同</a>。</p>"
+      },
+      {
+        "id": "se-taxonomy",
+        "title": "2. 资源比 SSA value 更细，也更宽",
+        "html": "<p>SSA告诉你逻辑定义与使用，不自动包含物理别名、隐含配置、搬运窗口或退休资源。资源分析至少要分别处理 BR descriptor字段、PE/VP sticky配置、标量/寄存器状态、L2字节区间、weight slab/WL1地址、GDG/AXI区域与DMA窗口。mail本身只是承载这些语义约束的硬件手段。</p><table><thead><tr><th>资源</th><th>正确的事件边</th><th>不能替代它的东西</th></tr></thead><tbody><tr><td>BRDesc(reg,fields)</td><td>ConfigBeforeSnapshot / SnapshotBeforeRewrite</td><td>晚于snapshot的mail issue gate</td></tr><tr><td>L2Range(addr,size)</td><td>写完成→读；旧读结束→覆盖；写序</td><td>仅比较memref或descriptor SSA名字</td></tr><tr><td>WeightStore / DMA window</td><td>装载完成→使用；旧使用→重写</td><td>仅看“这是LW/PE”两个unit名</td></tr><tr><td>lane/退休资源</td><td>容量占用→释放、输出写接受</td><td>普通张量use-def图</td></tr><tr><td>mail channel</td><td>有序credit被正确recv消费</td><td>单纯send总数等于recv总数</td></tr></tbody></table><p><code>Resources.cpp</code> 中物理区间相交使用半开范围语义，并防止区间末端计算溢出。未知关系应保留may-alias或显式拒绝；“没认出资源”不等于“没有副作用”。如果descriptor改变了layout，分析范围也必须随之改变。<a href=\"./evidence/hardware-sync-sources.md#hs-resources\">源码与证据定位</a>。</p>"
+      },
+      {
+        "id": "se-hazards",
+        "title": "3. 用同一段地址区分 RAW、WAR、WAW",
+        "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 355\" role=\"img\" aria-label=\"同地址产生三种义务：producer 是顺序端点，不总是写者；教学字节区间与操作组合，非本轮运行IR；实际是否发mail还取决于typed proof。\"><rect width=\"800\" height=\"355\" rx=\"16\" fill=\"#f5f2e9\"/><text x=\"22\" y=\"32\" fill=\"#273d35\" font-size=\"20\" font-family=\"system-ui,sans-serif\">同地址产生三种义务：producer 是顺序端点，不总是写者</text><rect x=\"30\" y=\"70\" width=\"225\" height=\"60\" rx=\"9\" fill=\"#315c4c\"/><text x=\"44\" y=\"96\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">LD 写 [8192,8320)</text><text x=\"44\" y=\"119\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">RAW：新值尚未就绪</text><rect x=\"520\" y=\"70\" width=\"245\" height=\"60\" rx=\"9\" fill=\"#315c4c\"/><text x=\"534\" y=\"96\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">PE 读 [8256,8384)</text><text x=\"534\" y=\"119\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">重叠64B，必须等写可见</text><path d=\"M255 100 L520 100\" stroke=\"#b25130\" stroke-width=\"2.5\" fill=\"none\"/><rect x=\"30\" y=\"160\" width=\"225\" height=\"60\" rx=\"9\" fill=\"#315c4c\"/><text x=\"44\" y=\"186\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">PE 读旧 buffer</text><text x=\"44\" y=\"209\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">WAR：旧读仍在途</text><rect x=\"520\" y=\"160\" width=\"245\" height=\"60\" rx=\"9\" fill=\"#315c4c\"/><text x=\"534\" y=\"186\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">DT 写复用地址</text><text x=\"534\" y=\"209\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">必须等旧读取完成</text><path d=\"M255 190 L520 190\" stroke=\"#b25130\" stroke-width=\"2.5\" fill=\"none\"/><rect x=\"30\" y=\"250\" width=\"225\" height=\"60\" rx=\"9\" fill=\"#315c4c\"/><text x=\"44\" y=\"276\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">DT 写输出</text><text x=\"44\" y=\"299\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">WAW：两次写覆盖</text><rect x=\"520\" y=\"250\" width=\"245\" height=\"60\" rx=\"9\" fill=\"#315c4c\"/><text x=\"534\" y=\"276\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">PE 写相交输出</text><text x=\"534\" y=\"299\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">需要有证据的写顺序</text><path d=\"M255 280 L520 280\" stroke=\"#b25130\" stroke-width=\"2.5\" fill=\"none\"/><text x=\"300\" y=\"92\" fill=\"#273d35\" font-size=\"17\" font-family=\"system-ui,sans-serif\">写 → 读</text><text x=\"300\" y=\"182\" fill=\"#273d35\" font-size=\"17\" font-family=\"system-ui,sans-serif\">读 → 写</text><text x=\"300\" y=\"272\" fill=\"#273d35\" font-size=\"17\" font-family=\"system-ui,sans-serif\">写 → 写</text><text x=\"22\" y=\"337\" fill=\"#53685c\" font-size=\"13\" font-family=\"system-ui,sans-serif\">教学字节区间与操作组合，非本轮运行IR；实际是否发mail还取决于typed proof。</text></svg>\n<p>RAW要保护消费者读到新结果；WAR要保护旧读者不被新写者覆盖；WAW要保护最后写入的语义顺序。WAR中的producer是前一个读者，不是数据生产者。两个不同SSA buffer经过AddressAllocation复用同一段L2，就会产生原来张量图没有的WAR/WAW；反过来，同一底层分配中的不相交subview可以没有数据冲突，但必须用实际layout推出范围。</p><p>只发现冲突还没决定最终mail。已存在的typed硬件顺序或覆盖路径可以消去冗余token，前提是证据精确到资源、unit/lane、事件与版本。上一章真实案例的地址选择可以减少额外冲突；后端依赖分析仍独立决定正确性，不能把分配器“预计同步较便宜”当成免同步证书。</p>"
+      },
+      {
+        "id": "se-diagonal",
+        "title": "4. 为什么同 PE 的 WAW 可消，而 RAW/WAR 不能照搬",
+        "html": "<p>读取到的RTL合同给出一个很窄的结论：同core PE写L2经统一master路径，1024-bit请求进入八个128-bit segment FIFO；在真正相交的segment上，前一写的SRAM grant先于后一写。这能证明writer→writer release order，因此同core PE→PE的重叠L2 WAW可用 <code>pe-same-unit-l2-write-order</code> 免mail。</p><p>它<strong>没有</strong>证明前一aggregate response必须早于后一issue，也没有证明前一读结束早于后一写。PE可以提前推进下一条计算；RAW/WAR仍须token或独立completion proof。将“同单元WAW有序”缩写成“同PE完全串行”会错误删掉真依赖。</p><p>PE普通destination在该合同中是写资源，累加保存在内部OL1，不是默认读回L2 destination。若DT先初始化同一输出、PE后写，冲突应表达为跨单元WAW；不能为了补上mail凭空给PE添加destination read。保留正确结果不够，资源模型还要能解释为什么正确，才能在优化时不误删。<a href=\"./evidence/hardware-sync-sources.md#hs-rtl-model\">源码与证据定位</a>。</p>"
+      },
+      {
+        "id": "se-ct",
+        "title": "5. CT snapshot 顺序与 CT sticky wait 是两种完全不同的力量",
+        "html": "<p>正常dispatch路径中，CT配置副作用与后续consumer predecode受全局ready串行约束。BR RAW、snapshot之后的BR WAR和BR WAW因此可由前端顺序保护。consumer的mail recv gate晚于snapshot，不能拿一个数据执行阶段的wait补救已经锁存错的descriptor。</p><p>但CT如果作为接收方执行等待，会卡住后续全局dispatch。这种sticky wait比普通计算单元queue上的wait影响更大：某个需要给它send的后续命令可能根本还没发到对应unit。判断“把recv提前更保守”必须同时检查可达的send是否被CT挡在后面，否则更强等待会形成环。</p><pre><code>// Teaching event sketch, not runnable ZeusLow syntax.\nCT: wait(VP_done) ; dispatch VP_producer\nVP: queue is empty until CT dispatches producer\n// Cycle: CT waits for VP; VP waits for CT to dispatch.</code></pre><p>真实规划器对VP/DT→CT有专门的合法性与容量粗化限制，是为了尊重这类硬件约束；不能用全局barrier替代所有难以理解的局部依赖。<a href=\"./evidence/hardware-sync-sources.md#hs-chain\">源码与证据定位</a>、<a href=\"./evidence/hardware-sync-sources.md#hs-planner\">源码与证据定位</a>。</p>"
+      },
+      {
+        "id": "se-lanes-si",
+        "title": "6. VP/DT lane 与 SI 跨核效果：两个不能遗漏的边界",
+        "html": "<p>VP/DT有公共queue与有序outbox，同时又有多个内部lane。公共队列序不意味着不同lane的读写完成序；lane credit、write-retire槽和done队列产生额外背压。编译器管理的lane分配必须进入资源与最终验证合同。同lane可用的写完成证明不能原样套到跨lane，未固定lane也不能猜成最有利分配。</p><p>SI的关键区别是<strong>退休顺序成立，不代表数据效果必然成立</strong>。LaTeX模型当前记录：SI会比较版本、die、core、sync_info；匹配且非info-only才走读数据并写本地L2路径，不匹配或info-only可以回写回复并正常done。这样outbox照样有序发mail，但目的buffer未必被写。</p><p>因此本地InjectSync能保证消费者晚于SI退休；配对正确、对端启动、远端数据世代和可见性则属于跨核launch/通信ABI及双核验证。旧文档中“SI不能当sender”的历史措辞不能压过更新后的顺序/效果区分，也不能向另一端过度推导为“SI done证明全部数据已到达”。<a href=\"./evidence/hardware-sync-sources.md#hs-status\">当前实现和SI合同</a>。</p>"
+      },
+      {
+        "id": "se-obligation",
+        "title": "7. 将硬件事实变成可审计的 obligation",
+        "html": "<p>一个完整依赖应保留producer与consumer身份、两端unit/lane、资源身份、RAW/WAR/WAW种类、producer要求达到的事件、consumer最晚允许推进的事件、循环距离d和owner loop。之后才能决定是typed no-mail、由其他义务覆盖，还是需要真正的physical token。</p><p>例如“PE旧读→DT复用写”不能只存 <code>PE→DT</code>。必须存那条PE是哪次迭代、读哪段字节、DT是否可能在另一分支、旧读需要哪个完成锚点。只按unit pair合并会把不同数据、不同世代和不同控制路径的义务混起来；只按SSA edge则会漏掉物理别名与隐含配置。</p><p>面试中可以用这样的闭环展示深度：先把异常归到descriptor、数据、同步、控制流中的一个事件层；读对应RTL/合同；让effect registry表达出来；添加能区分错误与正确事件点的最小反例；再用真实业务形状确认没有漏掉布局或跨核ABI。下一章才开始讨论如何把这些义务压成最少而合法的计数器序列。</p>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "BR已经snapshot，是否说明原输入buffer可以释放？",
+        "a": "只能说明后续改BR不会改变已经锁存的命令。buffer内容仍可能被PE晚些时候读取；物理地址复用必须保护数据读生命周期，与descriptor生命周期分开。",
+        "followup": "把wait放在consumer issue gate为何救不了错误的snapshot？"
+      },
+      {
+        "q": "两个SSA value不同，怎样仍会形成WAR？",
+        "a": "AddressAllocation可将新buffer放入旧buffer的物理区间，异步旧读取可能仍在途。字节相交且后者写，就产生读后写义务，和SSA名称无关。",
+        "followup": "区间只重叠64B时，怎样避免整buffer过度同步又保持安全？"
+      },
+      {
+        "q": "同PE WAW免mail的真实证明是什么？",
+        "a": "是同core写路径进入L2 segment FIFO后，对相交物理segment的grant保持顺序。它不是同PE所有阶段串行，也不覆盖reader lifetime，所以不能消RAW/WAR。",
+        "followup": "若两个写在不同core或不同unit，此证明还成立吗？"
+      },
+      {
+        "q": "为什么mail计数平衡还可能读到错误数据？",
+        "a": "平衡只说明总信用数量正确，不能说明recv消费的credit来自其所需producer，也不能证明producer的done拥有目标数据效果。无标签FIFO错位和SI match-fail都是反例。",
+        "followup": "怎样在软件验证器里补上硬件没有携带的producer身份？"
+      },
+      {
+        "q": "CT wait提前为什么可能更危险？",
+        "a": "CT会阻断后续全局dispatch；若被等待的producer仍在其后，提前wait让producer无法入队，形成等待环。需要结合事件依赖和容量边，不是只看局部覆盖关系。",
+        "followup": "普通VP queue上的wait与CT sticky wait阻塞范围有何不同？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "hs-snapshot",
+        "label": "PE 描述符锁存与命令 snapshot",
+        "url": "./evidence/hardware-sync-sources.md#hs-snapshot",
+        "note": "design/rtl/zeus518/inst_ctrl/inst518_pe_inst_predecode.v:120；本地文件指纹见索引",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-rtl-model",
+        "label": "指令时序、descriptor、PE/VP/DT/DMA 同步合同",
+        "url": "./evidence/hardware-sync-sources.md#hs-rtl-model",
+        "note": "triton_shared/docs/vcs_debug/rtl-instruction-dependency-model.md:51；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-resources",
+        "label": "物理范围、资源冲突和 may-alias",
+        "url": "./evidence/hardware-sync-sources.md#hs-resources",
+        "note": "triton_shared/lib/Dialect/ZeusLow/Transforms/InjectSync/Resources.cpp:70；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-chain",
+        "label": "mailbox 公理、阶梯、容量、循环与三项条件",
+        "url": "./evidence/hardware-sync-sources.md#hs-chain",
+        "note": "triton_shared/docs/mailbox-sync-chain-model/mailbox-sync-chain-model.tex:168；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-planner",
+        "label": "阶梯、容量粗化、循环配平",
+        "url": "./evidence/hardware-sync-sources.md#hs-planner",
+        "note": "triton_shared/lib/Dialect/ZeusLow/Transforms/InjectSync/Staircase/StaircasePlanning.cpp:442；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-status",
+        "label": "实际实现范围、SI 顺序与效果边界",
+        "url": "./evidence/hardware-sync-sources.md#hs-status",
+        "note": "triton_shared/docs/mailbox-sync-chain-model/mailbox-sync-chain-model.tex:1839；82613bc2eb30",
+        "kind": "源码"
+      }
+    ],
+    "takeaways": [
+      "先描述资源与事件，再选择mail载体；snapshot、issue、done、release不可互换。",
+      "同unit或同SSA均不足以判断同步；必须核对物理范围、lane和typed完成证明。",
+      "SI的本地退休、远端配对与数据有效性是独立合同。"
+    ]
+  },
+  {
+    "id": "sync-staircase-planning",
+    "title": "阶梯规划：把无标签 mailbox 变成可证明的顺序链",
+    "part": "518 硬件与同步",
+    "order": 38.3,
+    "subtitle": "从四个交叉依赖点，手工走完后缀最小值、去重和容量约束",
+    "minutes": 55,
+    "level": "深入",
+    "tags": [
+      "staircase",
+      "mailbox",
+      "算法",
+      "FIFO",
+      "capacity",
+      "依赖图"
+    ],
+    "lead": "硬件mail只保存计数，不保存“这是哪个producer的完成”。编译器必须让send序列与recv序列按同一个顺序配对。阶梯算法的价值，是把这一约束变成可推导的构造，而不是在每条边上独立插mail后继续打补丁。",
+    "sections": [
+      {
+        "id": "sp-channel",
+        "title": "1. 一个 channel 是一个计数器，不是一堆独立 event",
+        "html": "<p>当前模型以九个unit形成有向U→V channel，包括U=V的对角channel。mailbox计数器为6bit，上限63；指令携带send/recv mask，每一bit对应一个unit方向。同一条指令不能在同一channel里表达“发两份独立信用”。</p><p>硬件不会给credit附producer ID。软件可将计数器视作按序到达和消费的逻辑FIFO：第j个recv吃第j个send所贡献的信用。若两条依赖分别要求U₁→V₂与U₂→V₁，独立插mail就会交叉配对；V₁先消费的其实是U₁的信用，而它真正需要U₂完成。总数2对2仍可能错误。</p><p>解决方法必须协调<strong>整个channel</strong>的发送与接收顺序。当前staircase从资源义务点规划统一链；不能先让RAW、WAR、循环等各自产生互不知情的物理token，再希望最后把mask OR一下就安全。<a href=\"./evidence/hardware-sync-sources.md#hs-chain\">源码与证据定位</a>。</p>"
+      },
+      {
+        "id": "sp-coverage",
+        "title": "2. 点与 token：覆盖不等于站在同一位置",
+        "html": "<p>对固定U→V，依赖点(p,c)要求U上第p个事件完成，才能让V上第c个相关consumer推进。token(s,r)选择在U上s处send、V上r处recv。若s不早于p、r不晚于c，且有序outbox和unit次序合同成立，则此token可以覆盖该依赖：晚send已覆盖早producer，早recv阻止后consumer过早执行。</p><div class=\"formula\">覆盖条件：U(p) ≤ U(s)，且 V(r) ≤ V(c)<br/>两个轴是各unit的指令序号，不是同一条墙钟时间轴。</div>\n<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 385\" role=\"img\" aria-label=\"依赖点平面：红点是原始义务，折线是安全阶梯；轴为unit序号；点和折线是本章教学输入，不是实际kernel生成结果。\"><rect width=\"800\" height=\"385\" rx=\"16\" fill=\"#f5f2e9\"/><text x=\"22\" y=\"32\" fill=\"#273d35\" font-size=\"20\" font-family=\"system-ui,sans-serif\">依赖点平面：红点是原始义务，折线是安全阶梯</text><path d=\"M130 285 L690 285\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M130 285 L130 55\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><text x=\"560\" y=\"310\" fill=\"#273d35\" font-size=\"14\" font-family=\"system-ui,sans-serif\">U 上的 producer / send 序</text><text x=\"24\" y=\"65\" fill=\"#273d35\" font-size=\"14\" font-family=\"system-ui,sans-serif\">V 序</text><circle cx=\"235\" cy=\"246\" r=\"7\" fill=\"#c45c37\"/><text x=\"245\" y=\"240\" fill=\"#273d35\" font-size=\"14\" font-family=\"system-ui,sans-serif\">(1,1)</text><circle cx=\"340\" cy=\"129\" r=\"7\" fill=\"#c45c37\"/><text x=\"350\" y=\"123\" fill=\"#273d35\" font-size=\"14\" font-family=\"system-ui,sans-serif\">(2,4)</text><circle cx=\"445\" cy=\"207\" r=\"7\" fill=\"#c45c37\"/><text x=\"455\" y=\"201\" fill=\"#273d35\" font-size=\"14\" font-family=\"system-ui,sans-serif\">(3,2)</text><circle cx=\"550\" cy=\"90\" r=\"7\" fill=\"#c45c37\"/><text x=\"560\" y=\"84\" fill=\"#273d35\" font-size=\"14\" font-family=\"system-ui,sans-serif\">(4,5)</text><path d=\"M235 246 L445 246\" stroke=\"#315c4c\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M445 246 L445 207\" stroke=\"#315c4c\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M445 207 L550 207\" stroke=\"#315c4c\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M550 207 L550 90\" stroke=\"#315c4c\" stroke-width=\"2.5\" fill=\"none\"/><text x=\"34\" y=\"337\" fill=\"#273d35\" font-size=\"16\" font-family=\"system-ui,sans-serif\">将 (2,4) 与 (3,2) 合为 token(3,2)：V₂开始等待U₃，因而也保护V₄。</text><text x=\"22\" y=\"367\" fill=\"#53685c\" font-size=\"13\" font-family=\"system-ui,sans-serif\">轴为unit序号；点和折线是本章教学输入，不是实际kernel生成结果。</text></svg>\n<p>移动recv到更早的V位置会延长等待范围，移动send到更晚的U位置会增加所等待的工作。覆盖关系告诉你这样仍满足数据顺序，<strong>不单独保证放置合法、无死锁或性能更好</strong>；CT、循环、容量与多lane约束需要后面的验证层。<a href=\"./evidence/hardware-sync-sources.md#hs-chain\">覆盖条件与构造</a>。</p>"
+      },
+      {
+        "id": "sp-worked",
+        "title": "3. 四个点，逐步算出三个 token",
+        "html": "<p>令点按U顺序为 <code>(1,1),(2,4),(3,2),(4,5)</code>。为保持发送与接收同序，逆序扫描consumer位置取后缀最小值，然后同recv只保留最晚send：</p><table><thead><tr><th>p</th><th>原c</th><th>r=min(本项c,后缀r)</th><th>去重结果</th></tr></thead><tbody><tr><td>4</td><td>5</td><td>5</td><td>(4,5)</td></tr><tr><td>3</td><td>2</td><td>2</td><td>(3,2)</td></tr><tr><td>2</td><td>4</td><td>2</td><td>被(3,2)覆盖</td></tr><tr><td>1</td><td>1</td><td>1</td><td>(1,1)</td></tr></tbody></table><pre><code>// Teaching pseudocode for the linear, non-periodic core.\npoints = sort_by_producer(points)\nr = +infinity\nfor point in reverse(points):\n    r = min(r, point.consumer)\n    proposal.append((point.producer, r))\ntokens = keep_latest_send_for_each_recv(proposal)</code></pre><p>最后send序列1,3,4，recv序列1,2,5，同序且无重复recv。(3,2)同时覆盖原来的(2,4)和(3,2)：U₃ release涵盖U₂，V₂的等待也约束V₄。算法没有把p2的业务计算删掉，只合并其完成证据。</p><p>同send的多个点还需共享最早recv，否则一条指令的一bit send无法支持多个独立token。实际C++先按sendTime入bucket，bucket内recvTime降序排列，保证逆向suffix时整组能见到最小recv；它不是机械照抄“按(p,c)升序”的教学伪码。<a href=\"./evidence/hardware-sync-sources.md#hs-planner\">planStaircase:442–510</a>。</p>"
+      },
+      {
+        "id": "sp-coarsen",
+        "title": "4. 从阶梯到粗化：省 token 会损失 overlap",
+        "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 355\" role=\"img\" aria-label=\"可选粗化与性能代价：更少mail不等于更短时间；示意表达同步约束强弱；未赋予duration，不代表实测损失。\"><rect width=\"800\" height=\"355\" rx=\"16\" fill=\"#f5f2e9\"/><text x=\"22\" y=\"32\" fill=\"#273d35\" font-size=\"20\" font-family=\"system-ui,sans-serif\">可选粗化与性能代价：更少mail不等于更短时间</text><rect x=\"30\" y=\"75\" width=\"220\" height=\"70\" rx=\"9\" fill=\"#315c4c\"/><text x=\"44\" y=\"101\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">原 token A = (s₁,r₁)</text><text x=\"44\" y=\"124\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">早consumer只等早producer</text><rect x=\"530\" y=\"75\" width=\"235\" height=\"70\" rx=\"9\" fill=\"#315c4c\"/><text x=\"544\" y=\"101\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">原 token B = (s₂,r₂)</text><text x=\"544\" y=\"124\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">晚consumer等晚producer</text><path d=\"M250 110 L530 110\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><rect x=\"250\" y=\"205\" width=\"315\" height=\"72\" rx=\"9\" fill=\"#315c4c\"/><text x=\"264\" y=\"231\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">合并为 (s₂,r₁)</text><text x=\"264\" y=\"254\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">[r₁,r₂) 也被迫等到 s₂</text><path d=\"M140 145 L250 230\" stroke=\"#b25130\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M640 145 L565 230\" stroke=\"#b25130\" stroke-width=\"2.5\" fill=\"none\"/><text x=\"32\" y=\"305\" fill=\"#273d35\" font-size=\"17\" font-family=\"system-ui,sans-serif\">需要更晚的send、更早的recv：覆盖更强，等待范围也更大。</text><text x=\"22\" y=\"337\" fill=\"#53685c\" font-size=\"13\" font-family=\"system-ui,sans-serif\">示意表达同步约束强弱；未赋予duration，不代表实测损失。</text></svg>\n<p>相邻token合为(s₂,r₁)，依赖覆盖通常更强，但把原本只需等s₁的那段V工作也推迟到s₂。MAIL条数、mask密度、总等待时间是不同目标。特别是低并发小kernel，一条过宽的完成栅栏可能吞掉有价值的DMA/PE/VP重叠。</p><p>LaTeX讨论了可选成本粗化；当前实现尚未接profile候选成本，if下沉使用常数偏好，主要执行必要的容量粗化。不要把“可在模型中定义的优化目标”说成“当前已全局最小化latency”。在面试里可以给出后续方案：以真实完成时间估算新增等待，并在跨shape稳定性门槛下选择合并；这属于改进提议，不是已有功能。</p>"
+      },
+      {
+        "id": "sp-capacity",
+        "title": "5. 63 的硬件容量与 62 的规划预算",
+        "html": "<p>6bit计数器满63会阻塞sender outbox。容量背压是一条反向等待边：sender可能因为receiver还没消费而不能继续释放。当前 <code>boundOutstanding</code> 使用 <code>kMailboxCounterCapacity−1</code>，即62的规划预算，预留一格不是随意常数。</p><p>原因是多个channel的recv可能在同一命令合并成mask，硬件要等mask里<strong>所有</strong>计数器非零才checkout。一条channel有信用甚至已满，recv仍可能因另一来源为空而不动。如果把单channel“满意味着receiver必然落后”的推理机械套到多来源recv，会漏掉这种相互等待。合并mask到物化阶段才确定，所以规划层保守地对所有channel留余量。</p><p>实现按region内程序位置的闭区间计算占用峰值；超预算时合并覆盖峰值的相邻同类token，选择新增等待较小者。VP/DT→CT属于R1限制，不允许这种粗化；同点send/recv的exchange也不能被随意合并，因为send可能被推迟到自己的recv之后。找不到合法合并便失败，不是继续发一个会溢出的计划。<a href=\"./evidence/hardware-sync-sources.md#hs-planner\">boundOutstanding:592–682</a>。</p>"
+      },
+      {
+        "id": "sp-virtual",
+        "title": "6. 静态势能不是硬件实时计数：一个必要反例",
+        "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 325\" role=\"img\" aria-label=\"同一静态程序，异步执行可有不同实时占用；静态位置与运行时间是两种坐标；示意不是RTL trace。\"><rect width=\"800\" height=\"325\" rx=\"16\" fill=\"#f5f2e9\"/><text x=\"22\" y=\"32\" fill=\"#273d35\" font-size=\"20\" font-family=\"system-ui,sans-serif\">同一静态程序，异步执行可有不同实时占用</text><text x=\"35\" y=\"80\" fill=\"#273d35\" font-size=\"17\" font-family=\"system-ui,sans-serif\">静态程序位置：</text><rect x=\"220\" y=\"52\" width=\"115\" height=\"48\" rx=\"9\" fill=\"#315c4c\"/><text x=\"234\" y=\"78\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">s₁</text><rect x=\"355\" y=\"52\" width=\"115\" height=\"48\" rx=\"9\" fill=\"#315c4c\"/><text x=\"369\" y=\"78\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">r₁</text><rect x=\"490\" y=\"52\" width=\"115\" height=\"48\" rx=\"9\" fill=\"#315c4c\"/><text x=\"504\" y=\"78\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">s₂</text><rect x=\"625\" y=\"52\" width=\"115\" height=\"48\" rx=\"9\" fill=\"#315c4c\"/><text x=\"639\" y=\"78\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">r₂</text><text x=\"35\" y=\"145\" fill=\"#273d35\" font-size=\"17\" font-family=\"system-ui,sans-serif\">虚拟区间峰值：</text><path d=\"M245 138 L410 138\" stroke=\"#315c4c\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M515 138 L680 138\" stroke=\"#315c4c\" stroke-width=\"2.5\" fill=\"none\"/><text x=\"35\" y=\"185\" fill=\"#273d35\" font-size=\"16\" font-family=\"system-ui,sans-serif\">最多1个区间跨过同一静态切点</text><text x=\"35\" y=\"245\" fill=\"#273d35\" font-size=\"17\" font-family=\"system-ui,sans-serif\">可能的实际事件序：</text><rect x=\"220\" y=\"217\" width=\"115\" height=\"48\" rx=\"9\" fill=\"#315c4c\"/><text x=\"234\" y=\"243\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">s₁：B=1</text><rect x=\"355\" y=\"217\" width=\"115\" height=\"48\" rx=\"9\" fill=\"#315c4c\"/><text x=\"369\" y=\"243\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">s₂：B=2</text><rect x=\"490\" y=\"217\" width=\"115\" height=\"48\" rx=\"9\" fill=\"#315c4c\"/><text x=\"504\" y=\"243\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">r₁：B=1</text><rect x=\"625\" y=\"217\" width=\"115\" height=\"48\" rx=\"9\" fill=\"#315c4c\"/><text x=\"639\" y=\"243\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">r₂：B=0</text><text x=\"22\" y=\"307\" fill=\"#53685c\" font-size=\"13\" font-family=\"system-ui,sans-serif\">静态位置与运行时间是两种坐标；示意不是RTL trace。</text></svg>\n<p>对非wrap token，论文的虚拟占用可写为区间指示函数Σ[s≤x&lt;r]；wrap还要加上来自上一周期的一份。实现为了保守包含边界，用闭区间版本计算峰值。这些都是在<strong>静态程序位置</strong>上的量，不是任意真实时间t的mail计数B(t)。</p><p>例中静态顺序s₁,r₁,s₂,r₂最多覆盖一个区间；非CT接收队列尚未消费r₁时，前端仍可能把s₂派发并让sender释放，真实事件可成为s₁,s₂,r₁,r₂，于是B峰值为2。因此不能声称“规划峰值1就证明硬件计数永不超过1”。真实计数最终受硬件满门控；规划预算要结合前向构造及等待关系证明，不能把静态区间当作实时容量trace。</p>"
+      },
+      {
+        "id": "sp-code",
+        "title": "7. 对照实现：哪一步已经做，哪一步还没做",
+        "html": "<p><code>buildStaircasePlan</code> 先建RegionTree，拒绝不支持形态，再collectPoints、planRegion、equalizeLoops。线性region用单周期，loop region用两周期展开处理距离0/1。<code>planStaircase</code> 保留period0对应token，并处理被下一迭代token覆盖的点；不能用本章的四点线性伪码代替全部循环算法。</p><p>后缀扫描本身线性，实际实现还包括bucket内排序、区域穿越、重复阶梯化、容量粗化和验证状态。因此“整个InjectSync严格O(n)”不是由这一段循环能够证明的结论。性能分析应分别记录资源分析、point收集、规划、验证与物化的时间，避免把大型CFG验证状态增长归咎于suffix最小值。</p><p>当前版本默认staircase，不支持会报错，需要legacy时显式选择；它不会在失败后悄悄回退。LaTeX还明确：一般全局事件图的独立无环检查尚未单独实现，当前C3依赖前向构造与容量约束。最终章节会说明这对“已经形式化证明无死锁”的表述有何限制。<a href=\"./evidence/hardware-sync-sources.md#hs-status\">源码与证据定位</a>、<a href=\"./evidence/hardware-sync-sources.md#hs-planner\">源码与证据定位</a>。</p>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "为什么不能一条依赖一条mail，最后检查计数相等？",
+        "a": "同channel无producer标签，recv按次序消费credit。交叉依赖的独立mail会让早recv吃掉不够晚的send，即使总数相等也会欠保护。必须共同规划全channel的配对。",
+        "followup": "对(1,2)与(2,1)手工给出安全token集合。"
+      },
+      {
+        "q": "staircase中的后缀最小值在解决什么约束？",
+        "a": "把较早send的recv推进到后续最早需求处，使send序与recv序一致，再把同recv的token合成最晚send。它牺牲部分overlap换取无标签计数器的可实现顺序。",
+        "followup": "同send多个consumer时，为什么实际代码先按recv降序排bucket？"
+      },
+      {
+        "q": "更晚send、更早recv是否一定合法？",
+        "a": "覆盖更强，但不保证站点可达、不会阻断producer、循环世代正确或容量无环。CT sticky wait、同点exchange和跨region穿越都需要额外约束。",
+        "followup": "举一个提前CT recv导致producer无法dispatch的环。"
+      },
+      {
+        "q": "为什么规划用62，硬件明明可数到63？",
+        "a": "为多来源mask recv保留余量。某channel有credit甚至已满，recv仍可能等待另一channel；物化阶段可能合并mask，因此规划不能仅按单channel满计数推理receiver位置。",
+        "followup": "如果只针对单来源保留余量，需要哪些跨阶段信息才能安全优化？"
+      },
+      {
+        "q": "静态占用峰值能作为真实mail counter的最大值吗？",
+        "a": "不能。静态s1,r1,s2,r2峰值1，异步执行可能先完成s1,s2，真实计数到2。静态势能用于构造和控制流证明，真实容量还受硬件背压与事件顺序影响。",
+        "followup": "你会怎样在RTL trace里测真实B(t)，并与静态计划对照？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "hs-chain",
+        "label": "mailbox 公理、阶梯、容量、循环与三项条件",
+        "url": "./evidence/hardware-sync-sources.md#hs-chain",
+        "note": "triton_shared/docs/mailbox-sync-chain-model/mailbox-sync-chain-model.tex:168；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-planner",
+        "label": "阶梯、容量粗化、循环配平",
+        "url": "./evidence/hardware-sync-sources.md#hs-planner",
+        "note": "triton_shared/lib/Dialect/ZeusLow/Transforms/InjectSync/Staircase/StaircasePlanning.cpp:442；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-status",
+        "label": "实际实现范围、SI 顺序与效果边界",
+        "url": "./evidence/hardware-sync-sources.md#hs-status",
+        "note": "triton_shared/docs/mailbox-sync-chain-model/mailbox-sync-chain-model.tex:1839；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-region-code",
+        "label": "区域树构建",
+        "url": "./evidence/hardware-sync-sources.md#hs-region-code",
+        "note": "triton_shared/lib/Dialect/ZeusLow/Transforms/InjectSync/Staircase/RegionTree.cpp:138；82613bc2eb30",
+        "kind": "源码"
+      }
+    ],
+    "takeaways": [
+      "mailbox没有事件标签；全channel顺序配对是正确性的一部分。",
+      "suffix minimum给出覆盖链，容量和控制流约束决定它能否物化。",
+      "少mail、少等待、无死锁与实时容量是不同目标，不能由一个计数指标互相替代。"
+    ]
+  },
+  {
+    "id": "sync-loop-branch-mailbox",
+    "title": "循环与分支：mail 的世代、seed、drain 和吸收",
+    "part": "518 硬件与同步",
+    "order": 38.6,
+    "subtitle": "跨迭代依赖不是多插一条回边，控制流上的每一条退出路径都要闭合",
+    "minutes": 58,
+    "level": "深入",
+    "tags": [
+      "loop",
+      "CFG",
+      "seed",
+      "drain",
+      "mailbox",
+      "RegionTree",
+      "控制流"
+    ],
+    "lead": "线性代码能把send和recv排成一条链，循环却会把上一轮的信用带进下一轮；嵌套循环又可能消费父区域的信用。需要同时管理数量、来源、世代和控制流路径，才能解释真实FFN与attention流水中的同步问题。",
+    "sections": [
+      {
+        "id": "lb-distance",
+        "title": "1. d=0 与 d=1：owner loop 决定“上一轮”是哪一轮",
+        "html": "<p>依赖点除producer、consumer和unit外，还携带迭代距离d及owner loop。d=0表示同一次owner迭代；d=1表示上一次producer保护下一次consumer。距离不是按IR文本相隔多少个block计算，owner也不是随便取两个op的最近公共循环。</p><p>例如外层N-tile循环中，先完成一段PE旧读，下一轮VP会覆盖同一个双缓冲槽；这是相应外层buffer生命周期的WAR。若PE内部又有C循环，不能把它误记成每个C迭代的回边，否则seed、send频率和drain次数都错。相邻源代码位置也不说明同一动态实例，必须按执行路径和循环边界定义。</p><p>当前模型的基本点处理距离0/1，周期构造将U与V的各自序列展开两期：<code>(U(p)+aL_U, V(c)+(a+d)L_V)</code>，a取0、1，再在展开序列上做阶梯，读出period0计划。更一般多期距离、非规整CFG不能未经证明就套用。<a href=\"./evidence/hardware-sync-sources.md#hs-chain\">源码与证据定位</a>、<a href=\"./evidence/hardware-sync-sources.md#hs-region-code\">源码与证据定位</a>。</p>"
+      },
+      {
+        "id": "lb-seed",
+        "title": "2. n=3、k=1：逐个追踪首轮和下一轮的信用",
+        "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 360\" role=\"img\" aria-label=\"每轮3次recv、1个跨迭代槽：按逻辑FIFO配对；教学 n=3,k=1 的逻辑配对；非实际trace，superscript表示迭代。\"><rect width=\"800\" height=\"360\" rx=\"16\" fill=\"#f5f2e9\"/><text x=\"22\" y=\"32\" fill=\"#273d35\" font-size=\"20\" font-family=\"system-ui,sans-serif\">每轮3次recv、1个跨迭代槽：按逻辑FIFO配对</text><rect x=\"25\" y=\"75\" width=\"145\" height=\"60\" rx=\"9\" fill=\"#315c4c\"/><text x=\"39\" y=\"101\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">入口 seed</text><text x=\"39\" y=\"124\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">初始化1份credit</text><rect x=\"230\" y=\"75\" width=\"245\" height=\"60\" rx=\"9\" fill=\"#315c4c\"/><text x=\"244\" y=\"101\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">第0轮：r₁ ← seed</text><text x=\"244\" y=\"124\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">r₂ ← s₁⁰；r₃ ← s₂⁰</text><rect x=\"535\" y=\"75\" width=\"240\" height=\"60\" rx=\"9\" fill=\"#315c4c\"/><text x=\"549\" y=\"101\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">第1轮：r₁ ← s₃⁰</text><text x=\"549\" y=\"124\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">r₂ ← s₁¹；r₃ ← s₂¹</text><path d=\"M170 105 L230 105\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M475 105 L535 105\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><rect x=\"230\" y=\"215\" width=\"245\" height=\"60\" rx=\"9\" fill=\"#315c4c\"/><text x=\"244\" y=\"241\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">第0轮结束留下 s₃⁰</text><text x=\"244\" y=\"264\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">数量仍为1，世代已变化</text><rect x=\"535\" y=\"215\" width=\"240\" height=\"60\" rx=\"9\" fill=\"#315c4c\"/><text x=\"549\" y=\"241\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">最终出口 drain</text><text x=\"549\" y=\"264\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">消费最后一轮 s₃</text><path d=\"M352 135 L352 215\" stroke=\"#b7945c\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M475 245 L535 245\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><text x=\"25\" y=\"310\" fill=\"#273d35\" font-size=\"17\" font-family=\"system-ui,sans-serif\">数量守恒不等于来源不变：每轮都把上一轮的credit换成新完成事件。</text><text x=\"22\" y=\"342\" fill=\"#53685c\" font-size=\"13\" font-family=\"system-ui,sans-serif\">教学 n=3,k=1 的逻辑配对；非实际trace，superscript表示迭代。</text></svg>\n<p>在距离只涉及本轮/上一轮且0≤k≤n的本节模型中，每轮n次send和n次recv，入口有k份初始化credit时，第i轮第j个recv的来源为：j&gt;k时取本轮send(j−k)；j≤k且i&gt;0时取上轮send(n+j−k)；首轮前k个recv取seed。这正是绕回依赖在第0轮没有前驱实例时的初始化。</p><p>seed不是“伪造一份已经算完的结果”。它只用于模型认定首轮没有真实前驱义务的槽位。若首轮consumer实际上需要外部producer，那就必须由真实完成信用或有证明的转移保护，不能填一个seed消除等待。退出时留下的最后k份信用也不能带到不相干后续循环继续消费。这里说的是应满足的语义；当前policy对seed空义务与部分epoch关系仍有独立认证缺口，见本模块最后一章。<a href=\"./evidence/hardware-sync-sources.md#hs-chain\">周期配对与offset公式</a>。</p>"
+      },
+      {
+        "id": "lb-exits",
+        "title": "3. 零轮、提前退出与多出口：为什么不是固定放 k 个 drain",
+        "html": "<p>零轮是最容易漏掉的边界。若入口路径已经投了seed而循环执行零轮，出口必须处理这些初始化信用；不能假设总有最后一次send替换它。若循环在第一个recv之后、send之前走side exit，剩余数量又与完整迭代不同。</p><p>实际 <code>equalizeLoops</code> 对每条exit edge计算sendCut和recvCut。一个token在该出口的静态信用数是 <code>(wrap?1:0)+[sendPos&lt;sendCut]−[recvPos&lt;recvCut]</code>；对channel求和得φ，再与应保留给父区域的e比较。φ&gt;e时drain差额，φ&lt;e时按允许的绕回槽补refill。出口不同，调整也可能不同。</p><p>这不是通过“每个exit随便加够mail使余额为零”来修数据依赖。drain消耗哪个逻辑信用、refill承担什么角色，仍须身份与覆盖验证；而带父区域吸收时目标势能可能是e，不是0。当前仅支持区域模型能识别的控制流，手写非规整side exit可能被拒绝；文中按出口配平的数学能力不代表所有任意CFG都已接入。<a href=\"./evidence/hardware-sync-sources.md#hs-planner\">equalizeLoops:839–894</a>。</p>"
+      },
+      {
+        "id": "lb-branches",
+        "title": "4. 分支汇合：相同计数状态只是第一道门",
+        "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 445\" role=\"img\" aria-label=\"CFG 汇合需要路径一致的势能与正确的信用来源；不合法方案的教学反例；真实实现须做分支下沉/提升与身份校验。\"><rect width=\"800\" height=\"445\" rx=\"16\" fill=\"#f5f2e9\"/><text x=\"22\" y=\"32\" fill=\"#273d35\" font-size=\"20\" font-family=\"system-ui,sans-serif\">CFG 汇合需要路径一致的势能与正确的信用来源</text><rect x=\"300\" y=\"60\" width=\"200\" height=\"52\" rx=\"9\" fill=\"#315c4c\"/><text x=\"314\" y=\"86\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">入口 Φ=0</text><rect x=\"75\" y=\"165\" width=\"255\" height=\"76\" rx=\"9\" fill=\"#315c4c\"/><text x=\"89\" y=\"191\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">then：有producer</text><text x=\"89\" y=\"214\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">send后 Φ=1</text><rect x=\"475\" y=\"165\" width=\"255\" height=\"76\" rx=\"9\" fill=\"#315c4c\"/><text x=\"489\" y=\"191\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">else：无producer</text><text x=\"489\" y=\"214\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">仍为 Φ=0</text><path d=\"M345 112 L205 165\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M455 112 L605 165\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><rect x=\"300\" y=\"300\" width=\"200\" height=\"58\" rx=\"9\" fill=\"#315c4c\"/><text x=\"314\" y=\"326\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">join：不能直接合流</text><text x=\"314\" y=\"349\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">路径状态不一致</text><path d=\"M205 241 L345 300\" stroke=\"#b25130\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M605 241 L455 300\" stroke=\"#b25130\" stroke-width=\"2.5\" fill=\"none\"/><text x=\"28\" y=\"393\" fill=\"#273d35\" font-size=\"16\" font-family=\"system-ui,sans-serif\">先确定consumer是否只属于then；不能用else的空seed冒充缺失的数据生产者。</text><text x=\"22\" y=\"427\" fill=\"#53685c\" font-size=\"13\" font-family=\"system-ui,sans-serif\">不合法方案的教学反例；真实实现须做分支下沉/提升与身份校验。</text></svg>\n<p>Φ=累计send−累计recv是控制流路径上的虚拟势能。若汇合点从then进来有一份、从else进来没有，后续同一recv的行为无法用单一状态解释。可根据义务把consumer与recv下沉到有效分支，在分支内部配平，或选择有共同有效完成证据的更外层站点；具体方案必须尊重dominance、post-dominance和真实数据语义。</p><p>即使两个分支都留下1，也不必然正确：它们可能代表不同producer、资源或世代。身份FIFO验证需要保留不同路径的合法来源集合，而不是只有一个整数。路径太多会出现验证状态预算；预算耗尽应诊断为分析无法完成，不应默认为成功。</p><p>当前候选策略对if下沉采用常数偏好，未接真实profile。因此可以解释它倾向避免无关路径等待，不能声称已按分支概率全局最优。<a href=\"./evidence/hardware-sync-sources.md#hs-regions\">源码与证据定位</a>、<a href=\"./evidence/hardware-sync-sources.md#hs-status\">源码与证据定位</a>。</p>"
+      },
+      {
+        "id": "lb-steal",
+        "title": "5. 父 credit 穿过子循环：数量对了，为什么仍被偷走",
+        "html": "<p>考虑父区域一条U→V token：P处send、Q处recv，中间有同channel的子循环S。S若也有seed和recv，进入后第一个recv看到的是FIFO队头的父credit，而不一定是它自带的seed；整个配对偏移一格。数完P到Q总send/recv仍可能一样，但子循环下一轮的读写或Q本身已经欠保护。</p><p>两种处理都有明确代价。<strong>提升</strong>把Q的recv移到S入口，先消费父credit，防止它流入S；这让整个S提前等待P。<strong>吸收</strong>则在S有可用wrap槽时，让父credit替代一个seed；S首轮该绕回槽没有前驱义务，出口留下更晚的wrap send继续保护Q。后者依赖U有序outbox及身份转移证明，可以保留更多overlap。</p><p>最简单k=1、e=1时，入口不额外seed，出口不drain该份：执行多轮后Q消费最后wrap send；零轮时父credit原样到Q。多槽不等于“每个父credit从原位置原样出来”：出口要drain队头k−e份，留下的槽是后面的k−e+i，必须分别证明入口和出口来源。<a href=\"./evidence/hardware-sync-sources.md#hs-regions\">提升、吸收与不变量</a>。</p>"
+      },
+      {
+        "id": "lb-order",
+        "title": "6. 变换次序也属于算法：最终站点确定后才能结算吸收",
+        "html": "<p>父token的穿越必须按动态在途顺序处理：wrap token先穿过本周期send之后的子区域，再穿过下一周期recv之前的子区域。按源码region列表从头扫可能先命中“下一周期”的区域，漏掉本周期会先消费信用的循环。</p><p>提升会让多个recv落到同一个入口，破坏原先阶梯的严格单调与唯一性，所以还要重新阶梯化。容量粗化又可能把多个token合成一个，改变真正跨过哪些子区域。吸收数量e与具体槽位必须在<strong>最终token站点</strong>确定后重新结算；暂定吸收后来不再成立，就撤销并恢复相应seed。</p><p>同程序点的发射顺序也不能随意：跨channel的初始化send一般要在阻塞recv之前，避免下游等待一个被本unit等待挡住的seed；但同channel的对角U→U不能机械交换，否则recv可能吃掉刚发的seed而不等目标producer。共享同点recv命令的exchange还要求先准备该点所有send，再创建那个recv。一次“统一排序优化”若抹掉这些区别，就会破坏证明。<a href=\"./evidence/hardware-sync-sources.md#hs-regions\">源码与证据定位</a>。</p>"
+      },
+      {
+        "id": "lb-implementation",
+        "title": "7. 实现入口与可复核的调试问题",
+        "html": "<p><code>RegionTree.cpp</code> 将可识别的序列、分支、循环组织成区域，并建立各unit自己的站点序。<code>buildStaircasePlan</code> 先拒绝unsupported reason，再收集义务点并递归规划。循环均衡由 <code>equalizeLoops</code> 处理，credit合法消费由独立policy和最终验证接住。</p><p>排查时按一条信用追问：它在哪条channel产生？属于哪个owner的第几轮？首轮是不是空义务？经过哪个子区域？有无登记吸收？实际recv是否仍在覆盖consumer之前？每条exit保留的来源集合是什么？若只看最终IR中mail数量，很难回答这些问题。</p><p>当前管线会在SCF降低前尝试把部分raw CFG提升为结构化形式；这能扩充实际输入覆盖，但不是把任何多入口、不可规约控制流都变成已支持。验证器切断已建模自然循环回边后仍发现CFG环，会拒绝，因为它已无法定义一致的epoch。这个检查与一般异步硬件事件图的完整死锁检查是两回事。<a href=\"./evidence/hardware-sync-sources.md#hs-region-code\">源码与证据定位</a>、<a href=\"./evidence/hardware-sync-sources.md#hs-checker\">源码与证据定位</a>。</p>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "为什么循环第一轮需要seed，它是否意味着硬件虚假完成？",
+        "a": "wrap依赖对应上一轮实例，首轮没有该实例，seed初始化这部分空义务。它不是通用的完成替身；首轮真实外部RAW仍需实际producer证据，不能随便填credit。",
+        "followup": "若循环执行零轮而入口已投seed，应由哪条路径处置？"
+      },
+      {
+        "q": "每轮send和recv数量相等，为什么出口还有信用？",
+        "a": "入口k份把配对偏移k个位置，每轮消费旧信用并产生新信用，完整迭代保持k份在途。最终需要drain或按吸收合同交还父区域，不是数量不平衡。",
+        "followup": "n3k1时，第1轮r1精确消费哪一个send？"
+      },
+      {
+        "q": "为什么side exit不能统一drain k次？",
+        "a": "退出可能在某些send/recv之前，实际静态φ随出口cut变化；父区域还可能要求保留e份。必须按每个exit计算φ−e，并验证消费来源和允许的refill角色。",
+        "followup": "退出在recv后send前时，哪个项改变？"
+      },
+      {
+        "q": "父token为什么会被子循环偷掉？",
+        "a": "同channel无标签，子循环第一个recv先消费队头父credit，导致其余seed和完成事件错位。提升先消费父credit；吸收则在有证明的空wrap槽上有意替代seed并登记来源转移。",
+        "followup": "多槽k2e1时，入口消费槽和出口保留槽是否相同？"
+      },
+      {
+        "q": "分支两边Φ都等于1，是否足够通过？",
+        "a": "只解决计数状态一致，不解决信用身份、资源与世代。两边必须各自提供能覆盖后续consumer的来源或合法替代链；无生产者路径不能靠空seed伪造数据。",
+        "followup": "验证器为何需要多个来源状态而不只是单个整数？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "hs-chain",
+        "label": "mailbox 公理、阶梯、容量、循环与三项条件",
+        "url": "./evidence/hardware-sync-sources.md#hs-chain",
+        "note": "triton_shared/docs/mailbox-sync-chain-model/mailbox-sync-chain-model.tex:168；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-regions",
+        "label": "区域提升、循环吸收与势能均衡",
+        "url": "./evidence/hardware-sync-sources.md#hs-regions",
+        "note": "triton_shared/docs/mailbox-sync-chain-model/mailbox-sync-chain-model.tex:1024；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-planner",
+        "label": "阶梯、容量粗化、循环配平",
+        "url": "./evidence/hardware-sync-sources.md#hs-planner",
+        "note": "triton_shared/lib/Dialect/ZeusLow/Transforms/InjectSync/Staircase/StaircasePlanning.cpp:442；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-region-code",
+        "label": "区域树构建",
+        "url": "./evidence/hardware-sync-sources.md#hs-region-code",
+        "note": "triton_shared/lib/Dialect/ZeusLow/Transforms/InjectSync/Staircase/RegionTree.cpp:138；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-checker",
+        "label": "覆盖、时点、循环与规范计划验证",
+        "url": "./evidence/hardware-sync-sources.md#hs-checker",
+        "note": "triton_shared/lib/Dialect/ZeusLow/Transforms/InjectSync/Staircase/StaircaseVerification.cpp:23；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-policy",
+        "label": "seed/drain 与 credit 身份策略",
+        "url": "./evidence/hardware-sync-sources.md#hs-policy",
+        "note": "triton_shared/lib/Dialect/ZeusLow/Transforms/InjectSync/Staircase/StaircaseCreditPolicy.cpp:105；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-status",
+        "label": "实际实现范围、SI 顺序与效果边界",
+        "url": "./evidence/hardware-sync-sources.md#hs-status",
+        "note": "triton_shared/docs/mailbox-sync-chain-model/mailbox-sync-chain-model.tex:1839；82613bc2eb30",
+        "kind": "源码"
+      }
+    ],
+    "takeaways": [
+      "循环同步同时管理数量、身份和世代；d与owner必须和真实buffer生命周期对齐。",
+      "seed/drain是控制流配平机制，不能替代真实数据完成。",
+      "提升、重新阶梯化、吸收结算与物化排序共同决定最终正确性。"
+    ]
+  },
+  {
+    "id": "sync-proof-implementation",
+    "title": "同步闭环：从冻结模型到最终指令，证明做到哪一层",
+    "part": "518 硬件与同步",
+    "order": 39,
+    "subtitle": "把实现入口、独立验证、真实拒绝用例与硬件协同设计连起来",
+    "minutes": 52,
+    "level": "深入",
+    "tags": [
+      "InjectSync",
+      "验证",
+      "provenance",
+      "C1/C2/C3",
+      "deadlock",
+      "RTL",
+      "面试案例"
+    ],
+    "lead": "强的编译器回答不仅解释算法怎样工作，还能指出它依赖哪些硬件公理、验证器检查哪些结论、哪些错误仍需真实RTL和跨核业务证据。这里沿实际代码入口收拢前六章，避免把设计文档里的充分条件误说成已经完成的全硬件形式化证明。",
+    "sections": [
+      {
+        "id": "pv-pipeline",
+        "title": "1. 真正的实现流水：先冻结，再验证，最后物化",
+        "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 350\" role=\"img\" aria-label=\"InjectSyncPass 的真实职责边界；由冻结SHA代码调用点归纳；省略与本章无关的选项及证书处理。\"><rect width=\"800\" height=\"350\" rx=\"16\" fill=\"#f5f2e9\"/><text x=\"22\" y=\"32\" fill=\"#273d35\" font-size=\"20\" font-family=\"system-ui,sans-serif\">InjectSyncPass 的真实职责边界</text><rect x=\"25\" y=\"75\" width=\"225\" height=\"75\" rx=\"9\" fill=\"#315c4c\"/><text x=\"39\" y=\"101\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">① 构建 effect / resource</text><text x=\"39\" y=\"124\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">buildFunctionDependencyModel</text><text x=\"39\" y=\"147\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">只读IR并冻结模型</text><rect x=\"285\" y=\"75\" width=\"230\" height=\"75\" rx=\"9\" fill=\"#315c4c\"/><text x=\"299\" y=\"101\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">② 验证计划</text><text x=\"299\" y=\"124\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">verifyDependencyModels</text><text x=\"299\" y=\"147\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">独立重建查询索引</text><rect x=\"550\" y=\"75\" width=\"225\" height=\"75\" rx=\"9\" fill=\"#315c4c\"/><text x=\"564\" y=\"101\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">③ 单一物化入口</text><text x=\"564\" y=\"124\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">materialize…Schedule</text><text x=\"564\" y=\"147\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">生成mail指令 / mask</text><path d=\"M250 112 L285 112\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M515 112 L550 112\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><rect x=\"285\" y=\"220\" width=\"230\" height=\"75\" rx=\"9\" fill=\"#315c4c\"/><text x=\"299\" y=\"246\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">④ 检查最终结果</text><text x=\"299\" y=\"269\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">semantics + provenance</text><text x=\"299\" y=\"292\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">mailbox balance</text><path d=\"M665 150 L665 258\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M665 258 L515 258\" stroke=\"#8b9b8e\" stroke-width=\"2.5\" fill=\"none\"/><text x=\"25\" y=\"258\" fill=\"#273d35\" font-size=\"16\" font-family=\"system-ui,sans-serif\">失败保留诊断；</text><text x=\"25\" y=\"284\" fill=\"#273d35\" font-size=\"16\" font-family=\"system-ui,sans-serif\">不能绕过计划另插一套mail。</text><text x=\"22\" y=\"332\" fill=\"#53685c\" font-size=\"13\" font-family=\"system-ui,sans-serif\">由冻结SHA代码调用点归纳；省略与本章无关的选项及证书处理。</text></svg>\n<p>在 <code>InjectSyncPass.cpp:248–264</code>，每个函数建立dominance与post-dominance并调用 <code>buildFunctionDependencyModel</code>。模型构建使用只读IR拓扑查询作用域。341–346行在物化前调用 <code>verifyDependencyModels</code>，重新构造查询索引，不共享admission结论来“自证”。</p><p>372–375行只从冻结的 <code>physicalMailboxSchedule</code> 物化；阶段开关用于差分调试/筛选ownership，不重新启用各阶段各插mail的旧lowering。物化后还检查输出instruction semantics、最终token provenance，以及按选项启用的mailbox balance。默认planner为staircase，legacy必须显式选取，不支持形态会fail-loud。<a href=\"./evidence/hardware-sync-sources.md#hs-pass\">源码与证据定位</a>、<a href=\"./evidence/hardware-sync-sources.md#hs-status\">源码与证据定位</a>。</p>"
+      },
+      {
+        "id": "pv-three",
+        "title": "2. 三项性质各抓哪类错误",
+        "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 325\" role=\"img\" aria-label=\"C1、C2、C3：三扇不同的门；这是模型中的充分条件分解；当前实现并未单独构建一般全局事件图。\"><rect width=\"800\" height=\"325\" rx=\"16\" fill=\"#f5f2e9\"/><text x=\"22\" y=\"32\" fill=\"#273d35\" font-size=\"20\" font-family=\"system-ui,sans-serif\">C1、C2、C3：三扇不同的门</text><rect x=\"25\" y=\"85\" width=\"235\" height=\"118\" rx=\"9\" fill=\"#315c4c\"/><text x=\"39\" y=\"111\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">C1 数量 / 路径</text><text x=\"39\" y=\"134\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">汇合余额一致</text><text x=\"39\" y=\"157\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">前缀非负、最终归零</text><text x=\"39\" y=\"180\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">抓泄漏、缺失和错频率</text><rect x=\"285\" y=\"85\" width=\"230\" height=\"118\" rx=\"9\" fill=\"#315c4c\"/><text x=\"299\" y=\"111\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">C2 语义覆盖</text><text x=\"299\" y=\"134\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">recv所消费的credit</text><text x=\"299\" y=\"157\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">确能证明目标producer</text><text x=\"299\" y=\"180\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">抓配错来源与世代</text><rect x=\"540\" y=\"85\" width=\"235\" height=\"118\" rx=\"9\" fill=\"#315c4c\"/><text x=\"554\" y=\"111\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">C3 等待无环</text><text x=\"554\" y=\"134\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">包含容量与退休资源</text><text x=\"554\" y=\"157\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">在明确硬件公理下</text><text x=\"554\" y=\"180\" fill=\"#fff\" font-size=\"16\" font-family=\"system-ui,sans-serif\">抓循环等待</text><text x=\"35\" y=\"260\" fill=\"#273d35\" font-size=\"18\" font-family=\"system-ui,sans-serif\">计数正确 ≠ 数据正确；数据依赖覆盖 ≠ 所有硬件等待一定可前进。</text><text x=\"22\" y=\"307\" fill=\"#53685c\" font-size=\"13\" font-family=\"system-ui,sans-serif\">这是模型中的充分条件分解；当前实现并未单独构建一般全局事件图。</text></svg>\n<p>C1用程序路径上的势能约束计数：在相同汇合点各前驱一致、选定综合范围内前缀不负、函数出口清空。C2检查实际配对的credit能够覆盖义务的producer及其事件、consumer及时点。C3检查由issue、reserve、write-accept、done、release、lane/outbox容量与mail满门控形成的等待图是否无环。</p><p>文档给出的结论是，在相应硬件公理与模型范围内，C1∧C2∧C3足以保证所建模依赖及进展。反向并不成立：C1的程序序非负是当前综合范围的保守约束；某些非CT队列先等、前端继续发后面的sender的物理合法程序，可能不属于该范围。规划器拒绝一个形态，不自动证明硬件绝无合法执行方案。<a href=\"./evidence/hardware-sync-sources.md#hs-chain\">C1–C3 与充分性边界</a>。</p>"
+      },
+      {
+        "id": "pv-boundary",
+        "title": "3. 当前证明边界：C2 有接受豁免，C3 没有一般事件图检查",
+        "html": "<p><code>verifyStaircasePhysicalMailboxSchedule</code> 依次检查计划存在与unsupported、义务覆盖、DMA策略点、时点、冻结completion anchors、循环站点；若切掉已建模自然循环回边后仍有CFG环则拒绝。它确保可以定义循环epoch，不是把异步硬件全部资源建立成一个G并做完整死锁证明。</p><p><strong>C2也没有在所有接受路径上独立闭合。</strong>LaTeX 1728–1739把循环依赖的语义认证列为首要缺口；当前policy仍有四类豁免：同token的loop-carried obligation跳过完整覆盖；同token的equalization seed直接通过，未独立认证该次依赖确实为空；已登记absorption的出口carrier依赖转移登记与owner epoch条件；sunk point按planner标记跳过覆盖。问题在于冻结schedule还没有完整表达send所属epoch，不能宣称所有跨token替代都检查了完成界。<a href=\"./evidence/hardware-sync-sources.md#hs-identity-doc\">身份认证的明确未闭合项</a>。</p><p>LaTeX的实现状态还明确写到：当前C3依赖前向构造和容量约束，<strong>未单独实现一般事件图检查</strong>；profile成本粗化、重排也尚未接入。理论证明还要求相关事件不丢失及公平推进，RTL里某些FIFO满时事件路径的疑点没有被一般等待边自动表达。不能从“测试都过了”跨越到“对所有RTL状态完成形式化验证”。</p><p>准确的面试表述是：在限定资源与控制流域内，规划构造和多层检查共同约束覆盖、身份、配平、容量与站点；但上述C2接受路径仍依赖构造断言，C3也未形成一般独立事件图检查。对epoch认证、未建模硬件行为、跨核协议和新队列压力仍需补合同及证据。说清这个边界不会削弱工作深度，反而说明知道证明的对象是什么。<a href=\"./evidence/hardware-sync-sources.md#hs-checker\">源码与证据定位</a>、<a href=\"./evidence/hardware-sync-sources.md#hs-status\">源码与证据定位</a>。</p>"
+      },
+      {
+        "id": "pv-provenance",
+        "title": "4. 为什么最终 provenance 检查不能省",
+        "html": "<p>规划器输出正确，不代表物化结果一定正确。将两个recv OR成一条mask、把standalone MAIL吸收到计算指令、调整同点send/recv顺序，都会改变真实配对或阻塞位置。最终ledger要从已生成指令重建事件，检查每个send/recv是否来自计划、所在站点是否仍符合锚点、覆盖义务有没有遗失。</p><p>credit身份是软件验证信息，硬件计数器并不储存它。policy的目标是允许有证明的替代，例如阶梯合并使用较晚完成、循环吸收转移来源，并拒绝任意替代；实际独立覆盖检查仍受上一节四类豁免限制。<code>StaircaseCreditPolicy.cpp</code> 将equalization drain、seed与obligation completion区别处理：语义上，允许丢弃的配平credit不能反向解释成任意数据consumer的完成证据；实现中same-token seed与registered absorption的提前接受正是需要进一步认证的地方。</p><p>独立验证不意味着凭空获得独立硬件真相。规划与验证仍可能共享有误的effect registry或RTL合同；因此需要反例测试与硬件验证补足。把同一个“reason字符串”同时作为planner决定和verifier通过依据，等于循环论证；应重新检查它声称的资源、顺序与可达性条件。<a href=\"./evidence/hardware-sync-sources.md#hs-policy\">源码与证据定位</a>、<a href=\"./evidence/hardware-sync-sources.md#hs-pass\">源码与证据定位</a>。</p>"
+      },
+      {
+        "id": "pv-fixtures",
+        "title": "5. 两个已入库测试说明如何分开机制与具体编排",
+        "html": "<p><code>inject_sync_dependency_unmodeled_cfg_cycle.mlir</code> 构造left/right互相跳转的非规整CFG。它显式指定legacy来检查“切掉建模自然回边仍有环，无法定义epoch”的诊断；文件同时声明默认staircase会更早以region不支持拒绝。它不是staircase已支持该CFG的证据。</p><pre><code>// Exact excerpt: tracked fixture's CHECK line.\n// CHECK: error: physical mailbox verifier cannot define loop epochs because cutting every modeled natural-loop backedge still leaves a CFG cycle</code></pre><p><code>inject_sync_dependency_no_fallback_gate.mlir</code> 的前几条RUN用legacy检查具体report编排，但另有默认planner的 <code>require-dependency-model-no-fallback verify-mailbox-balance</code> 语义门禁。前者适合钉住某规划策略的回归；后者避免把一种合法MAIL布局当作唯一正确答案。该文件列出ST→PE的跨迭代L2Region WAR与PE→ST RAW预期，体现“读生命周期”而不是仅做producer→consumer张量图。</p><aside class=\"callout\">以上只读测试源码与FileCheck预期。本轮没有执行RUN行、没有产生新IR、没有获得新的lit/VCS PASS。测试中的legacy report计数不能冒充默认staircase输出。</aside><p><a href=\"./evidence/hardware-sync-sources.md#hs-fixture-cycle\">真实拒绝夹具</a>、<a href=\"./evidence/hardware-sync-sources.md#hs-fixture-gate\">规划器布局与语义门禁夹具</a>。</p>"
+      },
+      {
+        "id": "pv-debug",
+        "title": "6. 一个跨源码、验证与真实业务的定位闭环",
+        "html": "<ol><li><strong>冻结输入：</strong>保存业务kernel、shape、layout、dtype、动态参数、编译器SHA、最终zbin与模拟/RTL配置；最小例与业务例并存。</li><li><strong>找错事件：</strong>错误是descriptor锁存、L2数据值、计数器等待、write-retire还是跨核配对；定位第一个偏离，不从最终timeout猜根因。</li><li><strong>重建义务：</strong>列资源区间、access种类、unit/lane、owner/distance和需要的完成锚点；核对真实地址复用与BReg物理ID。</li><li><strong>追一条信用：</strong>沿计划、物化指令和运行事件确认send/recv的来源及世代；比较先后关系，不能只数mail数量。</li><li><strong>验证分层：</strong>静态契约和负例先说明编译器应接受/拒绝什么；功能参考说明数值；CycleSim/VCS说明各自覆盖的执行和时序；跨核业务说明真实ABI。</li><li><strong>确认收益：</strong>若删mail或改地址，重新比较同shape/频率/配置的wall与component区间，确认消除的是额外等待，不是省略必要完成。</li></ol><p>修复材料应包含“失败前输入→错误假设→修改后的合同→反例→业务验证范围”，而不是只有一份最小单测或一张更短的trace截图。若未跑RTL或未覆盖双核，结论直接写清，不用“已全面验证”掩盖缺口。</p>"
+      },
+      {
+        "id": "pv-codesign",
+        "title": "7. 资深架构追问：如果改 ISA，怎样衡量价值",
+        "html": "<p>当前每对unit一个计数channel，交叉义务必须通过阶梯提前等待。一个可讨论的<strong>未来设计</strong>是每对unit增加Q个独立channel并由指令选ID：将点按双轴偏序分成Q条同序链，交叉点若分到不同链，就能保留更晚recv，减少无标签FIFO造成的额外同步。最大反链宽度给出在简化模型下避免这些交叉等待所需的最少链数。</p><p>这不是现有518 ISA功能，也不是增加channel必然提速的承诺。需要同时评估计数器/指令编码成本、outbox压力、分配算法、跨region生命周期、调试可观测性和新验证状态空间。另一个方向是暴露更细的read-complete或write-accepted事件，从而缩短WAR保护生命周期；但如果硬件事件定义不稳定，软件就会承担更多错误风险。</p><p>面试最后可以把个人经历落成可核查叙事：我面对哪条硬件约束、如何把它转成资源模型、在哪个最小反例发现旧规则不够、怎样修订规划/验证/指令合同、业务收益用了什么计时口径。具体作者与MR比例另需历史证据；本教材提供机制与证据路径，不代替贡献归属审计。<a href=\"./evidence/hardware-sync-sources.md#hs-status\">硬件推广讨论与当前范围</a>。</p>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "你的同步验证是否已经证明RTL永远不会死锁？",
+        "a": "没有这样的无条件结论。C2对同token loop-carried、equalization seed、registered absorption carrier和sunk点仍有接受豁免；C3依赖前向性与容量条件，未单独实现一般事件图检查。还需无丢事件、公平推进与跨核配对等前提。",
+        "followup": "哪些未建模的FIFO或完成信号行为会使等待图证明失效？"
+      },
+      {
+        "q": "物化前计划已验证，为什么还要最终ledger？",
+        "a": "mask合并、MAIL吸收、同点排序或其他输出变化可能改变真实send/recv站点和配对。最终验证从生成指令重建provenance，确认结果实现了冻结计划，而不是只相信中间结构。",
+        "followup": "如何构造只改物化顺序就能被最终检查拒绝的负例？"
+      },
+      {
+        "q": "测试应该钉住一条具体MAIL布局吗？",
+        "a": "策略回归可以，但语义测试应允许其他合法布局。现有夹具把legacy report编排与默认planner的no-fallback/balance门禁区分，避免更换规划器时把正确改进误判失败。",
+        "followup": "仅balance门禁还缺哪种能抓错producer来源的检查？"
+      },
+      {
+        "q": "验证器拒绝一个计划是否证明硬件不可能执行？",
+        "a": "不一定。C1及身份策略属于保守充分条件，unsupported CFG或未登记的合法替代也可能被拒绝。应区分真实反例、超出支持域和验证能力不足，同时保持fail-closed。",
+        "followup": "怎样扩充验证域而不通过放宽成无条件接受？"
+      },
+      {
+        "q": "新增多个mail channel能解决什么，不能解决什么？",
+        "a": "它可将交叉依赖分到多条同序链，减少一个无标签计数器造成的提前等待；不能修复漏建物理alias、错误完成事件、跨核配对失效或真实资源不足。成本包括硬件状态和更复杂的channel分配与生命周期验证。",
+        "followup": "你会用哪些真实kernel统计来决定值得增加多少channel？"
+      },
+      {
+        "q": "为什么重建一次相同schedule还不能证明循环语义正确？",
+        "a": "构造器可稳定地产生同一个错误；重建只能发现计划被改坏。冻结schedule尚未完整记录send的epoch归属，部分policy分支仍信任构造标记。需要将epoch/动态实例关系变成可独立检查的事实，才有机会关闭这些豁免。",
+        "followup": "怎样为同token首轮seed增加独立的空义务认证而不误拒合法吸收链？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "hs-pass",
+        "label": "分析冻结、验证、物化与最终检查入口",
+        "url": "./evidence/hardware-sync-sources.md#hs-pass",
+        "note": "triton_shared/lib/Dialect/ZeusLow/Transforms/InjectSyncPass.cpp:210；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-chain",
+        "label": "mailbox 公理、阶梯、容量、循环与三项条件",
+        "url": "./evidence/hardware-sync-sources.md#hs-chain",
+        "note": "triton_shared/docs/mailbox-sync-chain-model/mailbox-sync-chain-model.tex:168；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-checker",
+        "label": "覆盖、时点、循环与规范计划验证",
+        "url": "./evidence/hardware-sync-sources.md#hs-checker",
+        "note": "triton_shared/lib/Dialect/ZeusLow/Transforms/InjectSync/Staircase/StaircaseVerification.cpp:23；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-policy",
+        "label": "seed/drain 与 credit 身份策略",
+        "url": "./evidence/hardware-sync-sources.md#hs-policy",
+        "note": "triton_shared/lib/Dialect/ZeusLow/Transforms/InjectSync/Staircase/StaircaseCreditPolicy.cpp:105；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-status",
+        "label": "实际实现范围、SI 顺序与效果边界",
+        "url": "./evidence/hardware-sync-sources.md#hs-status",
+        "note": "triton_shared/docs/mailbox-sync-chain-model/mailbox-sync-chain-model.tex:1839；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-fixture-cycle",
+        "label": "无法定义循环epoch的真实拒绝测试",
+        "url": "./evidence/hardware-sync-sources.md#hs-fixture-cycle",
+        "note": "triton_shared/test/ZeusV3Backend/Unit/Transforms/inject_sync_dependency_unmodeled_cfg_cycle.mlir:1；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-fixture-gate",
+        "label": "no-fallback与规划器布局的测试分层",
+        "url": "./evidence/hardware-sync-sources.md#hs-fixture-gate",
+        "note": "triton_shared/test/ZeusV3Backend/Unit/Transforms/inject_sync_dependency_no_fallback_gate.mlir:1；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-planner-option",
+        "label": "默认 staircase 与显式 legacy 选项",
+        "url": "./evidence/hardware-sync-sources.md#hs-planner-option",
+        "note": "triton_shared/include/triton-shared/Dialect/ZeusLow/Transforms/Passes.td:120；82613bc2eb30",
+        "kind": "源码"
+      },
+      {
+        "id": "hs-identity-doc",
+        "label": "C2 身份验证与四类明确未闭合的接受路径",
+        "url": "./evidence/hardware-sync-sources.md#hs-identity-doc",
+        "note": "triton_shared/docs/mailbox-sync-chain-model/mailbox-sync-chain-model.tex:1689；82613bc2eb30",
+        "kind": "源码"
+      }
+    ],
+    "takeaways": [
+      "当前实现有明确的分析、验证、单一物化、最终provenance闭环。",
+      "C1数量、C2覆盖、C3进展分别讨论；当前C2有明确豁免，C3无一般独立事件图检查。",
+      "真实面试案例要同时展示机制、失败反例、验证边界和收益口径。"
+    ]
+  }
+]

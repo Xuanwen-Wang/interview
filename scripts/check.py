@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Validate authored chapter references and portable build invariants."""
+import ast
 import json
+from collections import Counter
 import re
 from pathlib import Path
 from urllib.parse import urlsplit, unquote
@@ -10,6 +12,32 @@ ROOT = Path(__file__).resolve().parent.parent
 rows = [c for p in sorted((ROOT / 'content').glob('*.json')) for c in json.loads(p.read_text(encoding='utf-8'))]
 chapters = {c['id']: c for c in rows}
 errors = []
+catalog = json.loads((ROOT / 'config/navigation.json').read_text())
+modules = {m['id']: m for m in catalog['modules']}
+reports = json.loads((ROOT / 'config/interviews.json').read_text())
+companies = json.loads((ROOT / 'config/companies.json').read_text())
+company_map = {c['id']: c for c in companies}
+assert len(modules) == len(catalog['modules']), 'Duplicate module'
+assert len(company_map) == len(companies), 'Duplicate company'
+report_ids = {r['id'] for r in reports}
+assert len(report_ids) == len(reports), 'Duplicate report'
+placements = Counter(cid for m in modules.values() for g in m['groups'] for cid in g['chapters'])
+assert set(placements) == set(chapters), f'Catalog mismatch: {set(placements) ^ set(chapters)}'
+assert all(n == 1 for n in placements.values()), 'A chapter must have exactly one primary location'
+for m in modules.values():
+    assert re.fullmatch(r'[a-z0-9-]+', m['id'])
+    assert len({g['id'] for g in m['groups']}) == len(m['groups']), m['id']
+    for g in m['groups']:
+        assert g['chapters'] and re.fullmatch(r'[a-z0-9-]+', g['id']), g
+for c in companies:
+    assert set(c['reports']) <= report_ids and set(c['chapters']) <= set(chapters), c
+for r in reports:
+    assert r['category'] in {'job', 'report', 'takehome', 'reading'}, r
+    assert all(r.get(k) for k in ['title','url','date','experience','topics','note','checked']), r
+    assert urlsplit(r['url']).scheme == 'https' and urlsplit(r['url']).netloc, r
+reference_source = (ROOT / 'practice/reference.py').read_text()
+reference_functions = {node.name: ast.get_source_segment(reference_source, node) for node in ast.parse(reference_source).body if isinstance(node, (ast.FunctionDef, ast.ClassDef))}
+
 
 def check_link(url, where):
     if url.startswith(('https://', 'http://')):
@@ -22,7 +50,13 @@ def check_link(url, where):
                 errors.append(f'{where}: missing chapter {url}')
             elif len(parts) > 2 and parts[2] not in ({s['id'] for s in chapters[parts[1]]['sections']} | {'questions', 'takeaways', 'references', 'notes'}):
                 errors.append(f'{where}: missing section {url}')
-        elif parts[0] not in {'home', 'lab', 'sources', 'practice', 'notebook', 'glossary'}:
+        elif parts[0] == 'module':
+            if len(parts) < 2 or parts[1] not in modules or (len(parts) > 2 and parts[2] not in {g['id'] for g in modules[parts[1]]['groups']}):
+                errors.append(f'{where}: missing topic {url}')
+        elif parts[0] == 'company':
+            if len(parts) != 2 or parts[1] not in company_map:
+                errors.append(f'{where}: missing company {url}')
+        elif parts[0] not in {'home', 'catalog', 'companies', 'lab', 'sources', 'practice', 'notebook', 'glossary'}:
             errors.append(f'{where}: unsupported route {url}')
         return
     path, _, anchor = url.partition('#')
@@ -36,8 +70,11 @@ class CheckHTML(HTMLParser):
     def __init__(self, label):
         super().__init__()
         self.label, self.ids = label, set()
+        self.reference, self.code = None, []
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
+        if tag == 'pre' and a.get('data-reference'):
+            self.reference, self.code = a['data-reference'], []
         if 'id' in a:
             if a['id'] in self.ids:
                 errors.append(f'{self.label}: duplicate HTML id {a["id"]}')
@@ -46,6 +83,15 @@ class CheckHTML(HTMLParser):
             check_link(a['href'], self.label)
         if tag == 'svg' and ('viewbox' not in a or not a.get('aria-label')):
             errors.append(f'{self.label}: SVG requires viewBox and accessible label')
+
+    def handle_data(self, data):
+        if self.reference:
+            self.code.append(data)
+    def handle_endtag(self, tag):
+        if tag == 'pre' and self.reference:
+            if ''.join(self.code).strip() != reference_functions.get(self.reference, '').strip():
+                errors.append(f'{self.label}: stale code example {self.reference}')
+            self.reference = None
 
 for c in rows:
     assert len(c['sections']) >= 5, c['id']
@@ -69,4 +115,4 @@ assert not re.search(r'(?:ghp_|github_pat_|sk-proj-)[A-Za-z0-9_]{15,}', html)
 assert not re.search(r'/data/wangxw/home|/home/wangxw|172\.16\.\d+\.\d+', html)
 if errors:
     raise SystemExit('\n'.join(errors))
-print(f'PASS: {len(rows)} chapters; internal routes, source files/anchors, SVG labels, portable HTML and credential patterns checked.')
+print(f'PASS: {len(modules)} modules, {len(rows)} chapters, {len(companies)} company groups, {len(reports)} reports; catalog ownership, code example parity, internal routes, source files/anchors, SVG labels, portable HTML and credential patterns checked.')

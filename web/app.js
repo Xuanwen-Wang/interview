@@ -3,6 +3,7 @@ const $ = (s, root = document) => root.querySelector(s);
 const $$ = (s, root = document) => [...root.querySelectorAll(s)];
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const plain = html => { const d = document.createElement('div'); d.innerHTML = html; return d.textContent || ''; };
+const sectionTitle = title => title.replace(/^\d+(?:\.\s*|\s*\/\s*)/, '');
 const STORE_KEY = 'interview-field-notes-v1';
 const emptyState = () => ({read: [], notes: {}, practice: {}, last: null});
 function normalizeState(raw) {
@@ -27,7 +28,6 @@ function save() {
   localStorage.setItem(STORE_KEY,JSON.stringify(merged));state=merged;stateBase=JSON.parse(JSON.stringify(state));
  }catch{toast('浏览器未允许保存，请导出笔记备份。');}
 }
-const parts = [...new Set(CHAPTERS.map(c => c.part))];
 const questions = CHAPTERS.flatMap(c => c.questions.map(q => ({...q, chapter: c.id, title: c.title, part: c.part, key: c.id + ':' + (q.id || q.q)})));
 const sources = CHAPTERS.flatMap(c => c.sources.map(s => ({...s, chapter: c.id, chapterTitle: c.title})));
 const searchIndex = CHAPTERS.flatMap(c => [{chapter: c.id, title: c.title, subtitle: c.part, body: c.lead + ' ' + c.tags.join(' '), link: '#chapter/' + c.id}, ...c.sections.map(s => ({chapter:c.id,title:s.title,subtitle:c.title,body:plain(s.html),link:'#chapter/'+c.id+'/'+s.id})), ...c.questions.map(q => ({chapter:c.id,title:q.q,subtitle:'面试追问 · '+c.title,body:q.a+' '+q.followup,link:'#chapter/'+c.id+'/questions'}))]);
@@ -37,11 +37,7 @@ function progress() {
  $('#progress-bar').style.width = (n / CHAPTERS.length * 100) + '%';
  $$('#chapter-nav a').forEach(a => a.classList.toggle('read', state.read.includes(a.dataset.chapter)));
 }
-function nav() {
- $('#chapter-count').textContent = String(CHAPTERS.length).padStart(2, '0');
- $('#chapter-nav').innerHTML = parts.map(p => `<div class="nav-part">${esc(p)}</div>${CHAPTERS.filter(c=>c.part===p).map(c=>`<a href="#chapter/${c.id}" data-chapter="${c.id}"><i>${String(CHAPTERS.indexOf(c)+1).padStart(2,'0')}</i><span>${esc(c.title)}</span></a>`).join('')}`).join('');
- progress();
-}
+function nav(){const [route,id]=(location.hash.slice(1)||'home').split('/');renderNavigation(route,id);}
 function heroArt() { return `<div class="hero-art"><svg viewBox="0 0 490 346" role="img" aria-label="从模型语义经编译IR、资源调度到芯片执行的四层映射图">
 <defs><marker id="hero-arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0 0L6 3L0 6" fill="none" stroke="#7d9772"/></marker></defs>
 <g fill="none" stroke="#ccd6c4"><path d="M42 55H445M42 126H445M42 197H445M42 268H445" stroke-dasharray="3 5"/></g>
@@ -53,28 +49,21 @@ function heroArt() { return `<div class="hero-art"><svg viewBox="0 0 490 346" ro
 <g transform="translate(67 271)"><rect width="356" height="48" rx="4" fill="#244a38"/><g fill="#d2dfbe" font-family="monospace" font-size="11"><text x="51" y="29">PE</text><text x="132" y="29">VP</text><text x="219" y="29">DT</text><text x="303" y="29">CT</text></g><g stroke="#577b56"><path d="M91 9V39M177 9V39M265 9V39"/></g></g>
 <path d="M410 65h24v224h-10" fill="none" stroke="#c27c4d" stroke-dasharray="4 4"/><text x="454" y="190" font-family="monospace" font-size="8" fill="#b07951" transform="rotate(90 454 190)">EVIDENCE / FEEDBACK</text></svg><div class="art-caption">FIG. 01 — ONE WORKLOAD, FOUR LEVELS OF REASONING</div></div>`; }
 function card(c) { const i = CHAPTERS.indexOf(c); return `<a class="chapter-card" href="#chapter/${c.id}"><div class="card-top"><b>${String(i+1).padStart(2,'0')} / ${esc(c.level)}</b><span>${c.minutes} MIN</span></div><h3>${esc(c.title)}</h3><p>${esc(c.subtitle)}</p><div class="card-foot"><span>${esc(c.tags.slice(0,2).join(' · '))}</span><span>${state.read.includes(c.id)?'已读 ✓':'开始阅读 ↗'}</span></div></a>`; }
-function renderHome() {
- const n = CHAPTERS.reduce((a,c)=>a+c.sections.length,0);
- $('#main').innerHTML = `<section class="hero"><div><div class="eyebrow">A FIELD GUIDE TO AI COMPILERS</div><h1>从模型，到指令。<br><em>把两年的工作，<br>讲到每一层。</em></h1><p>以 518 / Zeus 与 GLM5Next 为线索，重建算法、算子、编译器和芯片之间的联系。既能从零复习，也能沿着真实案例，一直追问到源码与证据。</p><div class="hero-actions"><a class="primary" href="#chapter/${CHAPTERS[0].id}">打开学习路线 <span>↗</span></a><a class="text-link" href="#lab">动手理解性能曲线 →</a></div></div>${heroArt()}</section>
- <div class="stats"><div class="stat"><b>${CHAPTERS.length}</b><span>深度章节<br>从基础到工程</span></div><div class="stat"><b>${n}</b><span>知识切面<br>公式 · 图解 · 反例</span></div><div class="stat"><b>${questions.length}</b><span>面试追问<br>先表达，再看答案</span></div><div class="stat"><b>03</b><span>交互实验<br>容量 · 性能 · 拓扑</span></div></div>
- <div class="section-head"><div><div class="eyebrow">THE KNOWLEDGE MAP</div><h2 style="margin-top:9px">一张地图，串起整个技术栈</h2></div><p>建议先沿主线通读，再按岗位查缺补漏。</p></div>
- <div class="route-tabs" id="route-tabs"><button class="active" data-part="all">全部章节</button>${parts.map(p=>`<button data-part="${esc(p)}">${esc(p)}</button>`).join('')}</div><div class="chapter-grid" id="chapter-grid" style="margin-top:20px">${CHAPTERS.map(card).join('')}</div>
- <div class="home-split"><div class="feature-panel"><div class="eyebrow">THINK LIKE AN ARCHITECT</div><h3>模型变了，<br>硬件优势还成立吗？</h3><p>把 batch、上下文长度、KV heads 和计算／带宽比例放进同一张图。区分容量限制、带宽限制、计算限制与并行利用率。</p><a href="#lab">打开架构实验室 ↗</a></div><div><div class="section-head" style="margin-top:0"><h2>练习讲清楚真实的取舍</h2></div><div class="case-list">${[ ['#practice','01 / INTERVIEW','从“我做过”到“我能证明”','用问题、约束、方案、验证、边界组织回答。'], ['#sources','02 / EVIDENCE','一个性能数字需要多少上下文？','版本、shape、输入、计时范围与验证层级。'], ['#notebook','03 / YOUR NOTES','把不熟悉的地方，变成自己的表达','阅读进度与笔记保存在当前浏览器，可导出备份。'] ].map(x=>`<a href="${x[0]}"><span><small>${x[1]}</small><strong>${x[2]}</strong><p>${x[3]}</p></span><span>↗</span></a>`).join('')}</div></div></div>`;
- $$('#route-tabs button').forEach(b=>b.onclick=()=>{ $$('#route-tabs button').forEach(x=>x.classList.toggle('active',x===b));$('#chapter-grid').innerHTML=CHAPTERS.filter(c=>b.dataset.part==='all'||c.part===b.dataset.part).map(card).join(''); });
-}
+function renderHome(){renderKnowledgeHome();}
 function sourceUrl(s) { if (/^https?:\/\//.test(s.url)) return s.url; if (!s.url || s.url.startsWith('#')) return 'https://github.com/Xuanwen-Wang/interview/blob/main/'+(s.url?.slice(1)||'evidence/README.md'); return 'https://github.com/Xuanwen-Wang/interview/blob/main/'+s.url.replace(/^\.\//,''); }
 function sourceHTML(s) { return `<a href="${esc(sourceUrl(s))}" target="_blank" rel="noreferrer">${esc(s.label)} ↗</a><small>${esc(s.kind)} · ${esc(s.note || '')}</small>`; }
 function renderChapter(id, section) {
  const c = CHAPTERS.find(c=>c.id===id);
  if (!c) { renderNotFound(); return; }
- state.last = id; save(); const index=CHAPTERS.indexOf(c);
- $('#main').innerHTML=`<div class="eyebrow">CHAPTER ${String(index+1).padStart(2,'0')} / ${esc(c.part)}</div><h1 class="page-title">${esc(c.title)}</h1><p class="page-lead">${esc(c.lead)}</p><div class="chapter-meta"><span>${c.minutes} 分钟 · ${esc(c.level)}</span><span>${c.sections.length} 节 · ${c.questions.length} 个追问</span></div><div>${c.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div><div class="chapter-layout"><article class="article">${c.sections.map((s,i)=>`<section id="${s.id}" data-section="${s.id}"><h2><span class="sec-no">${String(i+1).padStart(2,'0')}</span>${esc(s.title)}</h2>${s.html}</section>`).join('')}<section id="takeaways"><div class="takeaways"><h3>读完这一章，应该能讲清楚</h3><ul>${c.takeaways.map(t=>`<li>${esc(t)}</li>`).join('')}</ul></div></section><section id="questions"><h2>面试官继续追问</h2>${c.questions.map(q=>`<details class="qa"><summary>${esc(q.q)}</summary><div>${esc(q.a).replace(/\n/g,'<br>')}<div class="followup"><strong>再追一层：</strong>${esc(q.followup)}</div></div></details>`).join('')}</section><section id="references"><h2>来源与证据范围</h2><p class="small muted">来源状态以采集时刻为准；原始仓库的访问权限独立于本指南。教学推导与历史实测在正文中分别标注。</p><ul class="source-list">${c.sources.map(s=>`<li>${sourceHTML(s)}</li>`).join('')}</ul></section><section id="notes"><h2>用自己的话再讲一遍</h2><textarea class="note-textarea" id="chapter-note" aria-label="本章个人笔记" placeholder="尝试写下：这个问题的核心约束是什么？我的方案为什么成立？如果条件改变呢？">${esc(state.notes[id]||'')}</textarea><p class="note-hint">自动保存到当前浏览器，不上传服务器。可在“个人笔记与备份”导出。</p><button id="read-main">${state.read.includes(id)?'已完成本章 ✓ · 取消标记':'标记本章已读 ✓'}</button></section><div class="chapter-bottom">${index>0?`<a href="#chapter/${CHAPTERS[index-1].id}"><small>PREVIOUS</small>← ${esc(CHAPTERS[index-1].title)}</a>`:'<a href="#home">← 知识地图</a>'}${index<CHAPTERS.length-1?`<a href="#chapter/${CHAPTERS[index+1].id}"><small>NEXT</small>${esc(CHAPTERS[index+1].title)} →</a>`:'<a href="#practice">进入面试练习 →</a>'}</div></article><aside class="toc"><div class="toc-title">IN THIS CHAPTER</div>${c.sections.map((s,i)=>`<a href="#chapter/${id}/${s.id}" data-toc="${s.id}">${String(i+1).padStart(2,'0')} ${esc(s.title)}</a>`).join('')}<a href="#chapter/${id}/questions">面试追问</a><a href="#chapter/${id}/references">来源与证据</a><a href="#chapter/${id}/notes">我的笔记</a><button class="read-toggle" id="read-toggle">${state.read.includes(id)?'已完成 ✓':'标记已读'}</button></aside></div>`;
+ state.last = id; save(); const context=chapterContext(id);const sequence=context.module?moduleChapters(context.module):CHAPTERS;const index=sequence.indexOf(c);
+ $('#main').innerHTML=`<div class="eyebrow">${esc(context.module?.title||c.part)} / ${esc(context.group?.title||'CHAPTER')}</div><h1 class="page-title">${esc(c.title)}</h1><p class="page-lead">${esc(c.lead)}</p><div class="chapter-meta"><span>${c.minutes} 分钟 · ${esc(c.level)}</span><span>${c.sections.length} 节 · ${c.questions.length} 个追问</span></div><div>${c.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div><div class="chapter-layout"><article class="article">${c.sections.map((s,i)=>`<section id="${s.id}" data-section="${s.id}"><h2><span class="sec-no">${String(i+1).padStart(2,'0')}</span>${esc(sectionTitle(s.title))}</h2>${s.html}</section>`).join('')}<section id="takeaways"><div class="takeaways"><h3>读完这一章，应该能讲清楚</h3><ul>${c.takeaways.map(t=>`<li>${esc(t)}</li>`).join('')}</ul></div></section><section id="questions"><h2>面试官继续追问</h2>${c.questions.map(q=>`<details class="qa"><summary>${esc(q.q)}</summary><div>${esc(q.a).replace(/\n/g,'<br>')}<div class="followup"><strong>再追一层：</strong>${esc(q.followup)}</div></div></details>`).join('')}</section><section id="references"><h2>来源与证据范围</h2><p class="small muted">来源状态以采集时刻为准；原始仓库的访问权限独立于本指南。教学推导与历史实测在正文中分别标注。</p><ul class="source-list">${c.sources.map(s=>`<li>${sourceHTML(s)}</li>`).join('')}</ul></section><section id="notes"><h2>用自己的话再讲一遍</h2><textarea class="note-textarea" id="chapter-note" aria-label="本章个人笔记" placeholder="尝试写下：这个问题的核心约束是什么？我的方案为什么成立？如果条件改变呢？">${esc(state.notes[id]||'')}</textarea><p class="note-hint">自动保存到当前浏览器，不上传服务器。可在“个人笔记与备份”导出。</p><button id="read-main">${state.read.includes(id)?'已完成本章 ✓ · 取消标记':'标记本章已读 ✓'}</button></section><div class="chapter-bottom">${index>0?`<a href="#chapter/${sequence[index-1].id}"><small>PREVIOUS</small>← ${esc(sequence[index-1].title)}</a>`:'<a href="#home">← 知识地图</a>'}${index<sequence.length-1?`<a href="#chapter/${sequence[index+1].id}"><small>NEXT</small>${esc(sequence[index+1].title)} →</a>`:'<a href="#practice">进入面试练习 →</a>'}</div></article><aside class="toc"><div class="toc-title">IN THIS CHAPTER</div>${c.sections.map((s,i)=>`<a href="#chapter/${id}/${s.id}" data-toc="${s.id}">${String(i+1).padStart(2,'0')} ${esc(sectionTitle(s.title))}</a>`).join('')}<a href="#chapter/${id}/questions">面试追问</a><a href="#chapter/${id}/references">来源与证据</a><a href="#chapter/${id}/notes">我的笔记</a><button class="read-toggle" id="read-toggle">${state.read.includes(id)?'已完成 ✓':'标记已读'}</button></aside></div>`;
  $$('.article table').forEach(t=>{const w=document.createElement('div');w.className='table-wrap';t.before(w);w.append(t);});
  $$('.article a').forEach(a=>{ const href=a.getAttribute('href')||''; if(href && !/^(https?:|#)/.test(href)) a.href=sourceUrl({url:href}); if (/^https?:/.test(a.getAttribute('href'))) { a.target='_blank'; a.rel='noreferrer'; } });
  $('#chapter-note').oninput=e=>{state.notes[id]=e.target.value;save();};
  function toggleRead(){state.read=state.read.includes(id)?state.read.filter(x=>x!==id):[...state.read,id];save();progress();$('#read-toggle').textContent=state.read.includes(id)?'已完成 ✓':'标记已读';$('#read-main').textContent=state.read.includes(id)?'已完成本章 ✓ · 取消标记':'标记本章已读 ✓';}
  $('#read-toggle').onclick=toggleRead;$('#read-main').onclick=toggleRead;
  if('IntersectionObserver' in window){sectionObserver=new IntersectionObserver(entries=>{entries.filter(e=>e.isIntersecting).forEach(e=>{$$('[data-toc]').forEach(a=>a.classList.toggle('current',a.dataset.toc===e.target.id));});},{rootMargin:'-90px 0px -65% 0px'});$$('section[data-section]').forEach(s=>sectionObserver.observe(s));}
+ enableFigureZoom();
  if(section)requestAnimationFrame(()=>document.getElementById(section)?.scrollIntoView());
 }
 function renderNotFound(){ $('#main').innerHTML='<div class="eyebrow">404 / KNOWLEDGE MAP</div><h1 class="page-title">这一页没有找到</h1><p>章节可能已调整。回到知识地图，或搜索你想找的概念。</p><a class="primary" href="#home">回到知识地图 →</a>'; }
@@ -104,9 +93,9 @@ function renderExperiment(kind){
 }
 let activeQuestion=null, questionPool=questions, refreshQuestionPool=()=>{};
 function renderPractice(){
- $('#main').innerHTML=`<div class="eyebrow">REHEARSE THE REASONING</div><h1 class="page-title">先说出来，再看答案。</h1><p class="page-lead">用两分钟组织第一层回答：问题是什么、关键约束是什么、为什么这样做。展开答案后，再尝试回答“再追一层”。这里的答案是表达骨架，不替代你自己的项目证据。</p><div class="practice-tools"><select id="question-part" aria-label="筛选面试问题领域"><option value="all">全部领域 · ${questions.length} 题</option>${parts.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('')}</select><button id="draw-question" class="primary">抽一道题 ↻</button><button id="weak-only">只练待巩固</button><span class="timer" id="timer">00:00</span><button id="timer-toggle">开始计时</button></div><div id="practice-body"></div>`;
+ $('#main').innerHTML=`<div class="eyebrow">REHEARSE THE REASONING</div><h1 class="page-title">先说出来，再看答案。</h1><p class="page-lead">用两分钟组织第一层回答：问题是什么、关键约束是什么、为什么这样做。展开答案后，再尝试回答“再追一层”。这里的答案是表达骨架，不替代你自己的项目证据。</p><div class="practice-tools"><select id="question-part" aria-label="筛选面试问题领域"><option value="all">全部领域 · ${questions.length} 题</option>${MODULES.map(m=>`<option value="${m.id}">${esc(m.title)}</option>`).join('')}</select><button id="draw-question" class="primary">抽一道题 ↻</button><button id="weak-only">只练待巩固</button><span class="timer" id="timer">00:00</span><button id="timer-toggle">开始计时</button></div><div id="practice-body"></div>`;
  let weak=false;
- refreshQuestionPool=()=>{questionPool=questions.filter(q=>($('#question-part').value==='all'||q.part===$('#question-part').value)&&(!weak||state.practice[q.key]==='weak'));};
+ refreshQuestionPool=()=>{questionPool=questions.filter(q=>($('#question-part').value==='all'||chapterContext(q.chapter).module?.id===$('#question-part').value)&&(!weak||state.practice[q.key]==='weak'));};
  const filter=()=>{refreshQuestionPool();draw();};
  $('#question-part').onchange=filter;$('#draw-question').onclick=draw;$('#weak-only').onclick=()=>{weak=!weak;$('#weak-only').textContent=weak?'正在练待巩固 ✓':'只练待巩固';filter();};
  $('#timer-toggle').onclick=()=>{if(practiceTimer){clearInterval(practiceTimer);practiceTimer=null;$('#timer-toggle').textContent='继续计时';}else{practiceTimer=setInterval(()=>{elapsed++;$('#timer').textContent=String(Math.floor(elapsed/60)).padStart(2,'0')+':'+String(elapsed%60).padStart(2,'0');},1000);$('#timer-toggle').textContent='暂停';}};filter();
@@ -128,7 +117,9 @@ const GLOSSARY=[
 ];
 function renderGlossary(){ $('#main').innerHTML=`<div class="eyebrow">A SHARED VOCABULARY</div><h1 class="page-title">先把术语，用在同一层上。</h1><p class="page-lead">${GLOSSARY.length} 个常用概念。理解术语时，顺便问一句：它属于算法、编程模型、编译 IR、物理执行，还是验证证据？</p><div class="source-filter"><input id="glossary-search" aria-label="搜索术语" placeholder="搜索中英文术语…"></div><dl class="glossary-grid" id="glossary-list"></dl>`;const update=()=>{const q=$('#glossary-search').value.toLowerCase();$('#glossary-list').innerHTML=GLOSSARY.filter(x=>x.join(' ').toLowerCase().includes(q)).map(x=>`<div class="glossary-item"><dt>${esc(x[0])}</dt><dd>${esc(x[1])}</dd></div>`).join('');};$('#glossary-search').oninput=update;update();}
 function renderNotebook(){
- $('#main').innerHTML=`<div class="eyebrow">MAKE IT YOUR OWN</div><h1 class="page-title">写下你自己的解释。</h1><p class="page-lead">笔记、阅读进度和练习状态只保存在当前浏览器。不同设备和域名之间不会自动同步；请导出 JSON 备份，或导出 Markdown 用自己的工具编辑。</p><div class="note-actions"><button id="export-json" class="primary">导出完整备份</button><button id="export-md">导出 Markdown 笔记</button><button id="import-json">导入备份</button><input id="import-file" type="file" accept="application/json,.json" hidden></div><div id="notebook-list">${CHAPTERS.map(c=>`<div class="notebook-item"><h3><a href="#chapter/${c.id}">${esc(c.title)} ↗</a></h3><textarea class="note-textarea" data-note="${c.id}" aria-label="${esc(c.title)}笔记" placeholder="写下这一章你还不熟悉的地方，以及你自己的项目例子。">${esc(state.notes[c.id]||'')}</textarea></div>`).join('')}</div>`;
+ $('#main').innerHTML=`<div class="eyebrow">MAKE IT YOUR OWN</div><h1 class="page-title">写下你自己的解释。</h1><p class="page-lead">笔记、阅读进度和练习状态只保存在当前浏览器。不同设备和域名之间不会自动同步；请导出 JSON 备份，或导出 Markdown 用自己的工具编辑。</p><div class="note-actions"><button id="export-json" class="primary">导出完整备份</button><button id="export-md">导出 Markdown 笔记</button><button id="import-json">导入备份</button><input id="import-file" type="file" accept="application/json,.json" hidden></div><div class="source-filter"><input id="note-search" type="search" aria-label="搜索笔记" placeholder="搜索章节标题或笔记内容…"><select id="note-module" aria-label="筛选笔记主题"><option value="all">全部主题</option>${MODULES.map(m=>`<option value="${m.id}">${esc(m.title)}</option>`).join('')}</select></div><div id="notebook-list">${CHAPTERS.map(c=>`<div class="notebook-item" data-note-chapter="${c.id}"><h3><a href="#chapter/${c.id}">${esc(c.title)} ↗</a></h3><textarea class="note-textarea" data-note="${c.id}" aria-label="${esc(c.title)}笔记" placeholder="写下这一章你还不熟悉的地方，以及你自己的项目例子。">${esc(state.notes[c.id]||'')}</textarea></div>`).join('')}</div>`;
+ const filterNotes=()=>{const term=$('#note-search').value.toLowerCase(),mod=$('#note-module').value;$$('[data-note-chapter]').forEach(el=>{const c=chapterMap.get(el.dataset.noteChapter);el.hidden=!(mod==='all'||chapterContext(c.id).module?.id===mod)||!(c.title+' '+(state.notes[c.id]||'')).toLowerCase().includes(term);});};
+ $('#note-search').oninput=filterNotes;$('#note-module').onchange=filterNotes;
  $$('[data-note]').forEach(el=>el.oninput=()=>{state.notes[el.dataset.note]=el.value;save();});
  const download=(content,type,name)=>{const url=URL.createObjectURL(new Blob([content],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
  $('#export-json').onclick=()=>download(JSON.stringify({version:1,exported:new Date().toISOString(),...state},null,2),'application/json','interview-notes.json');
@@ -136,16 +127,29 @@ function renderNotebook(){
  $('#import-json').onclick=()=>$('#import-file').click();
  $('#import-file').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{if(f.size>5e6)throw Error('文件过大');const data=JSON.parse(await f.text());if(data.version!==1||!Array.isArray(data.read)||!data.notes||typeof data.notes!=='object')throw Error('格式不匹配');const allowed=new Set(CHAPTERS.map(c=>c.id));const cleanNotes=Object.fromEntries(Object.entries(data.notes).filter(([k,v])=>allowed.has(k)&&typeof v==='string'));const cleanPractice=Object.fromEntries(Object.entries(data.practice||{}).filter(([k,v])=>questions.some(q=>q.key===k)&&['good','weak'].includes(v)));state={...state,read:[...new Set([...state.read,...data.read.filter(x=>allowed.has(x))])],notes:{...state.notes,...cleanNotes},practice:{...state.practice,...cleanPractice}};save();progress();renderNotebook();toast('备份已合并导入');}catch(err){toast('无法导入：'+err.message);}};
 }
+function setMenu(open){
+ document.body.classList.toggle('menu-open',open);$('#menu-toggle').setAttribute('aria-expanded',String(open));
+ $('#sidebar').inert=window.matchMedia('(max-width:700px)').matches&&!open;
+}
 function render(){
  clearInterval(practiceTimer);practiceTimer=null;sectionObserver?.disconnect();
  const [route,id,section]=(location.hash.slice(1)||'home').split('/');
- document.body.classList.remove('menu-open');$('#menu-toggle').setAttribute('aria-expanded','false');
+ setMenu(false);
+ renderNavigation(route,id);
  $$('.main-nav a').forEach(a=>a.classList.toggle('active',a.dataset.nav===route));
- $$('[data-chapter]').forEach(a=>a.classList.toggle('active',a.dataset.chapter===id&&route==='chapter'));
- const labels={home:'知识地图',lab:'架构实验室',practice:'面试练习',sources:'证据与来源',glossary:'术语速查',notebook:'个人笔记'};
- $('#breadcrumb').innerHTML='FIELD NOTES <span>/</span> '+esc(route==='chapter'?CHAPTERS.find(c=>c.id===id)?.title||'章节':labels[route]||'页面');
- document.title=(route==='chapter'?CHAPTERS.find(c=>c.id===id)?.title:labels[route]||'Interview')+' · AI Compiler Field Notes';
- if(route==='chapter')renderChapter(id,section);else({home:renderHome,lab:renderLab,practice:renderPractice,sources:renderSources,glossary:renderGlossary,notebook:renderNotebook}[route]||renderNotFound)();
+ const labels={home:'知识地图',catalog:'全站目录',companies:'公司与来源索引',lab:'架构实验室',practice:'面试练习',sources:'证据与来源',glossary:'术语速查',notebook:'个人笔记'};
+ const context=chapterContext(id), module=MODULES.find(m=>m.id===id), company=COMPANIES.find(c=>c.id===id);
+ let title=labels[route]||'页面';
+ let trail='<a href="#home">FIELD NOTES</a>';
+ if(route==='chapter'&&chapterMap.has(id)){title=chapterMap.get(id).title;if(context.module)trail+=`<span>/</span><a href="#module/${context.module.id}">${esc(context.module.title)}</a>`;}
+ if(route==='module')title=module?.title||'主题';
+ if(route==='company')title=company?.title||'公司';
+ $('#breadcrumb').innerHTML=trail+'<span>/</span>'+esc(title);
+ document.title=title+' · AI Compiler Field Notes';
+ if(route==='chapter')renderChapter(id,section);
+ else if(route==='module')renderModule(id,section);
+ else if(route==='company')renderCompanies(id);
+ else({home:renderHome,catalog:renderCatalog,companies:()=>renderCompanies(),lab:renderLab,practice:renderPractice,sources:renderSources,glossary:renderGlossary,notebook:renderNotebook}[route]||renderNotFound)();
  if(!section)window.scrollTo({top:0,behavior:'instant'});
  $('#main').focus({preventScroll:true});
 }
@@ -159,8 +163,14 @@ function search(){
 function openSearch(){$('#search-dialog').showModal();search();$('#search-input').focus();}
 $('#search-open').onclick=openSearch;$('#search-close').onclick=()=>$('#search-dialog').close();$('#search-input').oninput=search;
 $('#search-dialog').onclick=e=>{if(e.target===$('#search-dialog')){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close();}};
-document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openSearch();}if(e.key==='Escape'){document.body.classList.remove('menu-open');$('#menu-toggle').setAttribute('aria-expanded','false');}});
-$('#menu-toggle').onclick=()=>{document.body.classList.toggle('menu-open');$('#menu-toggle').setAttribute('aria-expanded',String(document.body.classList.contains('menu-open')));};
+document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openSearch();}if(e.key==='Escape'){const wasOpen=document.body.classList.contains('menu-open');setMenu(false);if(wasOpen)$('#menu-toggle').focus();}});
+$('#menu-backdrop').onclick=()=>{setMenu(false);$('#menu-toggle').focus();};
+$('#sidebar').addEventListener('click',e=>{if(e.target.closest('a[href^="#"]'))setMenu(false);});
+window.matchMedia('(max-width:700px)').addEventListener('change',()=>setMenu(false));
+$('#diagram-close').onclick=()=>$('#diagram-dialog').close();
+$('#diagram-scale').onchange=updateDiagramZoom;
+window.addEventListener('resize',updateDiagramZoom);
+$('#menu-toggle').onclick=()=>setMenu(!document.body.classList.contains('menu-open'));
 $('#focus-toggle').onclick=()=>{document.body.classList.toggle('focus');$('#focus-toggle').textContent=document.body.classList.contains('focus')?'目录':'专注';};
 $('#print').onclick=()=>window.print();
 $('.skip').onclick=e=>{e.preventDefault();$('#main').focus({preventScroll:true});$('#main').scrollIntoView();};

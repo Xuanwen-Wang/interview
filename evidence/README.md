@@ -22,6 +22,11 @@
 - [算法与 Attention](algorithms-sources.md)：论文、配置、KDA与DSA当前ABI。
 - [MoE 与真实案例](moe-sources.md)：PR作者、状态、固定代码、历史测量边界。
 - [硬件与编译器](compiler-sources.md)：资源与真实pass源码索引。
-- [审查与验收](review-and-validation.md)：交叉审查、修正记录与网页验收。
+- [算子数据流与上游编译组件](operator-internals-sources.md)：当前实现、版本化上游文档与手算。
+- [MoE部署与四kernel深度证据](moe-deep-sources.md)：拓扑、数值合同、通信边界与NV对照。
+- [PE硬件与同步深度证据](hardware-sync-sources.md)：RTL指纹、minitile、credit与C1/C2/C3边界。
+- [公司面经与题源](interview-sources.md)：身份、时间和来源局限。
+- [第二版审查与验收](review-v2.md)：目录重构、交叉审阅与新增Coding验证。
+- [第一版审查与验收](review-and-validation.md)：交叉审查、修正记录与网页验收。
 
 公开论文中的插图没有直接复制。本站结构图与数学算例为本次独立绘制/推导。原业务仓库仍可能需要原有访问权限，本指南公开并不会改变它们的权限。

@@ -36,16 +36,17 @@ def build():
             ContentCheck().feed(section['html'])
         assert len(c['questions']) >= 3, c['id']
     template = (ROOT / 'web/index.html').read_text(encoding='utf-8')
-    data = json.dumps(chapters, ensure_ascii=False).replace('</', '<\\/')
-    result = template.replace('/* INLINE_STYLE */', (ROOT / 'web/style.css').read_text(encoding='utf-8'))
-    result = result.replace('/* INLINE_DATA */', f'const CHAPTERS = {data};')
-    result = result.replace('/* INLINE_APP */', (ROOT / 'web/app.js').read_text(encoding='utf-8'))
+    payload = {'CHAPTERS': chapters, 'CATALOG': json.loads((ROOT / 'config/navigation.json').read_text(encoding='utf-8')), 'REPORTS': json.loads((ROOT / 'config/interviews.json').read_text(encoding='utf-8')), 'COMPANIES': json.loads((ROOT / 'config/companies.json').read_text(encoding='utf-8'))}
+    data = '\n'.join(f'const {name} = ' + json.dumps(value, ensure_ascii=False).replace('</', '<\\/') + ';' for name, value in payload.items())
+    result = template.replace('/* INLINE_STYLE */', (ROOT / 'web/style.css').read_text(encoding='utf-8') + '\n' + (ROOT / 'web/catalog.css').read_text(encoding='utf-8'))
+    result = result.replace('/* INLINE_DATA */', data)
+    result = result.replace('/* INLINE_APP */', (ROOT / 'web/catalog.js').read_text(encoding='utf-8') + '\n' + (ROOT / 'web/app.js').read_text(encoding='utf-8'))
     assert not re.search(r'/\* INLINE_\w+ \*/', result)
     out = ROOT / 'dist'
     out.mkdir(exist_ok=True)
     (out / 'index.html').write_text(result, encoding='utf-8')
     (out / '.nojekyll').touch()
-    manifest = {'chapters': len(chapters), 'sections': sum(len(c['sections']) for c in chapters), 'questions': sum(len(c['questions']) for c in chapters), 'characters': sum(len(re.sub('<[^>]+>', '', s['html'])) for c in chapters for s in c['sections']), 'bytes': len(result.encode())}
+    manifest = {'modules': len(payload['CATALOG']['modules']), 'topics': sum(len(m['groups']) for m in payload['CATALOG']['modules']), 'companies': len(payload['COMPANIES']), 'reports': len(payload['REPORTS']), 'diagrams': sum(s['html'].count('<svg') for c in chapters for s in c['sections']), 'chapters': len(chapters), 'sections': sum(len(c['sections']) for c in chapters), 'questions': sum(len(c['questions']) for c in chapters), 'characters': sum(len(re.sub('<[^>]+>', '', s['html'])) for c in chapters for s in c['sections']), 'bytes': len(result.encode())}
     (out / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
     print(json.dumps(manifest, ensure_ascii=False, indent=2))
 

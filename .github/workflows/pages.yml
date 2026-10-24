@@ -26,6 +26,12 @@ jobs:
         run: |
           python3 scripts/check.py
           node --check web/app.js
+          node --check web/catalog.js
+      - name: Verify original coding references
+        run: |
+          python3 -m unittest discover -s practice -v
+          g++ -std=c++17 -Wall -Wextra -Werror -fsanitize=address,undefined practice/coding.cpp -o "$RUNNER_TEMP/coding-check"
+          "$RUNNER_TEMP/coding-check"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

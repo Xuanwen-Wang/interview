@@ -14,17 +14,24 @@
 <aside class="sidebar" id="sidebar">
   <a href="#home" class="brand"><span class="brand-mark">i<span>.</span></span><span>INTERVIEW<small>AI COMPILER FIELD NOTES</small></span></a>
   <button id="search-open" class="search-button"><span>⌕ 搜索知识、问题、案例</span><kbd>⌘ K</kbd></button>
-  <nav class="main-nav" aria-label="主导航"><a href="#home" data-nav="home">◈ <span>知识地图</span></a><a href="#lab" data-nav="lab">⌁ <span>架构实验室</span></a><a href="#practice" data-nav="practice">▣ <span>面试练习</span></a><a href="#sources" data-nav="sources">↗ <span>证据与来源</span></a><a href="#glossary" data-nav="glossary">≡ <span>术语速查</span></a></nav>
-  <div class="nav-label">THE FIELD GUIDE <span id="chapter-count"></span></div>
-  <nav id="chapter-nav" class="chapter-nav" aria-label="章节"></nav>
-  <div class="sidebar-bottom"><div class="progress-caption"><span>我的学习进度</span><span id="progress-value">0%</span></div><div class="progress-track"><i id="progress-bar"></i></div><a href="#notebook">个人笔记与备份 ↗</a><small>2026.10 · 第一版 / 源码与论文双线</small></div>
+  <div class="sidebar-scroll">
+  <nav class="main-nav" aria-label="主导航"><a href="#home" data-nav="home">◈ <span>知识地图</span></a><a href="#catalog" data-nav="catalog">≡ <span>全站目录</span><small id="chapter-count"></small></a></nav>
+  <div class="nav-label">KNOWLEDGE FIELDS</div>
+  <nav id="module-nav" class="module-nav" aria-label="知识主题"></nav>
+  <div class="nav-label" id="context-label">当前专题</div>
+  <nav id="chapter-nav" class="chapter-nav" aria-label="当前专题章节"></nav>
+  <details class="nav-tools"><summary>学习工具与索引</summary><nav class="main-nav" aria-label="学习工具"><a href="#companies" data-nav="companies">公司来源索引 ↗</a><a href="#lab" data-nav="lab">架构实验室</a><a href="#practice" data-nav="practice">面试练习</a><a href="#sources" data-nav="sources">证据与来源</a><a href="#glossary" data-nav="glossary">术语速查</a></nav></details>
+  </div>
+  <div class="sidebar-bottom"><div class="progress-caption"><span>我的学习进度</span><span id="progress-value">0%</span></div><div class="progress-track"><i id="progress-bar"></i></div><a href="#notebook">个人笔记与备份 ↗</a><small>2026.10 · 第二版 / 分层知识库</small></div>
 </aside>
+<button id="menu-backdrop" aria-label="关闭目录" tabindex="-1"></button>
 <div class="workspace">
-<header class="topbar"><button id="menu-toggle" aria-label="打开目录" aria-expanded="false">☰</button><div id="breadcrumb">FIELD NOTES <span>/</span> 知识地图</div><div class="top-actions"><span class="edition">EDITION 01</span><button id="focus-toggle" title="切换专注阅读" aria-label="切换专注阅读">专注</button><button id="print" title="打印当前内容">打印</button><a id="repo-link" href="https://github.com/Xuanwen-Wang/interview" target="_blank" rel="noreferrer">GitHub ↗</a></div></header>
+<header class="topbar"><button id="menu-toggle" aria-controls="sidebar" aria-label="打开目录" aria-expanded="false">☰</button><div id="breadcrumb">FIELD NOTES <span>/</span> 知识地图</div><div class="top-actions"><span class="edition">EDITION 02</span><button id="focus-toggle" title="切换专注阅读" aria-label="切换专注阅读">专注</button><button id="print" title="打印当前内容">打印</button><a id="repo-link" href="https://github.com/Xuanwen-Wang/interview" target="_blank" rel="noreferrer">GitHub ↗</a></div></header>
 <main id="main" tabindex="-1"></main>
 <footer>从算法语义到硬件执行，每一个结论都应该有来处。<span>INTERVIEW / AI COMPILER FIELD NOTES</span></footer>
 </div>
 <dialog id="search-dialog"><div class="search-head"><span>⌕</span><input id="search-input" type="search" placeholder="试试：KDA、地址复用、FP8、KV cache…" aria-label="搜索全部章节"><button id="search-close" aria-label="关闭搜索">Esc</button></div><div id="search-results" aria-live="polite"></div></dialog>
+<dialog id="diagram-dialog" class="diagram-dialog" aria-label="图示放大阅读"><div class="diagram-controls"><label>缩放 <select id="diagram-scale"><option value="100">100%</option><option value="150">150%</option><option value="200">200%</option></select></label><button id="diagram-close" aria-label="关闭图示">关闭 ×</button></div><div id="diagram-stage"></div><p id="diagram-caption"></p></dialog>
 <div id="toast" role="status" aria-live="polite"></div>
 <script>/* INLINE_DATA */</script>
 <script>/* INLINE_APP */</script>

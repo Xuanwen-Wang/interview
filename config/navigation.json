@@ -1,0 +1,220 @@
+{
+  "version": 2,
+  "modules": [
+    {
+      "id": "start",
+      "title": "开始与路线",
+      "number": "01",
+      "description": "把已有项目经验组织成可追问、可证明的面试表达。",
+      "groups": [
+        {
+          "id": "route",
+          "title": "学习路线与工程表达",
+          "chapters": [
+            "start-here",
+            "engineering-drills"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "algorithms",
+      "title": "算法与数据流",
+      "number": "02",
+      "description": "从模型结构进入张量、状态、读写量和真实算子流水。",
+      "groups": [
+        {
+          "id": "models",
+          "title": "Transformer 与 Attention 演进",
+          "chapters": [
+            "transformer",
+            "kv-cache",
+            "flash-attention",
+            "mla-dsa",
+            "kda-linear",
+            "glm5next-architecture"
+          ]
+        },
+        {
+          "id": "operators",
+          "title": "算子级数据流深挖",
+          "chapters": [
+            "attention-dataflow",
+            "dsa-dataflow",
+            "kda-dataflow"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "moe",
+      "title": "MoE 全栈实战",
+      "number": "03",
+      "description": "贯通 EP×TP 部署、四个 kernel、通信与瓶颈证据。",
+      "groups": [
+        {
+          "id": "moe-foundation",
+          "title": "语义、拓扑与历史证据",
+          "chapters": [
+            "ffn-to-moe",
+            "moe-topology",
+            "moe-four-kernel-contract",
+            "moe-token-merge",
+            "moe-quantization-and-592",
+            "moe-evidence-and-interview"
+          ]
+        },
+        {
+          "id": "moe-kernels",
+          "title": "部署决策与 kernel 内部",
+          "chapters": [
+            "moe-topology-tradeoffs",
+            "moe-router-internals",
+            "moe-shared-dataflow",
+            "moe-routed-dataflow",
+            "moe-combine-reduce"
+          ]
+        },
+        {
+          "id": "moe-systems",
+          "title": "集体通信、重叠与性能预算",
+          "chapters": [
+            "moe-communication-overlap",
+            "moe-hardware-budget"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "compiler",
+      "title": "Triton · MLIR · LLVM",
+      "number": "04",
+      "description": "掌握 IR 对象、Pass 与重写机制，再进入分析、优化和代码生成。",
+      "groups": [
+        {
+          "id": "infra",
+          "title": "编译基础设施内部",
+          "chapters": [
+            "triton-ir-stack",
+            "mlir-object-model",
+            "pass-analysis",
+            "rewrite-conversion",
+            "llvm-mid-backend"
+          ]
+        },
+        {
+          "id": "reasoning",
+          "title": "正确性与白板推导",
+          "chapters": [
+            "compiler-correctness-foundations",
+            "compiler-whiteboard"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hardware",
+      "title": "518 硬件与后端",
+      "number": "05",
+      "description": "把真实 PE、存储、依赖与同步协议拆到实现层。",
+      "groups": [
+        {
+          "id": "backend",
+          "title": "518 编译链与真实案例",
+          "chapters": [
+            "compiler-518-hardware",
+            "compiler-triton-pipeline",
+            "compiler-schedule-memory",
+            "compiler-sync-proof",
+            "compiler-codegen-debug",
+            "compiler-real-case"
+          ]
+        },
+        {
+          "id": "pe",
+          "title": "PE、minitile 与带宽",
+          "chapters": [
+            "hw-memory-hierarchy",
+            "hw-pe-minitile",
+            "hw-bandwidth-credit"
+          ]
+        },
+        {
+          "id": "synchronization",
+          "title": "InjectSync 设计与实现",
+          "chapters": [
+            "sync-resource-events",
+            "sync-staircase-planning",
+            "sync-loop-branch-mailbox",
+            "sync-proof-implementation"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "systems",
+      "title": "性能与推理系统",
+      "number": "06",
+      "description": "把单算子优化放回容量、并发、服务与端到端指标中。",
+      "groups": [
+        {
+          "id": "serving",
+          "title": "性能模型与部署",
+          "chapters": [
+            "performance-model",
+            "serving-runtime"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "interviews",
+      "title": "公司与面经",
+      "number": "07",
+      "description": "按原始来源、招聘类型和时间理解公司考察，区分事实与准备扩展。",
+      "groups": [
+        {
+          "id": "field-reports",
+          "title": "面经阅读与公司专题",
+          "chapters": [
+            "interview-evidence-map",
+            "interview-bytedance",
+            "interview-chipmakers",
+            "interview-internet"
+          ]
+        },
+        {
+          "id": "takehomes",
+          "title": "官方开放作业",
+          "chapters": [
+            "interview-official-takehomes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "coding",
+      "title": "Coding 实作",
+      "number": "08",
+      "description": "从题目合同、参考实现、边界反例走到编译器与 kernel 的动手能力。",
+      "groups": [
+        {
+          "id": "algorithms-coding",
+          "title": "数据结构与图算法",
+          "chapters": [
+            "coding-algorithms",
+            "coding-graph-dataflow"
+          ]
+        },
+        {
+          "id": "systems-coding",
+          "title": "算子与编译优化实作",
+          "chapters": [
+            "coding-kernels",
+            "coding-pass-workshop"
+          ]
+        }
+      ]
+    }
+  ]
+}

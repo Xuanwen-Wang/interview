@@ -1,0 +1,589 @@
+[
+  {
+    "id": "interview-evidence-map",
+    "order": 60,
+    "part": "公司面经与开放作业",
+    "title": "面经地图：从来源走到你的准备路线",
+    "subtitle": "区分原帖、岗位要求、历史作业与原创练习",
+    "lead": "公司名不是题库。先把岗位、经验段、时间和证据身份摆正，再把问题转成可以推导、可以动手、可以用项目证明的能力。整理日期为2026-10-24。",
+    "minutes": 35,
+    "level": "面试专题",
+    "tags": [
+      "面经来源",
+      "公司",
+      "Coding"
+    ],
+    "sections": [
+      {
+        "id": "evidence",
+        "title": "先判断这条信息能证明什么",
+        "html": "<p>本主题承接“调研 AI 编译器社招面试”会话的27条来源，并续查寒武纪日常实习算子面经，形成28条记录。<a href=\"#companies\">公司来源索引</a>可按证据类型筛选。记录数不等于独立候选人数，同一作者跨多家公司的总结仍只是一位作者。</p><table><thead><tr><th>来源</th><th>能证明</th><th>不能证明</th></tr></thead><tbody><tr><td>本人面经</td><td>作者自述经历过某题型；需注明岗位和时间</td><td>公司固定必考、官方题库、某题出现概率</td></tr><tr><td>官方JD</td><td>该版本岗位重视哪些能力</td><td>实际面试逐题顺序或当前一定仍在招</td></tr><tr><td>官方开放作业</td><td>固定版本的任务与评估合同</td><td>所有候选人都做同题、当前招聘门槛</td></tr><tr><td>第三方题单</td><td>检索线索或学习材料</td><td>来源独立、日期新、答案正确</td></tr><tr><td>本站练习</td><td>我们设计的参考合同、解法与反例</td><td>曾被某公司逐字问过</td></tr></tbody></table><p>本版未核验到同时满足“近期、AI编译器、本人完整经历、中国公司3–5年社招”的充足样本。保留历史社招与校招/实习相邻岗位，是为了扩充题型，不把招聘类型改写。</p>"
+      },
+      {
+        "id": "dates",
+        "title": "三个时间：面试、发帖、抓取",
+        "html": "<p>燧原、沐曦两篇明确两年经验社招的原帖分别是2023-06-26和2023-06-29；即使聚合题库2026年重新收录，也不能更新面试年份。理想文章发表于2026-05-08，回忆的是约2025年5月的实习面试。<a href=\"https://www.nowcoder.com/feed/main/detail/3adbddae78794a9b860f924a77b66b24?sourceSSR=dynamic\">S07 · 燧原原文</a>；<a href=\"https://www.nowcoder.com/feed/main/detail/c69c9d6a4ec54c2e997369b2de37e049\">S08 · 沐曦原文</a>；<a href=\"https://www.rrricardo.top/blog/essays/2025-final\">S14 · 理想原文</a>。</p><p>来源字段分别保存展示日期、招聘类型、经验与备注。发布日期精度不足时保留“年份待核定”或“约”，不靠“刚刚”“最新”等相对词补齐。公司官方作业使用commit定位；commit日期是文件版本时间，不是候选人的面试日期。</p>"
+      },
+      {
+        "id": "roles",
+        "title": "按岗位问题选择准备深度",
+        "html": "<table><thead><tr><th>方向</th><th>第一层</th><th>应能写/画的第二层</th><th>你的项目连接</th></tr></thead><tbody><tr><td>图编译</td><td>图捕获、动态shape、融合</td><td>shape guard、layout转换与fallback路径</td><td>模型接入与实际算子ABI</td></tr><tr><td>MLIR/LLVM基础设施</td><td>Dialect/Op/Pass/rewrite</td><td>分析失效、pattern注册、转换合法性</td><td>518后端pass顺序与错误定位</td></tr><tr><td>芯片后端</td><td>调度、片上存储、ISA</td><td>物理区间、异步事件、资源限制</td><td>AddressAllocation与InjectSync</td></tr><tr><td>GPU/算子</td><td>GEMM、归约、访存</td><td>tile+寄存器预算、数值与profiler证据</td><td>MoE四kernel与NV边界比较</td></tr><tr><td>系统推理</td><td>批处理、KV、通信</td><td>吞吐/延时/容量模型与关键路径</td><td>EP4×TP4与Reduce/collective分离</td></tr></tbody></table><p>不是每个方向都要达到同样深度。可以把一个强项做成15分钟可深入的案例，同时把其他方向做到能画出数据流、解释接口和指出合法性反例。</p>"
+      },
+      {
+        "id": "answer",
+        "title": "把问题改写成三层回答",
+        "html": "<p>第一层用30秒给定义和适用条件。第二层给具体shape、IR或资源约束。第三层给反例、验证和可迁移的取舍。例如被问“为什么做fusion”，先讲减少中间存储与启动，再画两个kernel的读写，最后说明寄存器压力、占用率或通信边界可能让收益反转。</p><p>面经原帖中的候选人回答不是标准答案。比如jump越界、寄存器分配和BF16舍入都需要按真实ISA或语言语义重答；不复制作者当时的口误。本站Q&amp;A除明确标“题意概括”的段落外，均属于准备扩展。</p>"
+      },
+      {
+        "id": "practice",
+        "title": "一套能够带到白板上的准备材料",
+        "html": "<table><thead><tr><th>产物</th><th>应包含</th><th>本站入口</th></tr></thead><tbody><tr><td>项目A：编译正确性</td><td>输入IR、非法变换反例、pass次序、验证边界</td><td><a href=\"#chapter/compiler-real-case\">地址复用案例</a></td></tr><tr><td>项目B：MoE性能</td><td>每rank shape、字节、计算、通信、AB记录</td><td><a href=\"#module/moe\">MoE全栈</a></td></tr><tr><td>动手：图与数据流</td><td>拓扑排序、固定点、DCE与反例</td><td><a href=\"#module/coding\">Coding实作</a></td></tr><tr><td>基础设施：接口契约</td><td>Operation/Dialect/analysis/pattern/conversion</td><td><a href=\"#module/compiler\">Triton · MLIR · LLVM</a></td></tr><tr><td>白板：存储与调度</td><td>活跃区间、spill、资源受限排程</td><td><a href=\"#chapter/compiler-whiteboard\">贯穿练习</a></td></tr></tbody></table><p>每份材料先限制在一张图、一个最小例子和一个测量表。面试官继续追问时再展开源码，不让大量术语掩盖你负责的部分。</p>"
+      },
+      {
+        "id": "extend",
+        "title": "新公司和新专题怎样加入",
+        "html": "<p>新增一份面经先记录原始URL、面试/发帖时间、招聘类型、作者是否本人、题目归属、无法核定的部分，再链接到已有知识专题。新增技术内容则放入相应主题的专题目录；例如“中端核心Pass拆解”归编译基础，“KDA真实部署”归算子数据流。一个章节可被多条准备路线引用，正文只维护一份。</p><p>网站的公司索引、专题目录、正文与个人笔记互相独立。未来增加几十章也不需要把所有内容塞进侧栏；旧章节地址与本地笔记继续保留。</p>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "哪些来源可以叫“某公司问过的题”？",
+        "a": "本人面经只能支持“作者自述在该岗位经历了此题型”。还要确认题目归属、招聘类型和时间；官方JD只能支持能力要求。",
+        "followup": "同一作者同时面字节和阿里但未分配题目，如何标注？"
+      },
+      {
+        "q": "旧面经还有用吗？",
+        "a": "有，适合寻找稳定的底层题型；需要保留原日期，并用当前官方语义校正技术答案，不能包装成最新考法。",
+        "followup": "LLVM新PM和旧PM的题怎样分开？"
+      },
+      {
+        "q": "为什么不直接统计高频题？",
+        "a": "样本非随机、可能互相转抄、经验段混杂、同作者多帖，不具备可靠的概率分母。可以给准备优先级，不给伪精确频率。",
+        "followup": "怎样设计更可靠的调研记录？"
+      },
+      {
+        "q": "3–5年候选人的回答与入门者有什么区别？",
+        "a": "不只是定义，还要落实到实际接口、失败反例、资源权衡与验证过程，说明个人贡献和证据边界。",
+        "followup": "一个pass从合法到值得做还差什么？"
+      },
+      {
+        "q": "如何安排复习优先级？",
+        "a": "先确保两个真实项目可以完整讲透，再用公司题型补基础设施、编程与算法盲点。每个方向至少有一个能现场推导的例子。",
+        "followup": "如果只剩三天，哪类材料最值得完成？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "S01",
+        "label": "机器学习编译优化工程师 - Seed Model",
+        "url": "https://jobs.bytedance.com/experienced/position/7503827063050635538/detail",
+        "note": "2025-05-13；官方社招JD；未规定年限",
+        "kind": "官方社招JD"
+      },
+      {
+        "id": "S07",
+        "label": "2年编译器社招经验—燧原一面",
+        "url": "https://www.nowcoder.com/feed/main/detail/3adbddae78794a9b860f924a77b66b24?sourceSSR=dynamic",
+        "note": "2023-06-26；本人社招面经；历史；明确2年",
+        "kind": "本人社招面经；历史"
+      },
+      {
+        "id": "S08",
+        "label": "2年编译器社招面经—沐曦二面",
+        "url": "https://www.nowcoder.com/feed/main/detail/c69c9d6a4ec54c2e997369b2de37e049",
+        "note": "2023-06-29；本人社招面经；历史；明确2年",
+        "kind": "本人社招面经；历史"
+      },
+      {
+        "id": "S14",
+        "label": "2025年终总结：图编译器开发实习面经",
+        "url": "https://www.rrricardo.top/blog/essays/2025-final",
+        "note": "面试约2025-05；文章2026-05-08；本人实习面经；实习",
+        "kind": "本人实习面经"
+      },
+      {
+        "id": "G01",
+        "label": "luminal-ai/interview",
+        "url": "https://github.com/luminal-ai/interview/blob/main/README.md",
+        "note": "HEAD 2026-09-10；公司官方编译器take-home；未标年限",
+        "kind": "公司官方编译器take-home"
+      },
+      {
+        "id": "G02",
+        "label": "anthropics/original_performance_takehome",
+        "url": "https://github.com/anthropics/original_performance_takehome/blob/main/Readme.md",
+        "note": "HEAD 2026-01-22；公司官方历史性能take-home；未标年限",
+        "kind": "公司官方历史性能take-home"
+      }
+    ],
+    "takeaways": [
+      "面经、岗位、作业与练习保留独立身份",
+      "公司入口是索引，不是固定题库",
+      "把题目归并为可实现、可验证的能力"
+    ]
+  },
+  {
+    "id": "interview-bytedance",
+    "order": 61,
+    "part": "公司面经与开放作业",
+    "title": "字节：从融合收益追问到编译与硬件接口",
+    "subtitle": "以官方岗位和本人相邻岗位面经组织准备",
+    "lead": "原始材料同时包括官方JD、年限未明的算子相邻面经，以及多公司实习总结。下面先列证据，再给原创准备扩展；扩展部分不冒充逐字真题。",
+    "minutes": 35,
+    "level": "面试专题",
+    "tags": [
+      "面经来源",
+      "公司",
+      "Coding"
+    ],
+    "sections": [
+      {
+        "id": "sources",
+        "title": "当前材料里哪些明确属于字节",
+        "html": "<p>Seed Model岗位强调图优化、编译框架实际开发与CPU/GPU kernel；2026年3月本人相邻岗位记录包含fusion、Hopper warp specialization和MoE路由。另有“暑期实习编译相关总结”同时涉及字节/阿里云，DCE/DSE/GVN/TBAA等问题未逐题归属，本站不将其全部算作字节题。<a href=\"https://jobs.bytedance.com/experienced/position/7503827063050635538/detail\">S01 · 字节原文</a>；<a href=\"https://www.nowcoder.com/feed/main/detail/25ade7e61f7246438854a5f7ed5cc475\">S03 · 字节原文</a>；<a href=\"https://www.nowcoder.com/feed/main/detail/3ad1a6d1d4eb4ac7b609c8beb7f4dd96\">S04 · 字节/阿里云原文</a>。</p><p>以下训练适合把你的518经验翻译成通用编译能力：同样的输入，在图层、kernel层和ISA层分别拥有哪些信息？为什么某个优化必须在地址确定后完成？</p>"
+      },
+      {
+        "id": "fusion",
+        "title": "融合为什么可能更慢：写出一份成本账",
+        "html": "<p>原创教学例：A→B间有2MB中间张量。若A写一次B读一次，消除的逻辑流量是4MB；假设有效带宽1.6TB/s，下界收益仅2.5μs，另加可能节省的启动开销。若融合使寄存器使用上升、可驻留block减少，或让更大的tile溢出片上存储，损失可能超过这部分收益。数字仅为教学假设。</p><table><thead><tr><th>必须比较</th><th>能回答的问题</th></tr></thead><tbody><tr><td>融合前后外存字节与cache状态</td><td>真实减少了多少外存事务，而非仅删除IR张量？</td></tr><tr><td>寄存器、spill、shared memory</td><td>增加的中间值生命周期是否挤走并行度？</td></tr><tr><td>并发、shape和尾块</td><td>是否只在单一shape或低batch获益？</td></tr><tr><td>整个producer-consumer路径</td><td>单kernel名义提速是否转移了其他阶段的工作？</td></tr></tbody></table><p>对应你的MoE案例，应把Routed和Reduce的weight应用位置一起画出来，再比较相同工作范围。只比同名kernel会把fusion边界差异误认为硬件差距。</p>"
+      },
+      {
+        "id": "warp-specialization",
+        "title": "warp specialization：角色分工与正确性",
+        "html": "<p>准备扩展：先画生产者负责搬运、消费者负责计算的时间线，再说明buffer何时可读、何时可复用。Hopper TMA支持异步张量搬运，官方指南说明它能支持warp角色分工；这不等于所有kernel都应该专门分配搬运warp。<a href=\"https://docs.nvidia.com/cuda/hopper-tuning-guide/index.html\">NVIDIA Hopper指南</a>。</p><p>关键追问是生产速率、消费速率、缓冲数量和同步协议是否匹配。消费者慢时增加预取深度只提高资源占用；生产者慢时多消费者可能空等。double buffer既要等本轮数据就绪，又要等上一轮消费者不再使用该槽。可把这一逻辑映射到518的DT/PE/VP与mail，但不能把CUDA barrier直接当成518 mail语义。</p>"
+      },
+      {
+        "id": "compiler",
+        "title": "将项目讲到IR与pass接口",
+        "html": "<p>用一个图融合或算子lowering例子展示高层shape/布局信息到低层物理资源信息的变化。回答顺序可为：匹配什么Op；检查哪些静态/动态条件；产生哪个IR；谁负责layout和地址；哪些analysis会失效；失败时保留原IR还是报告错误。</p><p>如果说“我接入了Triton”，应能拆成frontend/runtime launch、target/backend注册、编译阶段和options、IR转换、binary/metadata及ABI，而不只说把tl.dot翻译成矩阵指令。<a href=\"#chapter/triton-ir-stack\">上游Triton架构</a>与<a href=\"#chapter/compiler-triton-pipeline\">518实际链路</a>需分开讲。</p>"
+      },
+      {
+        "id": "moe",
+        "title": "MoE路由题怎样接上真实工作",
+        "html": "<p>先明确score数学、是否有correction bias、TopK是否按group筛选、选中后用哪份score归一化。然后画token→expert slots→packed GEMM→加权合并，解释路由权重在哪一步乘、跨TP什么时候归约、Shared在哪些rank拥有真实权重。</p><p>可用四kernel描述个人责任，但进一步需要一个具体token的地址与数值路径。对热点专家，讨论M_e增大带来的weight amortization和负载不均衡；对低重复输入，不应承诺token merge必然大幅加速。对应<a href=\"#chapter/moe-router-internals\">Router内部</a>与<a href=\"#chapter/moe-routed-dataflow\">Routed数据流</a>。</p>"
+      },
+      {
+        "id": "rehearsal",
+        "title": "一次20分钟的模拟追问",
+        "html": "<table><thead><tr><th>时间</th><th>练习任务</th><th>完成标准</th></tr></thead><tbody><tr><td>0–3min</td><td>讲你做过的一个优化</td><td>有输入、约束、个人改动与验证层级</td></tr><tr><td>3–8min</td><td>画融合前后数据流</td><td>每个中间张量有shape和存储层级</td></tr><tr><td>8–13min</td><td>问一个错误或不合法反例</td><td>能构造越界、alias、NaN或同步失败</td></tr><tr><td>13–17min</td><td>更换batch/硬件/模型</td><td>能解释原优化为何可能失效</td></tr><tr><td>17–20min</td><td>写一个最小pattern或算子</td><td>先声明合同，再写代码与边界测试</td></tr></tbody></table><p>这是一份本站自拟训练流程，不是字节官方面试安排。</p>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "融合减少了一次读写，为什么模型更慢？",
+        "a": "减少逻辑字节不等于降低关键路径。检查cache、启动、寄存器/SMEM、occupancy、spill、并行任务数，以及工作是否搬到另一个kernel。",
+        "followup": "给一个可以量化的反例。"
+      },
+      {
+        "q": "warp specialization与多stage流水有什么关系？",
+        "a": "前者分配不同warp角色，后者安排多个在途buffer/stage。可以组合，也不能相互等同。必须证明生产完成与复用安全。",
+        "followup": "增加stage在哪些条件下无益？"
+      },
+      {
+        "q": "如何把518经历用于通用编译器面试？",
+        "a": "保留真实项目事实，用通用术语解释IR信息、依赖、资源与合法性；硬件专用mail/描述符应单独定义，不假设面试官熟悉。",
+        "followup": "哪项约束不能借用CUDA直觉？"
+      },
+      {
+        "q": "Triton后端接入为何不只是指令选择？",
+        "a": "还涉及target/编译阶段、layout/合法化、runtime参数与metadata、binary装载和验证。",
+        "followup": "一个dynamic stride参数在哪层进入ABI？"
+      },
+      {
+        "q": "只有局部kernel测试可否说完成模型适配？",
+        "a": "只能报告局部范围，还需集成、动态输入、Graph replay、通信和完整模型的精度/性能证据。",
+        "followup": "你的现有证据覆盖到了哪层？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "S01",
+        "label": "机器学习编译优化工程师 - Seed Model",
+        "url": "https://jobs.bytedance.com/experienced/position/7503827063050635538/detail",
+        "note": "2025-05-13；官方社招JD；未规定年限",
+        "kind": "官方社招JD"
+      },
+      {
+        "id": "S02",
+        "label": "硬件加速模型编译优化工程师",
+        "url": "https://jobs.bytedance.com/experienced/position/7404679843633334579/detail",
+        "note": "2024-08-19；官方历史JD；未规定年限",
+        "kind": "官方历史JD"
+      },
+      {
+        "id": "S03",
+        "label": "字节大模型算法一面 难死了…",
+        "url": "https://www.nowcoder.com/feed/main/detail/25ade7e61f7246438854a5f7ed5cc475",
+        "note": "2026-03-23；本人面经；编译/算子相邻岗位；年限及招聘类型不明，正文追问实习",
+        "kind": "本人面经；编译/算子相邻岗位"
+      },
+      {
+        "id": "S04",
+        "label": "暑期实习编译相关总结+timeline",
+        "url": "https://www.nowcoder.com/feed/main/detail/3ad1a6d1d4eb4ac7b609c8beb7f4dd96",
+        "note": "2025-04-03；本人实习面经；实习",
+        "kind": "本人实习面经"
+      }
+    ],
+    "takeaways": [
+      "fusion收益要用字节与资源预算解释",
+      "角色分工和流水深度不是同一个概念",
+      "把518项目映射成通用接口与合法性问题"
+    ]
+  },
+  {
+    "id": "interview-chipmakers",
+    "order": 62,
+    "part": "公司面经与开放作业",
+    "title": "芯片公司：后端推导、算子实现与现场编码",
+    "subtitle": "寒武纪、摩尔线程、燧原与沐曦的证据分开看",
+    "lead": "芯片公司并非只考指令集。现有原帖横跨编译器后端、图编译、高性能计算库和GPU算子；招聘类型与年份不同，先识别你投的是哪条线。",
+    "minutes": 35,
+    "level": "面试专题",
+    "tags": [
+      "面经来源",
+      "公司",
+      "Coding"
+    ],
+    "sections": [
+      {
+        "id": "matrix",
+        "title": "五组来源，五种不同的侧重",
+        "html": "<table><thead><tr><th>来源</th><th>身份与时间</th><th>题意概括</th></tr></thead><tbody><tr><td><a href=\"https://www.nowcoder.com/feed/main/detail/14270e0a7d4e48f29af370ece4b97ef9?sourceSSR=dynamic\">S05 · 寒武纪原文</a></td><td>寒武纪2026-09秋招相邻岗位</td><td>寄存器、DGEMM、HIP、分块transpose</td></tr><tr><td><a href=\"https://www.nowcoder.com/feed/main/detail/8f03623a522e4c75a6391f9d3f721c7f?sourceSSR=dynamic\">S06 · 摩尔线程原文</a></td><td>摩尔线程2026-10秋招相邻岗位</td><td>dtype/tile、反汇编、profiler、GPU均值滤波与TopK</td></tr><tr><td><a href=\"https://www.nowcoder.com/feed/main/detail/3adbddae78794a9b860f924a77b66b24?sourceSSR=dynamic\">S07 · 燧原原文</a></td><td>燧原2023-06，明确两年社招</td><td>MLIR、动态性、自动生成与手写算子</td></tr><tr><td><a href=\"https://www.nowcoder.com/feed/main/detail/c69c9d6a4ec54c2e997369b2de37e049\">S08 · 沐曦原文</a></td><td>沐曦2023-06，明确两年社招</td><td>LLVM Pass、寄存器分配、jump问题、K组链表</td></tr><tr><td><a href=\"https://www.nowcoder.com/feed/main/detail/7dfe46da13ad4ae8a3dd94c3ca7f5d05\">S22 · 寒武纪原文</a></td><td>寒武纪2026-05日常实习</td><td>prefix sum、bank conflict、Little’s Law</td></tr></tbody></table><p>这些信息支持“存在此类考察”，不支持把五条线合并为某公司的固定流程。</p>"
+      },
+      {
+        "id": "tile",
+        "title": "dtype改变，为什么tile不能只按字节缩放",
+        "html": "<p>原创准备题：从FP32切到FP8后，输入字节可能降低，但累加器仍可能是FP32；M×N累加器容量没有按输入精度等比缩小。Tensor Core/PE原语形状、scale粒度、对齐、尾部浪费和寄存器分配也会变化。</p><p>若线程维护8×8累加器，仅这64个FP32值就占64个标量槽的理论下界，还未计A/B片段、地址、mask和循环变量。是否最优取决于整体warp映射和目标机器。面经问题“为什么通常8×8”应先限定具体实现，不能答成硬件公理。</p>"
+      },
+      {
+        "id": "transpose",
+        "title": "transpose考的是读写方向和边界",
+        "html": "<p><strong>S05原帖是CPU题：</strong>用C++分块转置减少cache miss。先解释连续读、跨行写、cache line复用和tile工作集，再讨论GPU扩展中的shared memory与线程映射，不能把扩展练习写成原面试事实。</p><p>行主序输入A[M,N]的地址是i·N+j，输出B[N,M]是j·M+i。同一warp如果连续读取A的一行，直接写B通常变成跨行步长。通过片上tile让load和store各自按连续方向完成，并在两者间转换索引，才解决两边的合并访存。</p><p>边界不能只判断load：最后一个tile可能在交换block坐标后对store呈现另一组有效范围。block内同步必须由所有需要参与的线程执行，不能置于只有部分线程进入的边界if里。Shared memory padding能改变bank映射，但+1是否有效依赖bank/元素大小/访问宽度。<a href=\"#chapter/coding-kernels\">参考kernel练习</a>提供完整边界讨论。</p>"
+      },
+      {
+        "id": "backend",
+        "title": "后端题从SSA走到异步执行",
+        "html": "<p>沐曦原帖列出的Pass、寄存器分配和jump问题，应分别回答。寄存器分配从活跃性和干涉约束出发；不是把use-def链本身当分配算法。分支目标超出指令编码范围，可能需要branch relaxation或长跳转序列，具体依赖ISA、汇编器和链接器，不等于数组越界。</p><p>对518，还需说明普通SSA活跃性不覆盖异步设备访问完成。地址区间已经复用而PE仍在读旧值，会出现物理WAR；描述符snapshot被覆盖又是另一种事件边界。<a href=\"#module/hardware/synchronization\">同步专题</a>把这些风险拆成事件。</p>"
+      },
+      {
+        "id": "automatic",
+        "title": "自动生成和手写算子如何共存",
+        "html": "<p>准备扩展：不要用“编译器未来会替代所有手写”作为结论。需要比较表达能力、动态shape、布局、目标硬件原语、稳定性和维护成本。编译器可以把大部分常规算子纳入统一优化，而对少数关键路径提供定制kernel或library call。</p><p>正确的fallback设计还应规定dtype/布局/stream/工作空间与同步契约。一个高性能库调用若引入额外layout转换或阻断融合，局部收益可能在图上消失。对于你最熟悉的FFN，可以把“可通用的matmul lowering”与“业务路由和token packing的特殊ABI”分开解释。</p>"
+      },
+      {
+        "id": "cross",
+        "title": "从一道题延伸到架构判断",
+        "html": "<p>Little’s Law的稳态形式L=λW适合建立在途请求预算：目标带宽对应每秒完成多少请求，乘平均周转时间得到所需在途数。它不是“有N个credit就一定达到带宽”的充分条件，还要考虑地址分布、bank、返回通道、队列以及消费者速率。</p><p>518的WL1/LDG条件模型是很好的架构例子，但需要保留credit阈值、频率和RTT假设，避免把模型值当硅上实测。把通用queueing直觉落到真实计数器，才能解释资源利用率为何下降。<a href=\"#chapter/hw-bandwidth-credit\">详见带宽与credit</a>。</p>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "8×8线程tile为什么不是通用答案？",
+        "a": "它只适用于特定线程映射和资源预算。输入精度、累加器宽度、寄存器、SMEM、原语形状及尾部共同决定最优配置。",
+        "followup": "64个累加值之外还需多少状态？"
+      },
+      {
+        "q": "转置为什么需要同时检查load和store边界？",
+        "a": "块坐标与线程坐标交换后，输入有效域和输出有效域的表达不同；单侧mask不能证明另一侧安全。",
+        "followup": "写出非方阵17×35的最后一块边界。"
+      },
+      {
+        "q": "寄存器分配与片上地址分配是同一个问题吗？",
+        "a": "都有生命周期和冲突，但寄存器类/指令约束、buffer大小对齐、别名与异步完成等合同不同。不能直接复用全部模型。",
+        "followup": "描述符资源属于哪一类？"
+      },
+      {
+        "q": "Little’s Law能证明峰值带宽吗？",
+        "a": "不能。它给稳态平均在途数量与完成速率、周转时间的关系，还要验证供给、资源冲突和测量口径。",
+        "followup": "突发请求或短kernel为什么不满足稳态？"
+      },
+      {
+        "q": "NPU算子手写是否意味着编译器没用？",
+        "a": "不是。可编程性、调用契约、合法化、存储与同步仍需编译体系；选择通用与定制边界是工程权衡。",
+        "followup": "什么证据支持把某个手写kernel纳入通用lowering？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "S05",
+        "label": "0920 寒武纪一面（高性能计算库开发）",
+        "url": "https://www.nowcoder.com/feed/main/detail/14270e0a7d4e48f29af370ece4b97ef9?sourceSSR=dynamic",
+        "note": "2026-09-20；本人秋招面经；高性能计算库相邻岗位；年限未披露；秋招标签",
+        "kind": "本人秋招面经；高性能计算库相邻岗位"
+      },
+      {
+        "id": "S06",
+        "label": "1015 摩尔线程一面（AI 算子库及高性能计算工程师）",
+        "url": "https://www.nowcoder.com/feed/main/detail/8f03623a522e4c75a6391f9d3f721c7f?sourceSSR=dynamic",
+        "note": "2026-10-15；本人秋招面经；算子库相邻岗位；年限未披露；秋招标签",
+        "kind": "本人秋招面经；算子库相邻岗位"
+      },
+      {
+        "id": "S07",
+        "label": "2年编译器社招经验—燧原一面",
+        "url": "https://www.nowcoder.com/feed/main/detail/3adbddae78794a9b860f924a77b66b24?sourceSSR=dynamic",
+        "note": "2023-06-26；本人社招面经；历史；明确2年",
+        "kind": "本人社招面经；历史"
+      },
+      {
+        "id": "S08",
+        "label": "2年编译器社招面经—沐曦二面",
+        "url": "https://www.nowcoder.com/feed/main/detail/c69c9d6a4ec54c2e997369b2de37e049",
+        "note": "2023-06-29；本人社招面经；历史；明确2年",
+        "kind": "本人社招面经；历史"
+      },
+      {
+        "id": "S09",
+        "label": "寒武纪编译器研发工程师一面",
+        "url": "https://www.nowcoder.com/discuss/353156672430481408?sourceSSR=dynamic",
+        "note": "2020-07-31；本人面经；社招标签；历史；年限未披露",
+        "kind": "本人面经；社招标签；历史"
+      },
+      {
+        "id": "S22",
+        "label": "寒武纪 AI infra 日常实习面经分享",
+        "url": "https://www.nowcoder.com/feed/main/detail/7dfe46da13ad4ae8a3dd94c3ca7f5d05",
+        "note": "2026-05-02；本人实习面经；AI Infra相邻岗位；日常实习，非社招",
+        "kind": "本人实习面经；AI Infra相邻岗位"
+      }
+    ],
+    "takeaways": [
+      "按岗位方向判断题型，不按公司名想当然",
+      "tile、寄存器与带宽需要共同计算",
+      "源码与调度合同是回答后端题的支点"
+    ]
+  },
+  {
+    "id": "interview-internet",
+    "order": 63,
+    "part": "公司面经与开放作业",
+    "title": "图编译与推理团队：MLIR细节、算子和系统边界",
+    "subtitle": "理想、三星、智源、互联网实习记录与NVIDIA官方岗位",
+    "lead": "本章把原帖题意与本站的深入准备分开。不同公司记录未逐题归属时，保留“多公司”标签；不把美国岗位要求当成中国面试真题。",
+    "minutes": 35,
+    "level": "面试专题",
+    "tags": [
+      "面经来源",
+      "公司",
+      "Coding"
+    ],
+    "sections": [
+      {
+        "id": "mlir",
+        "title": "理想记录：从SSA问到parser/printer与CRTP",
+        "html": "<p>理想本人博客回忆图编译实习面试，涉及SSA、Dialect、Operation parser/printer、Pass种类与运行，以及CRTP；堆排序原计划手写，最后口述。面试约2025年5月，文章发表于2026年5月。<a href=\"https://www.rrricardo.top/blog/essays/2025-final\">S14 · 理想原文</a>。</p><p>深入准备：能给出一个自定义op的操作数、结果、属性和约束；说明generic assembly仍可表达op，custom parser/printer负责何种语法，verifier检查何种不变量。CRTP用于静态多态，不能把其中的static_cast说成运行时类型识别。进入<a href=\"#chapter/mlir-object-model\">MLIR对象模型</a>看注册与接口。</p>"
+      },
+      {
+        "id": "internet",
+        "title": "互联网实习汇总：保留团队与题目的对应",
+        "html": "<p>同一作者的2025春招总结中，美团条目出现nth_element和MHA伪代码；阿里国际条目明确要求按行实现稳定Softmax CUDA kernel；其他团队还涉及量化、访存、通信及推理系统。这里选择少量明确归属的Coding例子，不把整篇全部问题套到每个公司。<a href=\"https://www.nowcoder.com/discuss/736868736837173248\">S13 · 阿里/百度/快手/美团等原文</a>。</p><p>原创准备：同样是TopK/selection，先区分“第K个统计量”“有序TopK”和“无序集合”。同样是Softmax，先区分一行能否放入一个program/block、mask语义、累加精度和NaN政策。定义输出合同往往比先背代码更能避免失分。</p>"
+      },
+      {
+        "id": "graph",
+        "title": "三星与智源：图算法和算子语义",
+        "html": "<p>三星西安的2024年面经涉及IR转换、融合与图遍历/拓扑排序；智源2024年原帖列出DFS与含stride、padding的C++ Conv2D。两份材料的招聘类型和年限均未明确，不能称为社招样本。<a href=\"https://www.nowcoder.com/feed/main/detail/f8b2f253307f4118b2a0be93bdcb0d91\">S15 · 三星西安原文</a>；<a href=\"https://www.nowcoder.com/discuss/648859257261019136?sourceSSR=dynamic\">S16 · 智源原文</a>。</p><p>深入准备：拓扑排序要检测环和处理多源节点；IR的control-flow loop不是非法图，应区分CFG和要求DAG的依赖子图。Conv2D要先声明布局、groups、dilation、padding、cross-correlation语义，再写输出shape与索引。现场题若只要求基础二维版本，不应自行增加不受控的特性。</p>"
+      },
+      {
+        "id": "nvidia",
+        "title": "NVIDIA：官方岗位提供能力对照",
+        "html": "<p>官方岗位快照覆盖GPU/DSL、Triton/MLIR/LLVM、图表示、代码生成，以及性能/编译时间/内存三者权衡。部分上海岗位列2+或3+年要求；美国MLIR岗位仅作为能力参考，不推断当前招聘状态或面试题。<a href=\"https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/Deep-Learning-Performance-Software-Engineer_JR2013068\">S10 · NVIDIA原文</a>；<a href=\"https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/China-Shanghai/Deep-Learning-Compiler-Engineer---CUDA_JR2010731\">S11 · NVIDIA原文</a>；<a href=\"https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/US-CA-Santa-Clara/Senior-AI-Compiler-Engineer--MLIR_JR2016844\">S12 · NVIDIA原文</a>。</p><p>把“会用Triton”展开为能读编译阶段、理解layout conversion、编译选项与缓存key、数值语义、profiler和生成代码。把“会MLIR”展开为能添加op、注册pattern、搭建pass pipeline、证明转换合法性、编写负例与诊断。</p>"
+      },
+      {
+        "id": "system",
+        "title": "单算子、runtime与模型边界",
+        "html": "<p>原创场景：优化一个GEMM后，端到端TPOT不变。先确认是否命中该shape/实现，再分离queue/launch、layout转换、collective、同步、分配和其他算子。若该kernel只占5%，即便加速2倍，按Amdahl上限也只有1/(0.95+0.05/2)≈1.0256倍。</p><p>需要完整计时边界，而不是把每个异步kernel的时间简单求和。不同stream重叠、通信依赖和排队会改变关键路径；CPU计时必须包含明确同步，device event也只能说明它覆盖的stream区间。</p>"
+      },
+      {
+        "id": "bridge",
+        "title": "把通用知识接回你的工作",
+        "html": "<table><thead><tr><th>面试主题</th><th>可讲的518/MoE案例</th><th>追问底座</th></tr></thead><tbody><tr><td>动态shape与ABI</td><td>token数、slot有效性、packed plan</td><td>运行时guard、布局与尾部</td></tr><tr><td>rewriter合法性</td><td>view/address变换与物理alias</td><td>Op接口、副作用、转换target</td></tr><tr><td>调度与内存</td><td>地址复用偏好和在途PE访问</td><td>活跃性、资源事件、同步证明</td></tr><tr><td>数值</td><td>FP32参考误差与BF16边界</td><td>累加顺序、参考精度与阈值</td></tr><tr><td>通信</td><td>TP4×EP4结果归属</td><td>AllReduce与reduce-scatter计时分离</td></tr></tbody></table><p>准备时把“具体机制”和“公司来源”分成两列：前者以源码和官方语义校验，后者只回答为什么值得准备这个方向。</p>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "MLIR的generic assembly为何重要？",
+        "a": "它提供通用表示与调试入口；custom parser/printer是语法层，不能替代操作语义和verifier。",
+        "followup": "没有custom parser还可以构造和打印op吗？"
+      },
+      {
+        "q": "CFG有环为什么拓扑排序失败不代表编译器出错？",
+        "a": "拓扑排序要求DAG。循环CFG应使用固定点、SCC或循环结构分析，不能把回边删掉假装无环。",
+        "followup": "指令调度DAG如何从循环中获得？"
+      },
+      {
+        "q": "两个Triton kernel数值相同，ABI就相同吗？",
+        "a": "不相同。指针/stride、dtype、布局、workspace、状态及launch约定都可能不同。",
+        "followup": "Graph replay在哪些情况下暴露ABI问题？"
+      },
+      {
+        "q": "5%的kernel加速两倍，模型能快多少？",
+        "a": "在原比例和其他工作不变、无重叠变化的简化模型下约1.0256倍。实际还需验证调度和瓶颈是否迁移。",
+        "followup": "该kernel若与通信完全重叠呢？"
+      },
+      {
+        "q": "如何区分JD能力要求与题目证据？",
+        "a": "JD只说明官方期望；具体问过什么需要面经或官方作业。本站准备扩展要明确标签。",
+        "followup": "一个已下线岗位还应如何展示？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "S10",
+        "label": "Deep Learning Performance Software Engineer — JR2013068",
+        "url": "https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/Deep-Learning-Performance-Software-Engineer_JR2013068",
+        "note": "2026-10-24核验；官方JD；上海；3+年相关经验",
+        "kind": "官方JD；上海"
+      },
+      {
+        "id": "S11",
+        "label": "Deep Learning Compiler Engineer - CUDA — JR2010731",
+        "url": "https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/China-Shanghai/Deep-Learning-Compiler-Engineer---CUDA_JR2010731",
+        "note": "2026-10-24核验；官方JD；上海；2+年相关经验",
+        "kind": "官方JD；上海"
+      },
+      {
+        "id": "S12",
+        "label": "Senior AI Compiler Engineer, MLIR — JR2016844",
+        "url": "https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/US-CA-Santa-Clara/Senior-AI-Compiler-Engineer--MLIR_JR2016844",
+        "note": "2026官方招聘快照；官方JD；美国；3+年工作或研究经验",
+        "kind": "官方JD；美国"
+      },
+      {
+        "id": "S13",
+        "label": "2025春招实习面经汇总（已接阿里offer）",
+        "url": "https://www.nowcoder.com/discuss/736868736837173248",
+        "note": "2025春招；页面显示2025-04-17编辑；本人实习面经；单作者多公司；明确实习",
+        "kind": "本人实习面经；单作者多公司"
+      },
+      {
+        "id": "S14",
+        "label": "2025年终总结：图编译器开发实习面经",
+        "url": "https://www.rrricardo.top/blog/essays/2025-final",
+        "note": "面试约2025-05；文章2026-05-08；本人实习面经；实习",
+        "kind": "本人实习面经"
+      },
+      {
+        "id": "S15",
+        "label": "8.29 西安三星 一面 AI编译器开发",
+        "url": "https://www.nowcoder.com/feed/main/detail/f8b2f253307f4118b2a0be93bdcb0d91",
+        "note": "2024-08-29；本人面经；招聘类型/年限不明",
+        "kind": "本人面经"
+      },
+      {
+        "id": "S16",
+        "label": "智源 AI编译器一面面经",
+        "url": "https://www.nowcoder.com/discuss/648859257261019136?sourceSSR=dynamic",
+        "note": "2024-08-02；本人面经；招聘类型/年限不明",
+        "kind": "本人面经"
+      }
+    ],
+    "takeaways": [
+      "IR语法、语义与运行机制分别准备",
+      "按原帖明确的公司/团队归属整理题目",
+      "用端到端关键路径评价局部优化"
+    ]
+  },
+  {
+    "id": "interview-official-takehomes",
+    "order": 64,
+    "part": "公司面经与开放作业",
+    "title": "官方开放作业：怎样练调度与性能工程",
+    "subtitle": "Luminal与Anthropic历史作业的阅读方式和原创训练",
+    "lead": "开放仓库让任务更具体，但应先读各版本的规则与当前状态。本章只做任务概述和准备方法；本站练习使用自拟简化机器，不复制完整题面、测试或答案，也不代替正式应聘提交。",
+    "minutes": 35,
+    "level": "面试专题",
+    "tags": [
+      "面经来源",
+      "公司",
+      "Coding"
+    ],
+    "sections": [
+      {
+        "id": "sources",
+        "title": "两份作业的身份与边界",
+        "html": "<p>Luminal公开仓库是面向编译工程的作业，核心为SSA到VLIW的调度和scratch分配；以573b8a85固定版本定位。Anthropic仓库明确是历史性能作业，当前限时测试基础已更换，指标来自模拟机器；以5452f74b定位。<a href=\"https://github.com/luminal-ai/interview/blob/main/README.md\">G01 · Luminal原文</a>；<a href=\"https://github.com/anthropics/original_performance_takehome/blob/main/Readme.md\">G02 · Anthropic原文</a>。</p><p>先访问原仓库阅读规则，尤其是允许改动的文件、测试合同、协作与公开传播限制。这里只保留学习方向与来源链接，不在本站公开这些公司的完整解决方案。</p>"
+      },
+      {
+        "id": "contract",
+        "title": "第一步：把合法性写成判定器",
+        "html": "<p>原创训练可先定义一个小机器：每cycle每种engine一条指令，load延迟3、add延迟1、mul延迟2，结果不能在同bundle前递。每条op必须出现一次，消费者issue不能早于生产者完成。内存依赖另列，不能仅根据SSA边排程。</p><p>判定器与优化器独立：检查覆盖、重复、cycle非负、engine容量、依赖与延迟，再检查数值结果。这样一份错误但更短的schedule不会获得“提速”。下一章的参考实现使用本站模型，不声称通过任何公司的hidden tests。</p>"
+      },
+      {
+        "id": "schedule",
+        "title": "第二步：ready queue与关键路径",
+        "html": "<p>对DAG反向计算height(v)=latency(v)+max(height(successor))；每cycle取依赖已完成且engine可用的节点，优先更长关键路径。发射后不要立刻把consumer当ready，而是在结果完成cycle加入可用集合。空bundle可能是合法延迟气泡，不应为追求紧凑把依赖违规塞进去。</p><p>critical-path priority是启发式，不保证全局最优。它可能提前启动长延迟load，从而延长某些值的生命周期；应同时追踪live bytes与缓冲容量。目标函数和正确性模型必须分开。</p>"
+      },
+      {
+        "id": "allocation",
+        "title": "第三步：调度与存储相互制约",
+        "html": "<p>示例：两个独立load早发能隐藏latency，但如果consumer很晚才ready，两个结果会长期同时驻留。推迟其中一个load可能不改变makespan，却降低峰值live bytes。反过来，压低scratch高水位的复用决定，可能引入新的物理WAR或WAW。</p><p>需要明确同cycle read/write顺序。若机器写先于读，则旧值在cycle t被最后读取时，新值不能在同一cycle覆盖同一槽；若是读先于写则不同。这个细节必须按题目合同，而不能套用CPU/GPU经验。本站<a href=\"#chapter/compiler-whiteboard\">白板机器</a>与真实518依赖边界各自有独立约定。</p>"
+      },
+      {
+        "id": "performance",
+        "title": "第四步：从trace找可归因的收益",
+        "html": "<p>历史性能作业适合练SIMD、VLIW、访存复用和流水重叠。一次只改变一个主要机制，记录版本、输入、运行合同、数值检查和cycles。不要修改机器宽度、core数或reference来制造加速。</p><p>关注关键路径与slot利用率，不只统计指令条数：少一条指令可能缩短零cycle；多一条预取可能让总时间变短。用图解释改变了哪段等待，并用相同输入和模型做A/B。模拟cycles只代表该模拟机合同，不可作为真实CPU/NPU benchmark。</p>"
+      },
+      {
+        "id": "delivery",
+        "title": "最后交付：能解释、能退化、能验证",
+        "html": "<table><thead><tr><th>问题</th><th>应交付的证据</th></tr></thead><tbody><tr><td>算法在极端输入会怎样？</td><td>长链、宽DAG、空输出、重复use、尾部与未知alias</td></tr><tr><td>启发式效果为什么成立？</td><td>关键路径、资源占用与live bytes的前后对照</td></tr><tr><td>是否过拟合公开样例？</td><td>按shape/依赖结构变化的独立测试与保守fallback</td></tr><tr><td>编译时间是否可控？</td><td>图规模与复杂度，不将指数搜索写成默认路径</td></tr><tr><td>本人做了什么？</td><td>实现边界、借助工具的范围、能够现场修改的说明</td></tr></tbody></table><p>本站提供的是可以复算和运行的基础练习，不宣称达到任何公司的录用分数。真正有价值的是你能从失败输入反推错误的模型假设。</p>"
+      }
+    ],
+    "questions": [
+      {
+        "q": "为什么必须把验证器与调度器分开？",
+        "a": "优化器可能包含错误启发式；独立验证器按机器合同判断合法性，避免错误短schedule被当作收益。",
+        "followup": "如何测试验证器本身？"
+      },
+      {
+        "q": "拓扑序为何不足以作为时序排程？",
+        "a": "它只提供先后顺序，不包含指令延迟、同cycle前递、engine容量和异步内存完成。",
+        "followup": "一条load后立即接add在哪里违规？"
+      },
+      {
+        "q": "关键路径优先是否最优？",
+        "a": "不是，资源争用与内存压力可能使局部选择变差。需要明确启发式、复杂度与反例。",
+        "followup": "给一个更早发射却更高scratch的例子。"
+      },
+      {
+        "q": "scratch复用为什么依赖同cycle语义？",
+        "a": "写先于读和读先于写允许的端点相交不同。区间开闭必须来自机器合同。",
+        "followup": "unused result在写入cycle是否占空间？"
+      },
+      {
+        "q": "模拟cycles变快能宣称芯片性能提高吗？",
+        "a": "不能，必须绑定模拟模型和输入。硅上需要独立的硬件与端到端证据。",
+        "followup": "怎样把模拟trace转成硬件实验假设？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "G01",
+        "label": "luminal-ai/interview",
+        "url": "https://github.com/luminal-ai/interview/blob/main/README.md",
+        "note": "HEAD 2026-09-10；公司官方编译器take-home；未标年限",
+        "kind": "公司官方编译器take-home"
+      },
+      {
+        "id": "G02",
+        "label": "anthropics/original_performance_takehome",
+        "url": "https://github.com/anthropics/original_performance_takehome/blob/main/Readme.md",
+        "note": "HEAD 2026-01-22；公司官方历史性能take-home；未标年限",
+        "kind": "公司官方历史性能take-home"
+      },
+      {
+        "id": "G03",
+        "label": "fiigii/ai-comp",
+        "url": "https://github.com/fiigii/ai-comp/blob/main/Readme.md",
+        "note": "HEAD 2026-07-12；第三方解题实现；不适用",
+        "kind": "第三方解题实现"
+      }
+    ],
+    "takeaways": [
+      "官方作业按固定版本规则阅读",
+      "合法性判定与优化启发式分离",
+      "调度、存储和关键路径一起分析"
+    ]
+  }
+]
