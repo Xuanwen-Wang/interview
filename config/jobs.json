@@ -78,6 +78,249 @@
     ]
   },
   {
+    "id": "bytedance-7694589927579699461",
+    "title": "AI编译器专家（存算与AI） - 芯片研发",
+    "company": "字节跳动",
+    "locations": [
+      "北京",
+      "上海",
+      "杭州",
+      "西安"
+    ],
+    "employment": "社招 · 正式",
+    "experience": "相关专业硕士及以上；3 年以上相关研发经验",
+    "sourceId": "J02",
+    "origin": "user",
+    "direction": "编译器与DSL",
+    "status": "listed",
+    "checked": "2026-10-25",
+    "published": "2026-10-09",
+    "url": "https://jobs.bytedance.com/experienced/position/7694589927579699461/detail",
+    "verification": "2026-10-25 直接读取官方职位接口，channel_online_status=1；记录核验时发布状态，申请条件与招聘进度以官网为准。",
+    "jobCode": "A62538B",
+    "sourceType": "官方 API 实时核验",
+    "evidenceUrls": [
+      "https://jobs.bytedance.com/api/v1/job/posts/7694589927579699461/"
+    ],
+    "summary": "面向自研 NPU 与存算一体芯片，贯通图编译、后端映射、片上存储与 Runtime。",
+    "responsibilities": [
+      "建设从模型导入、图优化、IR 转换到代码生成及 Runtime 接入的编译链。",
+      "对接 PyTorch/ONNX，支持 CNN、Transformer 与 LLM 的编译和调优。",
+      "实现 Tiling、并行与调度映射、SRAM 规划和 DMA 编排，结合张量生命周期优化复用、驻留和搬运。",
+      "与算子、Runtime、硬件团队协作改进时延、吞吐、存储和计算效率。",
+      "从可编程性和利用率评价 ISA、存储层次、同步及微架构方案。",
+      "建立正确性、精度、兼容性、性能和异常场景回归及分析工具。"
+    ],
+    "requirements": [
+      "计算机、电子工程、自动化、微电子等相关专业硕士及以上；3 年以上 AI/传统编译器、深度学习框架或异构计算研发经验。",
+      "掌握 IR、控制流/数据流、模式匹配、指令选择、寄存器分配与代码生成；熟悉 MLIR、LLVM、TVM、XLA、IREE、Glow 或自研系统中的至少一种。",
+      "熟悉深度学习图及卷积、矩阵乘、归一化、Attention 的计算、布局与性能特点。",
+      "理解异构架构及缓存、片上存储、DMA、SIMD/SIMT、流水线和并行机制。",
+      "能用 Profiling 区分计算、访存、同步、搬运与调度瓶颈。",
+      "能与芯片架构、算子、Runtime、框架和模型团队沟通协作。"
+    ],
+    "preferred": [],
+    "keywords": [
+      "存算一体",
+      "NPU",
+      "AI编译器",
+      "MLIR",
+      "LLVM",
+      "TVM",
+      "XLA",
+      "IREE",
+      "Glow",
+      "IR",
+      "Tiling",
+      "DMA",
+      "SRAM",
+      "内存规划",
+      "软硬协同",
+      "Profiling",
+      "硕士",
+      "3年以上"
+    ],
+    "relevance": {
+      "summary": "与现有后端工程案例的交集包括资源约束下的映射、内存复用、DMA/同步以及 ISA 协同设计。存算一体是目标硬件背景，需要额外了解其执行与存储约束。",
+      "evidence": [
+        "可用地址分配、调度、InjectSync 案例，说明合法性、容量、异步在途与性能的关系。",
+        "可用 IR 到机器指令的调试闭环，展示精度、功能和性能回归如何定位问题。"
+      ],
+      "prepare": [
+        "核对硕士及以上、3 年以上相关研发经验这两项明确门槛。",
+        "准备模型导入与图优化、Runtime 接口，以及存算一体架构如何改变编译映射的讨论。"
+      ]
+    },
+    "chapters": [
+      "compiler-triton-pipeline",
+      "compiler-schedule-memory",
+      "compiler-sync-proof",
+      "compiler-codegen-debug",
+      "compiler-518-hardware"
+    ]
+  },
+  {
+    "id": "bytedance-7457906937700796690",
+    "title": "硬件加速算子编译器工程师（AI芯片） - 芯片研发",
+    "company": "字节跳动",
+    "locations": [
+      "北京",
+      "上海",
+      "杭州",
+      "西安",
+      "深圳"
+    ],
+    "employment": "社招 · 正式",
+    "experience": "未注明年限或学历门槛",
+    "sourceId": "J03",
+    "origin": "user",
+    "direction": "编译器与DSL",
+    "status": "listed",
+    "checked": "2026-10-25",
+    "published": "2025-01-09",
+    "url": "https://jobs.bytedance.com/experienced/position/7457906937700796690/detail",
+    "verification": "2026-10-25 直接读取官方职位接口，channel_online_status=1；记录核验时发布状态，申请条件与招聘进度以官网为准。",
+    "jobCode": "A100321A",
+    "sourceType": "官方 API 实时核验",
+    "evidenceUrls": [
+      "https://jobs.bytedance.com/api/v1/job/posts/7457906937700796690/"
+    ],
+    "summary": "面向多款 AI 芯片的传统及异构编译器开发，重点包括 Clang 前端与 LLVM 技术栈。",
+    "responsibilities": [
+      "开发与优化硬件加速平台多款芯片的传统编译器。",
+      "在 Clang 前端支持混合编译语法。",
+      "实现面向 AI 与异构硬件的编译功能和性能优化。",
+      "参与新架构研究与讨论。"
+    ],
+    "requirements": [
+      "熟悉编译原理和编译优化方法。",
+      "具备扎实的算法与编程基础。",
+      "熟悉 LLVM 编译器架构。",
+      "熟悉 Intel/AMD x86_64 或 ARM64、RISC-V 体系结构；JD 另要求精通 x86_64、ARM64、RISC-V 微架构。",
+      "精通 C/C++，理解 C++ 底层实现机制。"
+    ],
+    "preferred": [
+      "熟悉 LLVM/GCC 等 C/C++ 编译器，并参与相关开源社区。",
+      "HPC/AI 编译器及高性能计算库开发经历。"
+    ],
+    "keywords": [
+      "LLVM",
+      "Clang",
+      "GCC",
+      "C++",
+      "C/C++",
+      "传统编译器",
+      "异构编译",
+      "x86_64",
+      "ARM64",
+      "RISC-V",
+      "微架构",
+      "HPC",
+      "算子编译器"
+    ],
+    "relevance": {
+      "summary": "工作重点是传统编译器与异构编译基础设施；Clang 前端、LLVM 架构和 C++ 底层机制值得单独准备。",
+      "evidence": [
+        "可用编译分析、指令选择和寄存器分配的案例解释后端设计与正确性。",
+        "可用自研目标代码生成和硬件映射案例讨论新架构适配，但应明确与标准 LLVM 后端的实现差别。"
+      ],
+      "prepare": [
+        "补齐 Clang 前端、混合编译过程和 C++ 底层语义。",
+        "按 JD 核对 x86_64、ARM64、RISC-V 微架构知识；准备 LLVM/GCC 社区或高性能库工作证据。"
+      ]
+    },
+    "chapters": [
+      "llvm-mid-backend",
+      "compiler-correctness-foundations",
+      "compiler-whiteboard",
+      "compiler-codegen-debug"
+    ]
+  },
+  {
+    "id": "bytedance-6925712424150747400",
+    "title": "硬件加速编译器框架研发工程师（AI芯片） - 芯片研发",
+    "company": "字节跳动",
+    "locations": [
+      "北京",
+      "上海",
+      "深圳",
+      "杭州",
+      "西安"
+    ],
+    "employment": "社招 · 正式",
+    "experience": "未注明年限或学历门槛",
+    "sourceId": "J04",
+    "origin": "user",
+    "direction": "编译器与DSL",
+    "status": "listed",
+    "checked": "2026-10-25",
+    "published": "2021-02-05",
+    "url": "https://jobs.bytedance.com/experienced/position/6925712424150747400/detail",
+    "verification": "2026-10-25 直接读取官方职位接口，channel_online_status=1；记录核验时发布状态，申请条件与招聘进度以官网为准。",
+    "jobCode": "JU1RP",
+    "sourceType": "官方 API 实时核验",
+    "evidenceUrls": [
+      "https://jobs.bytedance.com/api/v1/job/posts/6925712424150747400/"
+    ],
+    "summary": "建设 AI 芯片编译框架，覆盖指令与并行调度、存储分配、Auto-tuning 和 Runtime。",
+    "responsibilities": [
+      "开发整体编译框架。",
+      "实现指令调度、存储分配与并行调度等优化。",
+      "开发并改进模型性能 Auto-tuning。",
+      "开发 Runtime 模块。"
+    ],
+    "requirements": [
+      "深入理解深度学习框架及其软件栈。",
+      "熟练使用 C/C++、汇编、Python 等编程语言。",
+      "能主动学习、快速解决问题，并具备自驱力。"
+    ],
+    "preferred": [
+      "MLIR 开发经历、多线程开发的产品经验。",
+      "计算机体系结构与并行计算知识。",
+      "编译与代码优化经验，以及 TVM/XLA 等相关开发背景。",
+      "对 TensorFlow/PyTorch、MXNet 等常用框架有深入理解。",
+      "深入的 LLVM/C++ 开发经验、AI 加速硬件量化工具开发经验。",
+      "GPU、FPGA 或 AI 芯片开发与评测经历。"
+    ],
+    "keywords": [
+      "编译框架",
+      "指令调度",
+      "存储分配",
+      "并行调度",
+      "Auto-tuning",
+      "自动调优",
+      "Runtime",
+      "运行时",
+      "C++",
+      "汇编",
+      "Python",
+      "MLIR",
+      "LLVM",
+      "TVM",
+      "XLA",
+      "量化",
+      "多线程"
+    ],
+    "relevance": {
+      "summary": "调度、内存规划和运行时之间的合同是核心交集；还需要把单个 kernel 的调优方法扩展到模型与框架层。",
+      "evidence": [
+        "可用地址生命周期、异步同步和调度案例，解释存储复用与并行性的权衡。",
+        "可用参数合法性、性能归因和回归流程，组织 Auto-tuning 的候选空间、目标与验证方法。"
+      ],
+      "prepare": [
+        "准备深度学习框架到编译器、Runtime 的接口和执行边界。",
+        "补齐汇编、多线程工程和自动调优实验；MLIR/LLVM 等具体系统经验在该 JD 中列为加分项。"
+      ]
+    },
+    "chapters": [
+      "compiler-schedule-memory",
+      "compiler-sync-proof",
+      "compiler-real-case",
+      "serving-runtime",
+      "pass-analysis"
+    ]
+  },
+  {
     "title": "机器学习编译优化工程师 - Seed Model",
     "company": "字节跳动",
     "experience": "未注明年限",
