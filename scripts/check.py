@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 from urllib.parse import urlsplit, unquote
 from html.parser import HTMLParser
+from build import portable_readings
 
 ROOT = Path(__file__).resolve().parent.parent
 rows = [c for p in sorted((ROOT / 'content').glob('*.json')) for c in json.loads(p.read_text(encoding='utf-8'))]
@@ -139,8 +140,12 @@ assert not re.search(r'<script[^>]+src=', html), 'Standalone HTML must not need 
 assert not re.search(r'https?://[^\s"\']+\.(?:woff|ttf|css)', html), 'External asset dependency'
 assert not re.search(r'(?:ghp_|github_pat_|sk-proj-)[A-Za-z0-9_]{15,}', html)
 assert not re.search(r'/data/wangxw/home|/home/wangxw|172\.16\.\d+\.\d+', html)
-pe = (ROOT / 'dist/pe.html').read_text(encoding='utf-8')
-assert pe.replace('<body data-default-route="chapter/hw-memory-hierarchy">', '<body>') == html, 'Portable PE entry must contain the same reviewed application'
+for filename, chapter_id in portable_readings(rows).items():
+    portable = (ROOT / 'dist' / filename).read_text(encoding='utf-8')
+    body = f'<body data-default-route="chapter/{chapter_id}">'
+    assert portable.count(body) == 1, f'Portable entry must open its own chapter: {filename}'
+    assert portable.replace(body, '<body>') == html, f'Portable entry must contain the same reviewed application: {filename}'
+
 if errors:
     raise SystemExit('\n'.join(errors))
 print(f'PASS: {len(modules)} modules, {len(rows)} chapters, {len(companies)} company groups, {len(reports)} reports; catalog ownership, code example parity, internal routes, source files/anchors, SVG labels, portable HTML and credential patterns checked.')

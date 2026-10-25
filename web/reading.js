@@ -17,7 +17,9 @@ function currentRoute() {
 }
 function readingPathHTML(c) {
   if (!c.readingStages) return '';
-  return `<nav class="reading-path" aria-label="本文阅读路径"><p>从外到内，沿一条数据路径读完</p><ol>${c.readingStages.map((stage,i)=>`<li><a href="#chapter/${c.id}/${stage.id}"><small>${String(i+1).padStart(2,'0')}</small><span>${esc(stage.title)}</span></a></li>`).join('')}</ol><a class="portable-reading" href="pe.html" download="518-pe.html">保存完整 PE HTML ↓</a></nav>`;
+  const portable = c.portableReading;
+  const download = portable ? `<a class="portable-reading" href="${esc(portable.file)}" download="${esc(portable.download)}">${esc(portable.label)}</a>` : '';
+  return `<nav class="reading-path" aria-label="本文阅读路径"><p>从外到内，沿一条数据路径读完</p><ol>${c.readingStages.map((stage,i)=>`<li><a href="#chapter/${c.id}/${stage.id}"><small>${String(i+1).padStart(2,'0')}</small><span>${esc(stage.title)}</span></a></li>`).join('')}</ol>${download}</nav>`;
 }
 function chapterSectionsHTML(c) {
   const sectionHTML = (s,i,tag) => `<section id="${s.id}" data-section="${s.id}"><${tag}><span class="sec-no">${String(i+1).padStart(2,'0')}</span>${esc(sectionTitle(s.title))}</${tag}>${tag==='h3'?s.html.replace(/<(\/?)h3\b/g,'<$1h4'):s.html}</section>`;
@@ -30,6 +32,13 @@ function chapterTocHTML(c, selected) {
   return c.readingStages.map((stage,i)=>`<details class="toc-stage" data-toc-stage="${stage.id}" ${i===0||stage.id===selected||stage.sections.includes(selected)?'open':''}><summary>${String(i+1).padStart(2,'0')} ${esc(stage.title)}</summary>${stage.sections.map(id=>{const index=c.sections.findIndex(s=>s.id===id);return link(c.sections[index],index);}).join('')}</details>`).join('');
 }
 function highlightReadingSection(id) {
+  // Keep an explicit stage jump selected while its heading is visible; the
+  // preceding section's tail may still intersect the reading viewport.
+  const requested = document.getElementById(currentRoute()[2]);
+  if (requested?.matches('[data-reading-stage]')) {
+    const top = requested.getBoundingClientRect().top;
+    if (top >= 0 && top < innerHeight / 2) id = requested.querySelector('[data-section]')?.id || id;
+  }
   $$('[data-toc]').forEach(a=>a.classList.toggle('current',a.dataset.toc===id));
   const stage = document.getElementById(id)?.closest('[data-reading-stage]')?.dataset.readingStage;
   $$('[data-stage-jump]').forEach(a=>a.classList.toggle('current',a.dataset.stageJump===stage));

@@ -15,7 +15,7 @@
 
 ## 连续长文与旧链接
 
-PE 使用一个 chapter、一个完整 HTML，按六个阅读层次组织。`readingStages` 的每项包含 `id/title/summary/sections`；所有 `sections` 展平后必须与章内 section 顺序完全相同。侧边栏、页首路径和右侧目录都跳到同一篇文章的锚点，页面不拆载、不重新初始化交互。阶段标题用 h2，小节用 h3，小节内部标题从 h3 转为 h4。
+PE 与 VP 各使用一个 chapter、一个完整 HTML，按六个阅读层次组织。`readingStages` 的每项包含 `id/title/summary/sections`；所有 `sections` 展平后必须与章内 section 顺序完全相同。侧边栏、页首路径和右侧目录都跳到同一篇文章的锚点，页面不拆载、不重新初始化交互。阶段标题用 h2，小节用 h3，小节内部标题从 h3 转为 h4。
 
 正文的硬件字节映射、credit 等补充推导可放在 `<details class="pe-deep-dive">` 中。直接访问其内部锚点会展开对应内容；打印时所有技术补充自动展开，结束后恢复原状态。
 
@@ -23,7 +23,7 @@ PE 使用一个 chapter、一个完整 HTML，按六个阅读层次组织。`rea
 
 首次迁移先备份旧存储原文，再写入 `readingVersion: 2`。旧版备份导入、JSON/Markdown 导出、多标签合并和取消已读都须验证。`scripts/check.py` 检查阶段覆盖、旧锚点与重名 ID；浏览器验证实际跳转及历史笔记定位。
 
-`scripts/build.py` 同时生成 `dist/index.html` 和直接打开 PE 长文的 `dist/pe.html`。两者内嵌同一份内容和应用，仅默认路由不同；`pe.html` 可保存后独立离线阅读。它们在同一来源共享浏览器笔记，文件离线副本则需导出/导入来转移笔记。
+长文章节使用 `portableReading` 指定独立入口，例如 `{"file":"vp.html","download":"518-vp.html","label":"保存完整 VP HTML ↓"}`。`scripts/build.py` 据此生成 `dist/pe.html`、`dist/vp.html`；它们与 `dist/index.html` 内嵌同一份内容和应用，仅默认路由不同，可保存后独立离线阅读。文件名必须是唯一的英文小写 HTML 文件名，不能占用 `index.html`。下载链接使用当前章的元数据，不能写死为 PE。静态检查验证独立入口内容一致性；浏览器验收验证实际下载目标。它们在同一来源共享浏览器笔记，文件离线副本则需导出/导入来转移笔记。
 
 ## 未来专题怎么放
 

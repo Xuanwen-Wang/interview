@@ -7,6 +7,20 @@ from html.parser import HTMLParser
 
 ROOT = Path(__file__).resolve().parent.parent
 
+def portable_readings(chapters):
+    entries = {}
+    for chapter in chapters:
+        portable = chapter.get('portableReading')
+        if portable is None:
+            continue
+        assert chapter.get('readingStages'), f'Portable reading requires a reading path: {chapter["id"]}'
+        assert all(isinstance(portable.get(key), str) and portable[key] for key in ['file', 'download', 'label']), chapter['id']
+        assert re.fullmatch(r'[a-z0-9-]+\.html', portable['file']), portable
+        assert re.fullmatch(r'[a-z0-9-]+\.html', portable['download']), portable
+        assert portable['file'] != 'index.html' and portable['file'] not in entries, portable['file']
+        entries[portable['file']] = chapter['id']
+    return entries
+
 class ContentCheck(HTMLParser):
     def handle_starttag(self, tag, attrs):
         if tag in {'script', 'iframe', 'object', 'embed', 'form'}:
@@ -45,7 +59,8 @@ def build():
     out = ROOT / 'dist'
     out.mkdir(exist_ok=True)
     (out / 'index.html').write_text(result, encoding='utf-8')
-    (out / 'pe.html').write_text(result.replace('<body>', '<body data-default-route="chapter/hw-memory-hierarchy">'), encoding='utf-8')
+    for filename, chapter_id in portable_readings(chapters).items():
+        (out / filename).write_text(result.replace('<body>', f'<body data-default-route="chapter/{chapter_id}">'), encoding='utf-8')
     (out / '.nojekyll').touch()
     manifest = {'modules': len(payload['CATALOG']['modules']), 'topics': sum(len(m['groups']) for m in payload['CATALOG']['modules']), 'companies': len(payload['COMPANIES']), 'reports': len(payload['REPORTS']), 'diagrams': sum(s['html'].count('<svg') for c in chapters for s in c['sections']), 'chapters': len(chapters), 'sections': sum(len(c['sections']) for c in chapters), 'questions': sum(len(c['questions']) for c in chapters), 'characters': sum(len(re.sub('<[^>]+>', '', s['html'])) for c in chapters for s in c['sections']), 'bytes': len(result.encode())}
     (out / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')

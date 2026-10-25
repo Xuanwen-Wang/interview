@@ -1111,6 +1111,11 @@
         ],
         "noteKey": "hw-pe-minitile"
       }
+    },
+    "portableReading": {
+      "file": "pe.html",
+      "download": "518-pe.html",
+      "label": "保存完整 PE HTML ↓"
     }
   }
 ]

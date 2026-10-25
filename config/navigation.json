@@ -188,7 +188,7 @@
       "id": "hardware",
       "title": "518 硬件与后端",
       "number": "05",
-      "description": "把真实 PE、存储、依赖与同步协议拆到实现层。",
+      "description": "把真实 PE、VP、存储、依赖与同步协议拆到实现层。",
       "groups": [
         {
           "id": "backend",
@@ -207,6 +207,13 @@
           "title": "PE 架构：由外到内的一篇讲解",
           "chapters": [
             "hw-memory-hierarchy"
+          ]
+        },
+        {
+          "id": "vp",
+          "title": "VP 架构：从数据路径到编译器",
+          "chapters": [
+            "hw-vp-architecture"
           ]
         },
         {

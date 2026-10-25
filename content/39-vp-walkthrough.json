@@ -1,0 +1,390 @@
+[
+  {
+    "id": "hw-vp-architecture",
+    "title": "518 VP：从 L2 输入到向量流水、归约与多执行器",
+    "part": "518 VP 微架构",
+    "order": 37.8,
+    "subtitle": "沿 gate × sigmoid(gate) × up，由外到内理解非矩阵计算的数据通路",
+    "minutes": 100,
+    "level": "深入",
+    "tags": [
+      "518",
+      "VP",
+      "SIMD",
+      "wide64",
+      "pipe32",
+      "PRG",
+      "PostCal",
+      "VPChaining",
+      "多 VP",
+      "RTL"
+    ],
+    "lead": "从单核四个 VP 的位置开始，量清 128 B 读写接口，放大到 wide / pipe 两种算术通路、分段近似与归约，再把数值、融合、多执行器和同步放回真实编译链。以源码证据解释硬件，以明确假设推导字节账本，不把结构上限当成实测。",
+    "portableReading": {
+      "file": "vp.html",
+      "download": "518-vp.html",
+      "label": "保存完整 VP HTML ↓"
+    },
+    "readingStages": [
+      {
+        "id": "vp-stage-1",
+        "title": "核内全貌",
+        "summary": "先认执行器，再量接口与有效字节。",
+        "sections": [
+          "vp-map",
+          "vp-hierarchy",
+          "vp-io-budget"
+        ]
+      },
+      {
+        "id": "vp-stage-2",
+        "title": "进入单 VP",
+        "summary": "从描述符和 PreCal，走到 wide / pipe。",
+        "sections": [
+          "vp-descriptors",
+          "vp-precal",
+          "vp-wide-pipe"
+        ]
+      },
+      {
+        "id": "vp-stage-3",
+        "title": "算术与非线性",
+        "summary": "沿模块链理解归约、标量与分段参数。",
+        "sections": [
+          "vp-arithmetic",
+          "vp-reduction",
+          "vp-prg"
+        ]
+      },
+      {
+        "id": "vp-stage-4",
+        "title": "数值与融合",
+        "summary": "把 PostCal、SwiGLU 值图和 chaining 合法性连起来。",
+        "sections": [
+          "vp-postcal",
+          "vp-swiglu",
+          "vp-chaining"
+        ]
+      },
+      {
+        "id": "vp-stage-5",
+        "title": "多 VP 与同步",
+        "summary": "分配工作、装好参数，再证明资源依赖。",
+        "sections": [
+          "vp-multivp",
+          "vp-prg-ownership",
+          "vp-sync"
+        ]
+      },
+      {
+        "id": "vp-stage-6",
+        "title": "性能与面试",
+        "summary": "沿反压查瓶颈，用证据组织架构答案。",
+        "sections": [
+          "vp-backpressure",
+          "vp-performance",
+          "vp-interview"
+        ]
+      }
+    ],
+    "sections": [
+      {
+        "id": "vp-map",
+        "title": "先看 VP 的边界：矩阵计算之后，数据还要走哪里",
+        "html": "<p>PE 擅长把矩阵乘法铺到计算阵列；VP 接着处理逐元素算术、非线性近似、比较、归约、缩放和格式转换。它也可以独立服务不含 PE 的向量算子。理解 VP 的入口不是先背指令缩写，而是先画出：<strong>输入在哪里，如何变成内部浮点数据，经过哪些可配置模块，结果何时真正回到 L2。</strong></p><p>本文沿一条教学主线展开：一行 gate 与 up 已在 L2，计算 <code>z = (gate × sigmoid(gate)) × up</code>。这条数学链帮助认识模块；实际业务的 dtype、近似函数、cast 点与分段必须以对应 kernel 为准，不能仅凭这个公式把整段合成一条指令。</p><figure class=\"diagram\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1120 365\" role=\"img\" aria-label=\"一核里的 VP：从 L2 读，经过流水，再写回 L2\"><title>一核里的 VP：从 L2 读，经过流水，再写回 L2</title><desc>只画单 core 的数据依赖；PE 与 VP 通过有完成约束的 L2 数据交接。不同 tile 可以重叠，图不表示所有单元串行工作。</desc><rect width=\"1120\" height=\"365\" fill=\"#faf8f3\"/><g font-family=\"Noto Sans CJK SC, Microsoft YaHei, sans-serif\"><text x=\"32\" y=\"43\" font-size=\"25\" fill=\"#243b36\" font-weight=\"700\">一核里的 VP：从 L2 读，经过流水，再写回 L2</text><rect x=\"32.0\" y=\"100\" width=\"333.3333333333333\" height=\"185\" rx=\"10\" fill=\"#edf5fb\" stroke=\"#276b99\" stroke-width=\"1.5\"/><text x=\"48.0\" y=\"132\" font-size=\"21\" fill=\"#276b99\">L2 中的输入</text><text x=\"48.0\" y=\"165\" font-size=\"17\" fill=\"#243b36\">LD / PE / DT 产生</text><text x=\"48.0\" y=\"194\" font-size=\"17\" fill=\"#243b36\">gate、up、参数</text><text x=\"48.0\" y=\"223\" font-size=\"17\" fill=\"#243b36\">先满足数据依赖</text><path d=\"M368.3333333333333 192 L390.3333333333333 192\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M382.3333333333333 187 L390.3333333333333 192 L382.3333333333333 197\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><rect x=\"393.3333333333333\" y=\"100\" width=\"333.3333333333333\" height=\"185\" rx=\"10\" fill=\"#fff0e6\" stroke=\"#aa5429\" stroke-width=\"1.5\"/><text x=\"409.3333333333333\" y=\"132\" font-size=\"21\" fill=\"#aa5429\">VP 执行器</text><text x=\"409.3333333333333\" y=\"165\" font-size=\"17\" fill=\"#243b36\">PreCal 输入整理</text><text x=\"409.3333333333333\" y=\"194\" font-size=\"17\" fill=\"#243b36\">CAL 算术与归约</text><text x=\"409.3333333333333\" y=\"223\" font-size=\"17\" fill=\"#243b36\">PostCal 输出处理</text><path d=\"M729.6666666666666 192 L751.6666666666666 192\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M743.6666666666666 187 L751.6666666666666 192 L743.6666666666666 197\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><rect x=\"754.6666666666666\" y=\"100\" width=\"333.3333333333333\" height=\"185\" rx=\"10\" fill=\"#f2edf8\" stroke=\"#76548f\" stroke-width=\"1.5\"/><text x=\"770.6666666666666\" y=\"132\" font-size=\"21\" fill=\"#76548f\">L2 中的结果</text><text x=\"770.6666666666666\" y=\"165\" font-size=\"17\" fill=\"#243b36\">格式化结果与写回</text><text x=\"770.6666666666666\" y=\"194\" font-size=\"17\" fill=\"#243b36\">供 PE / VP / ST 使用</text><text x=\"770.6666666666666\" y=\"223\" font-size=\"17\" fill=\"#243b36\">完成后才能安全消费</text><text x=\"32\" y=\"330\" font-size=\"17\" fill=\"#65746d\">机制示意；箭头表示数据依赖，不表示等时延或逐周期波形。</text></g></svg><figcaption>只画单 core 的数据依赖；PE 与 VP 通过有完成约束的 L2 数据交接。不同 tile 可以重叠，图不表示所有单元串行工作。</figcaption></figure><p>阅读顺序是<strong>核内位置 → 输入接口 → 单 VP 内部 → 编译器映射 → 多执行器与同步 → 性能判断</strong>。已有的 <a href=\"#chapter/hw-memory-hierarchy\">PE 长文</a>解释矩阵路径，本文补全非矩阵部分。</p><p>证据采集于 2026-10-25：硬件来自只读 RTL 参考副本，逐文件用 SHA256 固定；编译器来自 <code>triton_shared@82613bc2eb30</code>。本次没有运行 VCS、CycleSim 或硅上测试。图均为源码解释或显式教学模型，不能用来报告芯片实测性能。</p><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-hardware-rtl.md#vp-scope\">固定版本证据</a>。</p><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-compiler-sources.md#vc-scope\">固定版本证据</a>。</p>"
+      },
+      {
+        "id": "vp-hierarchy",
+        "title": "把三个数字分开：4 个 VP、两组 32 lane、128 B 接口",
+        "html": "<p>核顶层连到一个 VP wrapper，wrapper 明确实例化 4 个 <code>vp_518_top</code>。编译器将它们映射为 <code>CSS4…CSS7</code>，因此“VP4”通常在谈四个执行器，而不是四个元素并行。</p><figure class=\"diagram\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1120 390\" role=\"img\" aria-label=\"从 core 放大到执行器，再放大到算术 lane\"><title>从 core 放大到执行器，再放大到算术 lane</title><desc>单 core 四个 VP 的结构与编译器 CSS 映射；图中的执行目标不保证当前 kernel 实际使用了全部四个。</desc><rect width=\"1120\" height=\"390\" fill=\"#faf8f3\"/><g font-family=\"Noto Sans CJK SC, Microsoft YaHei, sans-serif\"><text x=\"32\" y=\"43\" font-size=\"25\" fill=\"#243b36\" font-weight=\"700\">从 core 放大到执行器，再放大到算术 lane</text><rect x=\"32\" y=\"90\" width=\"280\" height=\"240\" rx=\"10\" fill=\"#f0f2eb\" stroke=\"#65746d\" stroke-width=\"1.5\"/><text x=\"48\" y=\"122\" font-size=\"21\" fill=\"#65746d\">单 NPU core</text><text x=\"48\" y=\"155\" font-size=\"17\" fill=\"#243b36\">PE：矩阵计算</text><text x=\"48\" y=\"184\" font-size=\"17\" fill=\"#243b36\">VP × 4：向量执行器</text><text x=\"48\" y=\"213\" font-size=\"17\" fill=\"#243b36\">DT / LD / ST：搬运变换</text><text x=\"48\" y=\"242\" font-size=\"17\" fill=\"#243b36\">共享 L2 与同步资源</text><rect x=\"360\" y=\"90\" width=\"170\" height=\"100\" rx=\"10\" fill=\"#fff0e6\" stroke=\"#aa5429\" stroke-width=\"1.5\"/><text x=\"376\" y=\"122\" font-size=\"21\" fill=\"#aa5429\">VP0 / CSS4</text><text x=\"376\" y=\"155\" font-size=\"17\" fill=\"#243b36\">独立执行目标</text><rect x=\"544\" y=\"90\" width=\"170\" height=\"100\" rx=\"10\" fill=\"#fff0e6\" stroke=\"#aa5429\" stroke-width=\"1.5\"/><text x=\"560\" y=\"122\" font-size=\"21\" fill=\"#aa5429\">VP1 / CSS5</text><text x=\"560\" y=\"155\" font-size=\"17\" fill=\"#243b36\">独立执行目标</text><rect x=\"728\" y=\"90\" width=\"170\" height=\"100\" rx=\"10\" fill=\"#fff0e6\" stroke=\"#aa5429\" stroke-width=\"1.5\"/><text x=\"744\" y=\"122\" font-size=\"21\" fill=\"#aa5429\">VP2 / CSS6</text><text x=\"744\" y=\"155\" font-size=\"17\" fill=\"#243b36\">独立执行目标</text><rect x=\"912\" y=\"90\" width=\"170\" height=\"100\" rx=\"10\" fill=\"#fff0e6\" stroke=\"#aa5429\" stroke-width=\"1.5\"/><text x=\"928\" y=\"122\" font-size=\"21\" fill=\"#aa5429\">VP3 / CSS7</text><text x=\"928\" y=\"155\" font-size=\"17\" fill=\"#243b36\">独立执行目标</text><rect x=\"360\" y=\"230\" width=\"722\" height=\"115\" rx=\"10\" fill=\"#f2edf8\" stroke=\"#76548f\" stroke-width=\"1.5\"/><text x=\"376\" y=\"262\" font-size=\"21\" fill=\"#76548f\">把一个 VP 放大</text><text x=\"376\" y=\"295\" font-size=\"17\" fill=\"#243b36\">内部 A 组 32 lane + B 组 32 lane；wide / pipe 改变连接方式</text><text x=\"376\" y=\"324\" font-size=\"17\" fill=\"#243b36\">执行器编号、算术 lane、接口字节数，是三个不同维度。</text></g></svg><figcaption>单 core 四个 VP 的结构与编译器 CSS 映射；图中的执行目标不保证当前 kernel 实际使用了全部四个。</figcaption></figure><table><thead><tr><th>层次</th><th>已核对的结构</th><th>不能由此推出</th></tr></thead><tbody><tr><td>core 内执行器</td><td>4 × VP，对应 CSS4…CSS7</td><td>一次 kernel 自动四路分摊</td></tr><tr><td>单 VP 的 CAL</td><td>两组 32 路；wide 合计 64 路，pipe 串接</td><td>任意指令都同时完成 64 个元素</td></tr><tr><td>单 VP 的 L2 数据口</td><td>读 1024 bit、写 1024 bit，即各 128 B</td><td>内部只有 32 lane，或四 VP 必获四倍带宽</td></tr></tbody></table><p>术语要带层次：编译调度里有时也把执行器叫 lane；本文固定用“VP 执行器”和“CAL 元素 lane”避免混淆。一个 VP 不等同于 GPU 的一个 SM，源码也没有给出可照搬的 warp 调度模型。</p><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-hardware-rtl.md#vp-topology\">固定版本证据</a>。</p><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-compiler-sources.md#vc-hints\">固定版本证据</a>。</p>"
+      },
+      {
+        "id": "vp-io-budget",
+        "title": "先算有效字节，再谈 64 路计算是否吃得饱",
+        "html": "<p>单 VP 暴露一组 1024-bit 读数据口与一组 1024-bit 写数据口；双 tensor 输入复用这个读口，二者各有请求、接受和完成相关控制。128 B 是接口位宽；“128 B/拍”还要求该接口时钟域内成功握手、有效载荷填满并且没有反压。不能跳过条件直接换算持续 GB/s。</p><table><thead><tr><th>64 个逻辑元素</th><th>有效载荷</th><th>按满 128 B 口折算</th><th>应注意</th></tr></thead><tbody><tr><td>INT8 / FP8</td><td>64 B</td><td>0.5 个满载荷等价值</td><td>不是半次物理握手；可能有填充或合并</td></tr><tr><td>BF16</td><td>128 B</td><td>1 个满载荷等价值</td><td>内部会展宽为 FP32</td></tr><tr><td>FP32</td><td>256 B</td><td>2 个满载荷等价值</td><td>累计 64 个值的字节账本；FP32 实际常只用低 32 有效 lane</td></tr></tbody></table><p>再算一个<strong>教学字节账本</strong>：256 元素 BF16 的 <code>Z=X×Y</code>，X、Y、Z 都完整、连续、对齐；无额外 scale、PRG load 或中间写回。输入各 512 B，共读 1024 B；输出 512 B。因此数据端口至少承担 8 个满载读载荷、4 个满载写载荷。它不是“12 cycle 指令”：读写能否重叠、指令前后端、内部计算、尾块和 L2 仲裁都没计入。</p><figure class=\"diagram\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1120 365\" role=\"img\" aria-label=\"BF16×256 的字节账本：计算并行度之外还有端口负担\"><title>BF16×256 的字节账本：计算并行度之外还有端口负担</title><desc>只计算这个教学乘法的有效 payload，不模拟 RTL 时序、事务拆分或 L2 bank 冲突。</desc><rect width=\"1120\" height=\"365\" fill=\"#faf8f3\"/><g font-family=\"Noto Sans CJK SC, Microsoft YaHei, sans-serif\"><text x=\"32\" y=\"43\" font-size=\"25\" fill=\"#243b36\" font-weight=\"700\">BF16×256 的字节账本：计算并行度之外还有端口负担</text><rect x=\"32.0\" y=\"100\" width=\"333.3333333333333\" height=\"185\" rx=\"10\" fill=\"#edf5fb\" stroke=\"#276b99\" stroke-width=\"1.5\"/><text x=\"48.0\" y=\"132\" font-size=\"21\" fill=\"#276b99\">读 X 与 Y</text><text x=\"48.0\" y=\"165\" font-size=\"17\" fill=\"#243b36\">512 B + 512 B</text><text x=\"48.0\" y=\"194\" font-size=\"17\" fill=\"#243b36\">总读载荷 1024 B</text><text x=\"48.0\" y=\"223\" font-size=\"17\" fill=\"#243b36\">8 × 128 B</text><path d=\"M368.3333333333333 192 L390.3333333333333 192\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M382.3333333333333 187 L390.3333333333333 192 L382.3333333333333 197\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><rect x=\"393.3333333333333\" y=\"100\" width=\"333.3333333333333\" height=\"185\" rx=\"10\" fill=\"#fff0e6\" stroke=\"#aa5429\" stroke-width=\"1.5\"/><text x=\"409.3333333333333\" y=\"132\" font-size=\"21\" fill=\"#aa5429\">内部乘法</text><text x=\"409.3333333333333\" y=\"165\" font-size=\"17\" fill=\"#243b36\">按元素展宽</text><text x=\"409.3333333333333\" y=\"194\" font-size=\"17\" fill=\"#243b36\">按配置走 CAL</text><text x=\"409.3333333333333\" y=\"223\" font-size=\"17\" fill=\"#243b36\">内部 FP32 数据</text><path d=\"M729.6666666666666 192 L751.6666666666666 192\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M743.6666666666666 187 L751.6666666666666 192 L743.6666666666666 197\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><rect x=\"754.6666666666666\" y=\"100\" width=\"333.3333333333333\" height=\"185\" rx=\"10\" fill=\"#f2edf8\" stroke=\"#76548f\" stroke-width=\"1.5\"/><text x=\"770.6666666666666\" y=\"132\" font-size=\"21\" fill=\"#76548f\">写 BF16 Z</text><text x=\"770.6666666666666\" y=\"165\" font-size=\"17\" fill=\"#243b36\">256 × 2 B = 512 B</text><text x=\"770.6666666666666\" y=\"194\" font-size=\"17\" fill=\"#243b36\">4 × 128 B</text><text x=\"770.6666666666666\" y=\"223\" font-size=\"17\" fill=\"#243b36\">最终转换点可见</text><text x=\"32\" y=\"330\" font-size=\"17\" fill=\"#65746d\">机制示意；箭头表示数据依赖，不表示等时延或逐周期波形。</text></g></svg><figcaption>只计算这个教学乘法的有效 payload，不模拟 RTL 时序、事务拆分或 L2 bank 冲突。</figcaption></figure><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-hardware-rtl.md#vp-io\">固定版本证据</a>。</p><p>1024 bit 指有效数据位宽，不含另行传输的 ECC。FP32 单次读入是 32 个元素，归约入口的 FP32 模式也使用低 32 路有效 mask；上表的两个满载荷等价值只是累计 64 个数所需的字节，<strong>不保证两拍拼成一次 64 路有效 FP32 计算</strong>。实际 concat/bypass 取决于配置。</p>"
+      },
+      {
+        "id": "vp-descriptors",
+        "title": "指令不只描述算术：地址、形状与有效范围也是合同",
+        "html": "<p>VP 要知道输入和输出如何遍历 L2：base、维度、步进、数据格式与边界等配置决定取到的是哪一行、哪些通道、哪些有效元素。编译器中的逻辑 tensor/view 与硬件实际描述符之间需要一层明确转换。相同逻辑 shape 不代表相同物理地址，相同 base 也不代表可以忽略 offset。</p><table><thead><tr><th>层面</th><th>面试时要问的具体问题</th></tr></thead><tbody><tr><td>逻辑 tensor</td><td>这是 256 元素的一行，还是多行 tensor 的切片？归约沿哪一轴？</td></tr><tr><td>物理存储</td><td>view 与哪个 root buffer 别名？offset、stride 和 allocation 生命周期是什么？</td></tr><tr><td>描述符状态</td><td>读到的配置是否对应当前 slice？跨分支或循环是否仍有效？</td></tr><tr><td>有效数据</td><td>tail 的无效元素被屏蔽了吗？归约的填充值会不会污染结果？</td></tr><tr><td>输出</td><td>写了哪些字节？后续读者需要的范围是否已经完整初始化？</td></tr></tbody></table><p>例如把一行切成四个子块时，必须同时改变每段的起点、有效长度与输出范围。仅把执行器从 CSS4 改成 CSS5，不会自动完成切片。对于 sum 归约，可用 0 作为数学恒等填充值；max 常见用负无穷，但 NaN 与特殊值策略仍需单独约定。<strong>这些是算法合同，不能假定所有 VP 指令自动采用同一 mask 规则。</strong></p><p>描述符和数据完成的区别可继续读 <a href=\"#chapter/sync-resource-events\">资源与事件</a>；本节不列未逐项验证的全部指令字段编码。</p><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-hardware-rtl.md#vp-io\">固定版本证据</a>。</p><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-compiler-sources.md#vc-sync\">固定版本证据</a>。</p>"
+      },
+      {
+        "id": "vp-precal",
+        "title": "PreCal：把存储格式整理成计算格式",
+        "html": "<p>PreCal 位于读口与 CAL 之间，包含输入转换、数据拆分/拼接和分发。输入来自 L2 的 raw bits，内部算术使用 FP32 表示；先把“一个输入 beat 有多少元素”与“内部一批处理多少元素”对应起来，才能解释 narrow dtype 的优势与整理成本。</p><figure class=\"diagram\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1120 365\" role=\"img\" aria-label=\"沿 64 个 BF16 元素走进 VP\"><title>沿 64 个 BF16 元素走进 VP</title><desc>BF16 例子的数值展宽是表示转换；图不宣称所有配置都按一拍完成，也不表示可以删除源程序中的窄化边界。</desc><rect width=\"1120\" height=\"365\" fill=\"#faf8f3\"/><g font-family=\"Noto Sans CJK SC, Microsoft YaHei, sans-serif\"><text x=\"32\" y=\"43\" font-size=\"25\" fill=\"#243b36\" font-weight=\"700\">沿 64 个 BF16 元素走进 VP</text><rect x=\"32.0\" y=\"100\" width=\"333.3333333333333\" height=\"185\" rx=\"10\" fill=\"#edf5fb\" stroke=\"#276b99\" stroke-width=\"1.5\"/><text x=\"48.0\" y=\"132\" font-size=\"21\" fill=\"#276b99\">L2 raw</text><text x=\"48.0\" y=\"165\" font-size=\"17\" fill=\"#243b36\">64 × BF16</text><text x=\"48.0\" y=\"194\" font-size=\"17\" fill=\"#243b36\">128 B 有效载荷</text><text x=\"48.0\" y=\"223\" font-size=\"17\" fill=\"#243b36\">1024-bit 接口</text><path d=\"M368.3333333333333 192 L390.3333333333333 192\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M382.3333333333333 187 L390.3333333333333 192 L382.3333333333333 197\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><rect x=\"393.3333333333333\" y=\"100\" width=\"333.3333333333333\" height=\"185\" rx=\"10\" fill=\"#edf4eb\" stroke=\"#426e4b\" stroke-width=\"1.5\"/><text x=\"409.3333333333333\" y=\"132\" font-size=\"21\" fill=\"#426e4b\">PreCal</text><text x=\"409.3333333333333\" y=\"165\" font-size=\"17\" fill=\"#243b36\">格式转换与分发</text><text x=\"409.3333333333333\" y=\"194\" font-size=\"17\" fill=\"#243b36\">raw → FP32</text><text x=\"409.3333333333333\" y=\"223\" font-size=\"17\" fill=\"#243b36\">按模式整理批次</text><path d=\"M729.6666666666666 192 L751.6666666666666 192\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M743.6666666666666 187 L751.6666666666666 192 L743.6666666666666 197\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><rect x=\"754.6666666666666\" y=\"100\" width=\"333.3333333333333\" height=\"185\" rx=\"10\" fill=\"#fff0e6\" stroke=\"#aa5429\" stroke-width=\"1.5\"/><text x=\"770.6666666666666\" y=\"132\" font-size=\"21\" fill=\"#aa5429\">CAL 输入</text><text x=\"770.6666666666666\" y=\"165\" font-size=\"17\" fill=\"#243b36\">64 × FP32</text><text x=\"770.6666666666666\" y=\"194\" font-size=\"17\" fill=\"#243b36\">2048 bit 内部表示</text><text x=\"770.6666666666666\" y=\"223\" font-size=\"17\" fill=\"#243b36\">进入两组 32 路</text><text x=\"32\" y=\"330\" font-size=\"17\" fill=\"#65746d\">机制示意；箭头表示数据依赖，不表示等时延或逐周期波形。</text></g></svg><figcaption>BF16 例子的数值展宽是表示转换；图不宣称所有配置都按一拍完成，也不表示可以删除源程序中的窄化边界。</figcaption></figure><p>当前对外数据格式选择链核对到 INT8、FP8 E4M3、BF16、FP32。底层转换模块保留了其他格式常量，并不说明指令顶层能选到它们；不能仅凭搜索到 <code>FP16</code> 或 <code>E5M2</code> 名字就写成对外能力。</p><p>BF16→FP32 可以精确承载普通有限 BF16 值，但 FP32→BF16 会改变舍入。先窄化再展宽不能因为“最后都是 FP32”就消除；NaN、无穷、signed zero 和异常路径还需按真实硬件语义验证。</p><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-hardware-rtl.md#vp-pipeline\">固定版本证据</a>。</p><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-hardware-rtl.md#vp-numerics\">固定版本证据</a>。</p>"
+      },
+      {
+        "id": "vp-wide-pipe",
+        "title": "单 VP 的关键结构：wide 64 与 pipe 32+32",
+        "html": "<p><code>cal_group_top</code> 的总 lane 参数为 64，实际实例化两组 32-lane parallel engine。<code>pipe_mode=0</code> 时，两组接不同的输入半部，构成 wide 模式；<code>pipe_mode=1</code> 时，A 组的结果通过 link pipe 送到 B 组，构成更长的 32 路流水。</p><figure class=\"diagram\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1120 620\" role=\"img\" aria-label=\"wide 并列与 pipe 串接：两组 32 路的两种连接\"><title>wide 并列与 pipe 串接：两组 32 路的两种连接</title><desc>wide 的输入分叉到 A/B；pipe 的同一批数据顺序流经 A/B。结构图不表示一拍完成，也不保证所有输入类型都用满 64 路。</desc><rect width=\"1120\" height=\"620\" fill=\"#faf8f3\"/><g font-family=\"Noto Sans CJK SC, Microsoft YaHei, sans-serif\"><text x=\"32\" y=\"43\" font-size=\"25\" fill=\"#243b36\" font-weight=\"700\">wide 并列与 pipe 串接：两组 32 路的两种连接</text><text x=\"32\" y=\"79\" font-size=\"19\" fill=\"#426e4b\">wide：以下以 BF16 等 64 有效元素输入情形示意</text><rect x=\"32\" y=\"155\" width=\"220\" height=\"115\" rx=\"10\" fill=\"#edf5fb\" stroke=\"#276b99\" stroke-width=\"1.5\"/><text x=\"48\" y=\"187\" font-size=\"21\" fill=\"#276b99\">64 元素输入</text><text x=\"48\" y=\"220\" font-size=\"17\" fill=\"#243b36\">分为两半</text><text x=\"48\" y=\"249\" font-size=\"17\" fill=\"#243b36\">输入分发到 A 与 B</text><rect x=\"325\" y=\"100\" width=\"300\" height=\"100\" rx=\"10\" fill=\"#fff0e6\" stroke=\"#aa5429\" stroke-width=\"1.5\"/><text x=\"341\" y=\"132\" font-size=\"21\" fill=\"#aa5429\">A：32 路</text><text x=\"341\" y=\"165\" font-size=\"17\" fill=\"#243b36\">处理元素 0…31</text><rect x=\"325\" y=\"240\" width=\"300\" height=\"100\" rx=\"10\" fill=\"#fff0e6\" stroke=\"#aa5429\" stroke-width=\"1.5\"/><text x=\"341\" y=\"272\" font-size=\"21\" fill=\"#aa5429\">B：32 路</text><text x=\"341\" y=\"305\" font-size=\"17\" fill=\"#243b36\">处理元素 32…63</text><rect x=\"803\" y=\"170\" width=\"285\" height=\"100\" rx=\"10\" fill=\"#f2edf8\" stroke=\"#76548f\" stroke-width=\"1.5\"/><text x=\"819\" y=\"202\" font-size=\"21\" fill=\"#76548f\">并列结果</text><text x=\"819\" y=\"235\" font-size=\"17\" fill=\"#243b36\">按配置汇合到后级</text><path d=\"M252 212 H287 M287 150 V290 M625 150 H738 V290 H625 M738 220 H800\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M287 150 L322 150\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M314 145 L322 150 L314 155\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M287 290 L322 290\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M314 285 L322 290 L314 295\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M738 220 L800 220\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M792 215 L800 220 L792 225\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><text x=\"32\" y=\"395\" font-size=\"19\" fill=\"#426e4b\">pipe：同一批 32 元素按 A → link_pipe → B 前进</text><rect x=\"32\" y=\"425\" width=\"220\" height=\"115\" rx=\"10\" fill=\"#edf5fb\" stroke=\"#276b99\" stroke-width=\"1.5\"/><text x=\"48\" y=\"457\" font-size=\"21\" fill=\"#276b99\">32 元素输入</text><text x=\"48\" y=\"490\" font-size=\"17\" fill=\"#243b36\">保持元素身份</text><text x=\"48\" y=\"519\" font-size=\"17\" fill=\"#243b36\">送到 A 的入口</text><rect x=\"304\" y=\"425\" width=\"300\" height=\"115\" rx=\"10\" fill=\"#fff0e6\" stroke=\"#aa5429\" stroke-width=\"1.5\"/><text x=\"320\" y=\"457\" font-size=\"21\" fill=\"#aa5429\">A：第一段算术</text><text x=\"320\" y=\"490\" font-size=\"17\" fill=\"#243b36\">结果进入 link_pipe</text><text x=\"320\" y=\"519\" font-size=\"17\" fill=\"#243b36\">不在这里写回 L2</text><rect x=\"660\" y=\"425\" width=\"428\" height=\"115\" rx=\"10\" fill=\"#f2edf8\" stroke=\"#76548f\" stroke-width=\"1.5\"/><text x=\"676\" y=\"457\" font-size=\"21\" fill=\"#76548f\">B：第二段算术</text><text x=\"676\" y=\"490\" font-size=\"17\" fill=\"#243b36\">消费 A 的输出</text><text x=\"676\" y=\"519\" font-size=\"17\" fill=\"#243b36\">低 32 路结果送后级</text><path d=\"M255 480 L301 480\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M293 475 L301 480 L293 485\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M607 480 L657 480\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M649 475 L657 480 L649 485\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><text x=\"32\" y=\"583\" font-size=\"17\" fill=\"#65746d\">结构宽度不是吞吐保证：FP32 输入、归约、数据来源与输出格式都可能限制有效 lane。</text></g></svg><figcaption>wide 的输入分叉到 A/B；pipe 的同一批数据顺序流经 A/B。结构图不表示一拍完成，也不保证所有输入类型都用满 64 路。</figcaption></figure><p>这解释了“融合”为什么要看微架构：延长一条 VP 算术链可能减少中间 SRAM 读写与命令开销，同时也可能改变可用元素宽度和输入整理方式。<strong>不能仅按融合前后指令数，判断每元素吞吐。</strong></p><p>这里给的是 mux 与实例化所证明的数据通路。哪些 IR 配方会选用哪个模式，还要看当前 lowering 和生成指令；不能把两组 32 路解释成每条 op 天然有两倍峰值。</p><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-hardware-rtl.md#vp-pipeline\">固定版本证据</a>。</p>"
+      },
+      {
+        "id": "vp-arithmetic",
+        "title": "CAL 是有顺序与旁路的模块链",
+        "html": "<p>向量区不是一组可以任意排列的通用 ALU 指令。编译器显式维护模块顺序，模块的启用、旁路和操作数选择共同决定一条 VP 指令的含义。以下为<strong>固定版本编译器的抽象顺序</strong>，用于检查 chaining 合法性，并非精确逐周期 RTL 流水图：</p><pre>PreCal → Msk → Cmt → Dip → Sum0 → Prg → Mul → Flr\n       → Sum1 → Shf → Smt\n       → DipSc → PrgSc → MulSc → Sum1Sc → ShfSc → Sqr\n       → Rlu → PostCal</pre><table><thead><tr><th>模块族</th><th>理解其作用</th><th>不要误解</th></tr></thead><tbody><tr><td>Sum0 / Mul / Sum1</td><td>逐元素加减、乘法与相邻配方阶段</td><td>名字里的 Sum 不全是跨通道归约</td></tr><tr><td>Prg</td><td>按区间选择近似函数的参数</td><td>不是任意程序存储器，也不是精确 exp</td></tr><tr><td>Smt 与 scalar 区</td><td>Smt 可做 tree 归约或逐 lane 累加；tree 结果可接 scalar 区</td><td>Sqr 不能任意插入任一向量位置</td></tr><tr><td>Msk / Cmt / Rlu 等</td><td>mask、比较和激活相关路径</td><td>不是任意动态控制流</td></tr><tr><td>PostCal</td><td>后处理、缩放、类型转换与打包</td><td>不只是零成本的 store</td></tr></tbody></table><p>一条逻辑链要能落到这些模块和操作数入口。即使数学式能写成一个表达式，也可能因模块重复、顺序不符、额外读源、live user 或数值边界而拆成多条指令。看源码时先列运算图，再逐个映射到硬件模块，而不是只数 <code>tl.*</code> 调用。</p><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-compiler-sources.md#vc-order\">固定版本证据</a>。</p>"
+      },
+      {
+        "id": "vp-reduction",
+        "title": "归约与标量路径：为什么跨通道操作特别",
+        "html": "<p>逐元素乘法的每个输出只依赖对应元素；sum、max、归一化统计则要汇合一段通道数据。CAL 包含归约树和标量后处理路径，既要看同批 lane 的汇合，也要看一行跨多个批次时何时结束。<code>end_chl</code>、<code>end_tile</code> 等边界标志不能从数据值本身推出来。</p><figure class=\"diagram\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1120 365\" role=\"img\" aria-label=\"从独立元素到一行统计量，再返回逐元素计算\"><title>从独立元素到一行统计量，再返回逐元素计算</title><desc>示例是通用归一化的数据依赖，不断言整条归一化被编译成一条 VP 指令，也不模拟归约树舍入顺序。</desc><rect width=\"1120\" height=\"365\" fill=\"#faf8f3\"/><g font-family=\"Noto Sans CJK SC, Microsoft YaHei, sans-serif\"><text x=\"32\" y=\"43\" font-size=\"25\" fill=\"#243b36\" font-weight=\"700\">从独立元素到一行统计量，再返回逐元素计算</text><rect x=\"32.0\" y=\"100\" width=\"243.0\" height=\"185\" rx=\"10\" fill=\"#edf5fb\" stroke=\"#276b99\" stroke-width=\"1.5\"/><text x=\"48.0\" y=\"132\" font-size=\"21\" fill=\"#276b99\">向量值</text><text x=\"48.0\" y=\"165\" font-size=\"17\" fill=\"#243b36\">x₀², x₁², …</text><text x=\"48.0\" y=\"194\" font-size=\"17\" fill=\"#243b36\">每个元素有独立值</text><text x=\"48.0\" y=\"223\" font-size=\"17\" fill=\"#243b36\">逐批输入</text><path d=\"M278.0 192 L300.0 192\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M292.0 187 L300.0 192 L292.0 197\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><rect x=\"303.0\" y=\"100\" width=\"243.0\" height=\"185\" rx=\"10\" fill=\"#fff0e6\" stroke=\"#aa5429\" stroke-width=\"1.5\"/><text x=\"319.0\" y=\"132\" font-size=\"21\" fill=\"#aa5429\">归约结果</text><text x=\"319.0\" y=\"165\" font-size=\"17\" fill=\"#243b36\">s = Σ xᵢ²</text><text x=\"319.0\" y=\"194\" font-size=\"17\" fill=\"#243b36\">等待完整归约域</text><text x=\"319.0\" y=\"223\" font-size=\"17\" fill=\"#243b36\">形成行统计量</text><path d=\"M549.0 192 L571.0 192\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M563.0 187 L571.0 192 L563.0 197\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><rect x=\"574.0\" y=\"100\" width=\"243.0\" height=\"185\" rx=\"10\" fill=\"#f2edf8\" stroke=\"#76548f\" stroke-width=\"1.5\"/><text x=\"590.0\" y=\"132\" font-size=\"21\" fill=\"#76548f\">标量后处理</text><text x=\"590.0\" y=\"165\" font-size=\"17\" fill=\"#243b36\">r = 1 / √(s/C + ε)</text><text x=\"590.0\" y=\"194\" font-size=\"17\" fill=\"#243b36\">该行共享 r</text><text x=\"590.0\" y=\"223\" font-size=\"17\" fill=\"#243b36\">路径与近似需核对</text><path d=\"M820.0 192 L842.0 192\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M834.0 187 L842.0 192 L834.0 197\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><rect x=\"845.0\" y=\"100\" width=\"243.0\" height=\"185\" rx=\"10\" fill=\"#edf4eb\" stroke=\"#426e4b\" stroke-width=\"1.5\"/><text x=\"861.0\" y=\"132\" font-size=\"21\" fill=\"#426e4b\">向量使用 r</text><text x=\"861.0\" y=\"165\" font-size=\"17\" fill=\"#243b36\">yᵢ = xᵢ × r</text><text x=\"861.0\" y=\"194\" font-size=\"17\" fill=\"#243b36\">保留原向量或重读</text><text x=\"861.0\" y=\"223\" font-size=\"17\" fill=\"#243b36\">再乘逐通道 weight</text><text x=\"32\" y=\"330\" font-size=\"17\" fill=\"#65746d\">机制示意；箭头表示数据依赖，不表示等时延或逐周期波形。</text></g></svg><figcaption>示例是通用归一化的数据依赖，不断言整条归一化被编译成一条 VP 指令，也不模拟归约树舍入顺序。</figcaption></figure><p>当前编译器要求 <code>Sqr</code> 走 scalar 区，并通过 <code>Smt</code> tree 接入。C=1 的特例可插入适配；某些其他单例维度需要 DT transpose；没有合法维度时应拒绝 lowering。<strong>“数学上每元素开方”不等于硬件有可直接任意向量化的开方单元。</strong></p><p>把一行 reduction 切给四 VP 时，还要合并四份 partial，并保持归约与舍入合同。相反，把四条相互独立的完整行分别放到四 VP，通常没有这个跨执行器归约步骤。两类并行在算法上就不同。</p><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-hardware-rtl.md#vp-pipeline\">固定版本证据</a>。</p><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-compiler-sources.md#vc-order\">固定版本证据</a>。</p><h3>硬件轴与有状态 Mask</h3><p>RTL 区分沿硬件 C 的 tree 与整个 WHC 区域的 tree，前端 axis 必须先映射到描述符，不能直接把 C 当任意 tensor 的最后一维。树形、跨批累加与分片合并也有不同浮点求和顺序。</p><p>比较路径的 Mask 还保存 <strong>16 个 value/index 状态槽</strong>，在结束事件与 clear 条件下更新，并能屏蔽已命中的位置。这有助于理解反复选赢家的路径；它不是普通无状态 select。5-bit top_k 字段包含控制意义，不能据其位宽宣称有 32 槽，也不能据 16 槽单独判定所有前端 TopK API 的 K 上限。</p><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-hardware-rtl.md#vp-reduction\">固定版本证据</a>。</p>"
+      },
+      {
+        "id": "vp-prg",
+        "title": "PRG：用分段参数实现非线性近似",
+        "html": "<p>PRG 根据输入区间选择参数，配合后续 Mul / Sum 实现分段近似。用一段仿射函数解释最直观：先找区间 j，再取该段斜率与截距，计算 <code>f̂(x)=k[j]×x+b[j]</code>。它让 sigmoid 等非线性函数可以映射到规则的算术流水，但精度取决于区间、系数、边界与特殊值策略。</p><figure class=\"diagram\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1120 365\" role=\"img\" aria-label=\"分段近似：输入先选择参数，再进入算术\"><title>分段近似：输入先选择参数，再进入算术</title><desc>这是参数选择与仿射近似的教学图；不是将任意函数直接等同为同一组系数，也不假设乘加是一次 fused rounding。</desc><rect width=\"1120\" height=\"365\" fill=\"#faf8f3\"/><g font-family=\"Noto Sans CJK SC, Microsoft YaHei, sans-serif\"><text x=\"32\" y=\"43\" font-size=\"25\" fill=\"#243b36\" font-weight=\"700\">分段近似：输入先选择参数，再进入算术</text><rect x=\"32.0\" y=\"100\" width=\"333.3333333333333\" height=\"185\" rx=\"10\" fill=\"#edf5fb\" stroke=\"#276b99\" stroke-width=\"1.5\"/><text x=\"48.0\" y=\"132\" font-size=\"21\" fill=\"#276b99\">输入 x</text><text x=\"48.0\" y=\"165\" font-size=\"17\" fill=\"#243b36\">定位所属区间 j</text><text x=\"48.0\" y=\"194\" font-size=\"17\" fill=\"#243b36\">检查边界与有效域</text><text x=\"48.0\" y=\"223\" font-size=\"17\" fill=\"#243b36\">保留原 x</text><path d=\"M368.3333333333333 192 L390.3333333333333 192\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M382.3333333333333 187 L390.3333333333333 192 L382.3333333333333 197\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><rect x=\"393.3333333333333\" y=\"100\" width=\"333.3333333333333\" height=\"185\" rx=\"10\" fill=\"#fff0e6\" stroke=\"#aa5429\" stroke-width=\"1.5\"/><text x=\"409.3333333333333\" y=\"132\" font-size=\"21\" fill=\"#aa5429\">PRG 参数</text><text x=\"409.3333333333333\" y=\"165\" font-size=\"17\" fill=\"#243b36\">取 k[j] 与 b[j]</text><text x=\"409.3333333333333\" y=\"194\" font-size=\"17\" fill=\"#243b36\">32 / 64 段配置</text><text x=\"409.3333333333333\" y=\"223\" font-size=\"17\" fill=\"#243b36\">参数有执行器归属</text><path d=\"M729.6666666666666 192 L751.6666666666666 192\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M743.6666666666666 187 L751.6666666666666 192 L743.6666666666666 197\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><rect x=\"754.6666666666666\" y=\"100\" width=\"333.3333333333333\" height=\"185\" rx=\"10\" fill=\"#f2edf8\" stroke=\"#76548f\" stroke-width=\"1.5\"/><text x=\"770.6666666666666\" y=\"132\" font-size=\"21\" fill=\"#76548f\">算术与输出</text><text x=\"770.6666666666666\" y=\"165\" font-size=\"17\" fill=\"#243b36\">乘法，再相应加法</text><text x=\"770.6666666666666\" y=\"194\" font-size=\"17\" fill=\"#243b36\">得到近似值 f̂(x)</text><text x=\"770.6666666666666\" y=\"223\" font-size=\"17\" fill=\"#243b36\">按真实舍入合同判断</text><text x=\"32\" y=\"330\" font-size=\"17\" fill=\"#65746d\">机制示意；箭头表示数据依赖，不表示等时延或逐周期波形。</text></g></svg><figcaption>这是参数选择与仿射近似的教学图；不是将任意函数直接等同为同一组系数，也不假设乘加是一次 fused rounding。</figcaption></figure><p>本地 RTL 的有效配置已核对到 <strong>32 / 64 段</strong>。某些注释残留 128 段字样，但实际段数选择端口和参数数组不支持据此宣称 128 段。参数表也不是一次装入、全核四个 VP 就自动共享：其归属与消费者 CSS 是编译器必须处理的资源合同。</p><p>近似误差可能改变 MoE Router 接近的候选排名；要分别检查 sigmoid 值误差、TopK 选择和最终混合权重。正文的 <a href=\"#chapter/moe-sigmoid-topk-implementation\">sigmoid 与 TopK 实现</a>给出业务合同；这里只解释 VP 怎么承载这类算术。</p><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-hardware-rtl.md#vp-prg\">固定版本证据</a>。</p><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-compiler-sources.md#vc-prg\">固定版本证据</a>。</p><h3>参数表到底有多大</h3><p>一个 32-lane 并行 PRG 组共享 breakpoint、k、b 三个参数数组，各为 64×32 bit，共 <code>3×64×4=768 B</code>；32 段时有效参数载荷为 384 B。这是单组参数数组的容量，不含控制、FIFO、标量 PRG，也不是整个 VP 的 SRAM。不要再乘以 32 lane：查询者共享这份表。装载按有效参数输入分阶段推进，不能把输入阶段数直接说成固定时钟周期。</p><h3>当前 fast sigmoid 还做了什么</h3><p>固定编译器的 <code>approx=\"fast\"</code> 选择 64 段，在拟合前显式做 <code>max(x,-104)</code> 与 <code>min(x,10)</code>，然后 PRG 选 k/b，MUL 与 SUM1 求值。clamp 用于避免饱和段的零斜率与无穷相乘等问题；<code>accurate</code> 是另一条 exp/倒数修正路径。段数、clamp 与函数系数都属于这版配方，不能当作所有非线性函数的通用常数。</p><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-compiler-sources.md#vc-silu\">固定版本证据</a>。</p>"
+      },
+      {
+        "id": "vp-postcal",
+        "title": "PostCal：输出精度与第二段算术不能忽略",
+        "html": "<p>算术结果进入 PostCal 后，仍可能经历缩放、加减、格式转换与并串打包，再写回 L2。内部 FP32 表示和最终输出 BF16/FP8 是两件事；输出 dtype 会改变字节数，也会改变数值。</p><p>最容易踩坑的例子是两次标量乘法：</p><pre>原语义：t = round_f32(x × a)\n        y = round_f32(t × b)\n不能直接替换为：y = round_f32(x × round_f32(a × b))</pre><p>当前 <code>PostCalScalarChaining</code> 的闭合配方显式保留两次 FP32 乘法的顺序与舍入。它要求匹配受支持的 FP32 输入/中间值，可处理已证明合法的最终 BF16 narrowing；不能把未包含在此固定版本里的后续修改写成现状。</p><table><thead><tr><th>想做的优化</th><th>必须保留的合同</th></tr></thead><tbody><tr><td>消掉 BF16→FP32</td><td>源值是否确实仍为 BF16 舍入后的值；是否有其他读者</td></tr><tr><td>合并 ×a 再 ×b</td><td>两次乘法的顺序、舍入及参数消费次序</td></tr><tr><td>把 cast 推到最后</td><td>中间 BF16/FP8 窄化是否属于算法既定语义</td></tr><tr><td>原地写输出</td><td>旧输入是否仍被读取；PostCal 输出与 Y 是否重叠</td></tr><tr><td>减少输出字节</td><td>下游需要的 dtype 和量化约定是否改变</td></tr></tbody></table><p>因此融合优化的目标是减少可消除的传输和控制开销，同时保留程序规定的数值路径。特殊值与舍入不能仅用普通随机数据的相对误差测试替代。</p><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-hardware-rtl.md#vp-numerics\">固定版本证据</a>。</p><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-compiler-sources.md#vc-postcal\">固定版本证据</a>。</p><h3>把特殊值说到实际转换器</h3><p>本地连接实际使用 <code>vp_518_i2f</code> 与 <code>vp_518_f2i</code>。普通 BF16 窄化采用 round-to-nearest ties-to-even；NaN 有非零尾数处理，normal/saturation 模式对 Inf 与溢出结果不同，零分支产生正零。这些是固定副本代码规则，未做本轮逐位仿真；不能宣称转换天然保留所有 NaN payload、quiet 位或 signed zero。</p>"
+      },
+      {
+        "id": "vp-swiglu",
+        "title": "走完一个 SwiGLU：每个中间值都有去处",
+        "html": "<p>回到主例 <code>z=(g×sigmoid(g))×u</code>。先画逻辑值，再决定硬件指令。固定版本的 <code>python/zeus_business_kernels/moe/_silu_and_mul_common.py:99–118</code> 正好给出一个可对照的 BF16 分支：g、u 显式转 FP32，计算 fast sigmoid，先 g×sigmoid(g)，再乘 u，最后转 BF16。这里讲激活乘法部分，不包含 gate/up GEMM，也不证明已融合为一条指令。</p><figure class=\"diagram\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1120 365\" role=\"img\" aria-label=\"SwiGLU 的值依赖：先激活 gate，再乘 up\"><title>SwiGLU 的值依赖：先激活 gate，再乘 up</title><desc>教学数学链；sigmoid 的具体近似、多指令拆分、缓存与 cast 点必须与真实编译产物交叉核对。</desc><rect width=\"1120\" height=\"365\" fill=\"#faf8f3\"/><g font-family=\"Noto Sans CJK SC, Microsoft YaHei, sans-serif\"><text x=\"32\" y=\"43\" font-size=\"25\" fill=\"#243b36\" font-weight=\"700\">SwiGLU 的值依赖：先激活 gate，再乘 up</text><rect x=\"32.0\" y=\"100\" width=\"243.0\" height=\"185\" rx=\"10\" fill=\"#edf5fb\" stroke=\"#276b99\" stroke-width=\"1.5\"/><text x=\"48.0\" y=\"132\" font-size=\"21\" fill=\"#276b99\">g → FP32</text><text x=\"48.0\" y=\"165\" font-size=\"17\" fill=\"#243b36\">保留 g 的值</text><text x=\"48.0\" y=\"194\" font-size=\"17\" fill=\"#243b36\">计算 sigmoid 近似</text><text x=\"48.0\" y=\"223\" font-size=\"17\" fill=\"#243b36\">需要相应 PRG 参数</text><path d=\"M278.0 192 L300.0 192\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M292.0 187 L300.0 192 L292.0 197\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><rect x=\"303.0\" y=\"100\" width=\"243.0\" height=\"185\" rx=\"10\" fill=\"#fff0e6\" stroke=\"#aa5429\" stroke-width=\"1.5\"/><text x=\"319.0\" y=\"132\" font-size=\"21\" fill=\"#aa5429\">s = sigmoid(g)</text><text x=\"319.0\" y=\"165\" font-size=\"17\" fill=\"#243b36\">s 与原 g 对齐</text><text x=\"319.0\" y=\"194\" font-size=\"17\" fill=\"#243b36\">a = g × s</text><text x=\"319.0\" y=\"223\" font-size=\"17\" fill=\"#243b36\">原 g 不能过早覆盖</text><path d=\"M549.0 192 L571.0 192\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M563.0 187 L571.0 192 L563.0 197\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><rect x=\"574.0\" y=\"100\" width=\"243.0\" height=\"185\" rx=\"10\" fill=\"#f2edf8\" stroke=\"#76548f\" stroke-width=\"1.5\"/><text x=\"590.0\" y=\"132\" font-size=\"21\" fill=\"#76548f\">u → FP32</text><text x=\"590.0\" y=\"165\" font-size=\"17\" fill=\"#243b36\">z32 = a × u</text><text x=\"590.0\" y=\"194\" font-size=\"17\" fill=\"#243b36\">第二个向量来源</text><text x=\"590.0\" y=\"223\" font-size=\"17\" fill=\"#243b36\">受 FIFO / alias 约束</text><path d=\"M820.0 192 L842.0 192\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M834.0 187 L842.0 192 L834.0 197\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><rect x=\"845.0\" y=\"100\" width=\"243.0\" height=\"185\" rx=\"10\" fill=\"#edf4eb\" stroke=\"#426e4b\" stroke-width=\"1.5\"/><text x=\"861.0\" y=\"132\" font-size=\"21\" fill=\"#426e4b\">z → BF16</text><text x=\"861.0\" y=\"165\" font-size=\"17\" fill=\"#243b36\">按规定舍入</text><text x=\"861.0\" y=\"194\" font-size=\"17\" fill=\"#243b36\">PostCal 与打包</text><text x=\"861.0\" y=\"223\" font-size=\"17\" fill=\"#243b36\">写回并发出完成</text><text x=\"32\" y=\"330\" font-size=\"17\" fill=\"#65746d\">机制示意；箭头表示数据依赖，不表示等时延或逐周期波形。</text></g></svg><figcaption>教学数学链；sigmoid 的具体近似、多指令拆分、缓存与 cast 点必须与真实编译产物交叉核对。</figcaption></figure><p>问“能否一次融合”之前，先回答四件事：sigmoid 用什么近似？g 需要在哪里保留？u 从哪个输入入口进入？中间是否要求 BF16 舍入？如果这些问题未定，一句“VP 支持融合”无法证明方案成立。</p><p>例如早把 sigmoid 结果写回 g 所在 buffer，会破坏后面的 <code>g×s</code>；把 <code>(g×s)×u</code> 改为 <code>g×(s×u)</code> 也可能改变 FP32 舍入。保留图上的值生命周期与算术顺序，才能讨论 SRAM 复用。</p><p>真实 Shared 和 Routed 路径还包含 PE 投影、缩放和不同的 pack/输出合同，见 <a href=\"#chapter/moe-shared-dataflow\">Shared 数据流</a>与 <a href=\"#chapter/moe-routed-dataflow\">Routed 数据流</a>。本文不把教学链当作某个已验证 zbin。</p><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-compiler-sources.md#vc-chaining\">固定版本证据</a>。</p><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-compiler-sources.md#vc-postcal\">固定版本证据</a>。</p><pre>参数准备：为实际消费者 CSS 装入 fast sigmoid 的 PRG 表\n数据路径：gate_bf16 → gate_fp32 → clamp / PRG / MUL / SUM1 → sigmoid\n保留原值：gate_fp32 × sigmoid → silu_fp32\n第二来源：silu_fp32 × up_fp32 → result_fp32 → BF16 输出</pre><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-compiler-sources.md#vc-silu\">固定版本证据</a>。</p>"
+      },
+      {
+        "id": "vp-chaining",
+        "title": "VPChaining：证明一条硬件流水能接住整张子图",
+        "html": "<p>融合的第一关是模块顺序，第二关是值从哪里进入，第三关是旧值何时可以消失。<code>ResolveVPDeps</code> 还会补足模块间必要的依赖；这不是把几个相邻 op 拼成一个字符串。</p><table><thead><tr><th>检查维度</th><th>能否合并的理由或反例</th></tr></thead><tbody><tr><td>模块顺序</td><td>前一结果只能流向合法后继；重复或逆序模块不能凭代数等价绕过</td></tr><tr><td>共享入口</td><td>external Y、PRG.b、FLR.s、DIP.s 共用 CAL FIFO 写入口；合并指令最多保留其中一类来源</td></tr><tr><td>数据依赖</td><td>被融合中间值若有外部读者，仍要保留其可观察结果</td></tr><tr><td>alias 与覆盖</td><td>输出写入不能覆盖尚需读取的 X/Y 或其他 view</td></tr><tr><td>数值</td><td>保留窄化、两次舍入、特殊值和激活次序</td></tr><tr><td>调度策略</td><td>精确 VP 放置、split 策略与生命周期要一致</td></tr></tbody></table><p>一个实用反例：算式在模块顺序上完全合法，但既需要 external Y 又需要占同一个 FIFO 的 PRG.b 来源。这时没有合法输入路由；“少一条指令”并不能解决物理入口冲突。反过来，即使入口合法，也必须证明输出别名和 live user 安全。</p><p>读编译结果时依次核对：IR 中是否融合 → lowering 选择什么模式 → CSS 指向哪里 → 是否插入额外 DT/copy → SRAM 生命周期与同步是否仍正确。这样才能把编译优化和硬件行为连接起来。</p><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-compiler-sources.md#vc-chaining\">固定版本证据</a>。</p>"
+      },
+      {
+        "id": "vp-multivp",
+        "title": "多 VP 的两条路线：分配独立工作，或切分同一个 tile",
+        "html": "<p><code>parallel_executor_hint()</code> 与 <code>vp_hint(value, num_vp=N)</code> 解决不同问题。前者帮助独立逻辑操作分配执行目标，后者给同一个逻辑 tile 的 VP 计算提供拆分策略。它们可以在一个 kernel 中共存，但同一 op 上的 exact placement 与 split 不是可以随意叠加的两层并行。</p><figure class=\"diagram\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1120 468\" role=\"img\" aria-label=\"两种多 VP：多份完整工作，或一份工作的分片\"><title>两种多 VP：多份完整工作，或一份工作的分片</title><desc>示意每 core 四个执行器。实际切分粒度、合法维度、copy 与 placement 由编译器和形状约束决定。</desc><rect width=\"1120\" height=\"468\" fill=\"#faf8f3\"/><g font-family=\"Noto Sans CJK SC, Microsoft YaHei, sans-serif\"><text x=\"32\" y=\"43\" font-size=\"25\" fill=\"#243b36\" font-weight=\"700\">两种多 VP：多份完整工作，或一份工作的分片</text><rect x=\"32\" y=\"90\" width=\"246\" height=\"118\" rx=\"10\" fill=\"#edf5fb\" stroke=\"#276b99\" stroke-width=\"1.5\"/><text x=\"48\" y=\"122\" font-size=\"21\" fill=\"#276b99\">独立行 0 → VP0</text><text x=\"48\" y=\"155\" font-size=\"17\" fill=\"#243b36\">每行自己的输入与输出</text><text x=\"48\" y=\"184\" font-size=\"17\" fill=\"#243b36\">完整逻辑 op 分配执行器</text><rect x=\"304\" y=\"90\" width=\"246\" height=\"118\" rx=\"10\" fill=\"#edf5fb\" stroke=\"#276b99\" stroke-width=\"1.5\"/><text x=\"320\" y=\"122\" font-size=\"21\" fill=\"#276b99\">独立行 1 → VP1</text><text x=\"320\" y=\"155\" font-size=\"17\" fill=\"#243b36\">每行自己的输入与输出</text><text x=\"320\" y=\"184\" font-size=\"17\" fill=\"#243b36\">完整逻辑 op 分配执行器</text><rect x=\"576\" y=\"90\" width=\"246\" height=\"118\" rx=\"10\" fill=\"#edf5fb\" stroke=\"#276b99\" stroke-width=\"1.5\"/><text x=\"592\" y=\"122\" font-size=\"21\" fill=\"#276b99\">独立行 2 → VP2</text><text x=\"592\" y=\"155\" font-size=\"17\" fill=\"#243b36\">每行自己的输入与输出</text><text x=\"592\" y=\"184\" font-size=\"17\" fill=\"#243b36\">完整逻辑 op 分配执行器</text><rect x=\"848\" y=\"90\" width=\"246\" height=\"118\" rx=\"10\" fill=\"#edf5fb\" stroke=\"#276b99\" stroke-width=\"1.5\"/><text x=\"864\" y=\"122\" font-size=\"21\" fill=\"#276b99\">独立行 3 → VP3</text><text x=\"864\" y=\"155\" font-size=\"17\" fill=\"#243b36\">每行自己的输入与输出</text><text x=\"864\" y=\"184\" font-size=\"17\" fill=\"#243b36\">完整逻辑 op 分配执行器</text><rect x=\"32\" y=\"270\" width=\"246\" height=\"118\" rx=\"10\" fill=\"#fff0e6\" stroke=\"#aa5429\" stroke-width=\"1.5\"/><text x=\"48\" y=\"302\" font-size=\"21\" fill=\"#aa5429\">同一行第 0 段 → VP0</text><text x=\"48\" y=\"335\" font-size=\"17\" fill=\"#243b36\">元素 [0, 64)</text><text x=\"48\" y=\"364\" font-size=\"17\" fill=\"#243b36\">同一个 op 切成子任务</text><rect x=\"304\" y=\"270\" width=\"246\" height=\"118\" rx=\"10\" fill=\"#fff0e6\" stroke=\"#aa5429\" stroke-width=\"1.5\"/><text x=\"320\" y=\"302\" font-size=\"21\" fill=\"#aa5429\">同一行第 1 段 → VP1</text><text x=\"320\" y=\"335\" font-size=\"17\" fill=\"#243b36\">元素 [64, 128)</text><text x=\"320\" y=\"364\" font-size=\"17\" fill=\"#243b36\">同一个 op 切成子任务</text><rect x=\"576\" y=\"270\" width=\"246\" height=\"118\" rx=\"10\" fill=\"#fff0e6\" stroke=\"#aa5429\" stroke-width=\"1.5\"/><text x=\"592\" y=\"302\" font-size=\"21\" fill=\"#aa5429\">同一行第 2 段 → VP2</text><text x=\"592\" y=\"335\" font-size=\"17\" fill=\"#243b36\">元素 [128, 192)</text><text x=\"592\" y=\"364\" font-size=\"17\" fill=\"#243b36\">同一个 op 切成子任务</text><rect x=\"848\" y=\"270\" width=\"246\" height=\"118\" rx=\"10\" fill=\"#fff0e6\" stroke=\"#aa5429\" stroke-width=\"1.5\"/><text x=\"864\" y=\"302\" font-size=\"21\" fill=\"#aa5429\">同一行第 3 段 → VP3</text><text x=\"864\" y=\"335\" font-size=\"17\" fill=\"#243b36\">元素 [192, 256)</text><text x=\"864\" y=\"364\" font-size=\"17\" fill=\"#243b36\">同一个 op 切成子任务</text><text x=\"32\" y=\"246\" font-size=\"20\" fill=\"#426e4b\">上：parallel_executor_hint  ｜ 下：vp_hint(value, num_vp=4)</text><text x=\"32\" y=\"425\" font-size=\"17\" fill=\"#65746d\">下图以 256 元素逐元素算子作教学切分；归约、TopK 和带状态算法不能照搬。</text></g></svg><figcaption>示意每 core 四个执行器。实际切分粒度、合法维度、copy 与 placement 由编译器和形状约束决定。</figcaption></figure><p><code>vp_hint</code> 返回的值要继续用于后续计算，否则策略可能没有沿预期数据流传播。<code>num_vp=4</code> 是精确局部拓扑要求，无法合法拆分会编译报错；<code>auto</code> 与 kernel 级 parallel hint 则启用相应选择和规划，不保证四路使用。即使满足四路拓扑，也必须核对实际生成的 CSS4…CSS7 指令、各 executor 的输入输出子范围以及运行时依赖，不能据此推出实际重叠或加速。</p><p>回到 256 元素 BF16 二元乘法：如果四路恰好各处理 64 元素，每 VP 有 256 B 输入、128 B 输出；全核仍读 1024 B、写 512 B。<strong>切分没有减少总字节</strong>，只改变并发和每路工作量；它还可能增加 setup、对齐浪费、临时空间、PRG 装载或同步。</p><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-compiler-sources.md#vc-hints\">固定版本证据</a>。</p>"
+      },
+      {
+        "id": "vp-prg-ownership",
+        "title": "四个 VP 的参数状态：读到正确表，才有正确结果",
+        "html": "<p>非线性多 VP 的一个关键细节是 PRG 表按 CSS 归属。原来只有 CSS4 消费参数时，向 CSS4 装表就够；把计算分散到 CSS5、CSS6、CSS7 后，必须确保这些消费者也获得正确版本的参数。编译器 lowering 会依据消费者 CSS 处理广播；<code>AUTO</code> 不是硬件“向所有 VP 广播”的别名。</p><figure class=\"diagram\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1120 365\" role=\"img\" aria-label=\"多 VP 不仅分数据，还要跟踪参数的消费者\"><title>多 VP 不仅分数据，还要跟踪参数的消费者</title><desc>示意一个表被四个 VP 使用；实际 load 数量与复用范围以生成指令为准，图不暗示每个 tile 都必须重新装表。</desc><rect width=\"1120\" height=\"365\" fill=\"#faf8f3\"/><g font-family=\"Noto Sans CJK SC, Microsoft YaHei, sans-serif\"><text x=\"32\" y=\"43\" font-size=\"25\" fill=\"#243b36\" font-weight=\"700\">多 VP 不仅分数据，还要跟踪参数的消费者</text><rect x=\"32.0\" y=\"100\" width=\"333.3333333333333\" height=\"185\" rx=\"10\" fill=\"#edf5fb\" stroke=\"#276b99\" stroke-width=\"1.5\"/><text x=\"48.0\" y=\"132\" font-size=\"21\" fill=\"#276b99\">参数对象</text><text x=\"48.0\" y=\"165\" font-size=\"17\" fill=\"#243b36\">系数与段数</text><text x=\"48.0\" y=\"194\" font-size=\"17\" fill=\"#243b36\">本次使用的版本</text><text x=\"48.0\" y=\"223\" font-size=\"17\" fill=\"#243b36\">装载的来源与生命周期</text><path d=\"M368.3333333333333 192 L390.3333333333333 192\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M382.3333333333333 187 L390.3333333333333 192 L382.3333333333333 197\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><rect x=\"393.3333333333333\" y=\"100\" width=\"333.3333333333333\" height=\"185\" rx=\"10\" fill=\"#fff0e6\" stroke=\"#aa5429\" stroke-width=\"1.5\"/><text x=\"409.3333333333333\" y=\"132\" font-size=\"21\" fill=\"#aa5429\">消费者集合</text><text x=\"409.3333333333333\" y=\"165\" font-size=\"17\" fill=\"#243b36\">CSS4 / CSS5</text><text x=\"409.3333333333333\" y=\"194\" font-size=\"17\" fill=\"#243b36\">CSS6 / CSS7</text><text x=\"409.3333333333333\" y=\"223\" font-size=\"17\" fill=\"#243b36\">按实际指令定位</text><path d=\"M729.6666666666666 192 L751.6666666666666 192\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M743.6666666666666 187 L751.6666666666666 192 L743.6666666666666 197\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><rect x=\"754.6666666666666\" y=\"100\" width=\"333.3333333333333\" height=\"185\" rx=\"10\" fill=\"#f2edf8\" stroke=\"#76548f\" stroke-width=\"1.5\"/><text x=\"770.6666666666666\" y=\"132\" font-size=\"21\" fill=\"#76548f\">使用前条件</text><text x=\"770.6666666666666\" y=\"165\" font-size=\"17\" fill=\"#243b36\">本执行器表已就绪</text><text x=\"770.6666666666666\" y=\"194\" font-size=\"17\" fill=\"#243b36\">未被其他配方覆盖</text><text x=\"770.6666666666666\" y=\"223\" font-size=\"17\" fill=\"#243b36\">跨循环保留策略有效</text><text x=\"32\" y=\"330\" font-size=\"17\" fill=\"#65746d\">机制示意；箭头表示数据依赖，不表示等时延或逐周期波形。</text></g></svg><figcaption>示意一个表被四个 VP 使用；实际 load 数量与复用范围以生成指令为准，图不暗示每个 tile 都必须重新装表。</figcaption></figure><p>因此排查“VP1 正确、VP4 错误”时，应同时检查数据切片、PRG load 的 CSS、装载到消费的依赖、共享 buffer 的存活与参数覆盖。不能只检查最后的数值误差，也不能假定 PRG 是只读全局常量缓存。</p><p>这一点也限制收益：新增执行器带来的计算并行，可能被参数装载和控制开销抵消。首先确认参数是否真正复用，再讨论提升并发。</p><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-compiler-sources.md#vc-prg\">固定版本证据</a>。</p>"
+      },
+      {
+        "id": "vp-sync",
+        "title": "从指令发出到数据完成：同步必须落在正确事件上",
+        "html": "<p>异步单元里至少有指令被接受、描述符被采样、输入被消费、结果写回和完成事件等不同阶段。CT 发出下一条命令，并不意味着上一条 VP 的输出已可供 PE 或 ST 使用。</p><figure class=\"diagram\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1120 365\" role=\"img\" aria-label=\"一块 SRAM 被复用时，沿 RAW / WAR / WAW 检查\"><title>一块 SRAM 被复用时，沿 RAW / WAR / WAW 检查</title><desc>箭头是必须证明的先后关系，不是每条边一定插一条相同类型的 barrier；具体协议见 InjectSync 章节。</desc><rect width=\"1120\" height=\"365\" fill=\"#faf8f3\"/><g font-family=\"Noto Sans CJK SC, Microsoft YaHei, sans-serif\"><text x=\"32\" y=\"43\" font-size=\"25\" fill=\"#243b36\" font-weight=\"700\">一块 SRAM 被复用时，沿 RAW / WAR / WAW 检查</text><rect x=\"32.0\" y=\"100\" width=\"333.3333333333333\" height=\"185\" rx=\"10\" fill=\"#edf5fb\" stroke=\"#276b99\" stroke-width=\"1.5\"/><text x=\"48.0\" y=\"132\" font-size=\"21\" fill=\"#276b99\">生产者</text><text x=\"48.0\" y=\"165\" font-size=\"17\" fill=\"#243b36\">LD / PE / VP</text><text x=\"48.0\" y=\"194\" font-size=\"17\" fill=\"#243b36\">把结果写到区域 R</text><text x=\"48.0\" y=\"223\" font-size=\"17\" fill=\"#243b36\">证明完成边界</text><path d=\"M368.3333333333333 192 L390.3333333333333 192\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M382.3333333333333 187 L390.3333333333333 192 L382.3333333333333 197\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><rect x=\"393.3333333333333\" y=\"100\" width=\"333.3333333333333\" height=\"185\" rx=\"10\" fill=\"#fff0e6\" stroke=\"#aa5429\" stroke-width=\"1.5\"/><text x=\"409.3333333333333\" y=\"132\" font-size=\"21\" fill=\"#aa5429\">VP 读 R</text><text x=\"409.3333333333333\" y=\"165\" font-size=\"17\" fill=\"#243b36\">RAW：读之前已写好</text><text x=\"409.3333333333333\" y=\"194\" font-size=\"17\" fill=\"#243b36\">WAR：读完前别覆盖</text><text x=\"409.3333333333333\" y=\"223\" font-size=\"17\" fill=\"#243b36\">view 也属于同一存储</text><path d=\"M729.6666666666666 192 L751.6666666666666 192\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><path d=\"M743.6666666666666 187 L751.6666666666666 192 L743.6666666666666 197\" stroke=\"#83988b\" stroke-width=\"2.5\" fill=\"none\"/><rect x=\"754.6666666666666\" y=\"100\" width=\"333.3333333333333\" height=\"185\" rx=\"10\" fill=\"#f2edf8\" stroke=\"#76548f\" stroke-width=\"1.5\"/><text x=\"770.6666666666666\" y=\"132\" font-size=\"21\" fill=\"#76548f\">下一次复用</text><text x=\"770.6666666666666\" y=\"165\" font-size=\"17\" fill=\"#243b36\">重新分配或写 R</text><text x=\"770.6666666666666\" y=\"194\" font-size=\"17\" fill=\"#243b36\">检查所有旧读者</text><text x=\"770.6666666666666\" y=\"223\" font-size=\"17\" fill=\"#243b36\">避免跨执行器竞态</text><text x=\"32\" y=\"330\" font-size=\"17\" fill=\"#65746d\">机制示意；箭头表示数据依赖，不表示等时延或逐周期波形。</text></g></svg><figcaption>箭头是必须证明的先后关系，不是每条边一定插一条相同类型的 barrier；具体协议见 InjectSync 章节。</figcaption></figure><p>一个 CSS 内的顺序性质不能不加证明地扩展到两个 CSS；逻辑 SSA value 不同也不能排除物理地址重叠。并行越多，临时 buffer 越多、生命周期越容易交错，compiler 必须基于物理 alias 与单元完成语义建立依赖。</p><p>对于一块 gate buffer，sigmoid 消费 g 与后面的 g×s 都是读者；即使第一条读取已结束，也不能立刻让另一个执行器覆盖该地址。正确方案可能是延长生命周期、保留独立输出或添加必要同步，选择取决于真实值图。</p><p>更完整的证明模型见 <a href=\"#chapter/sync-resource-events/se-hazards\">RAW / WAR / WAW</a>和 <a href=\"#chapter/sync-proof-implementation\">InjectSync 验证范围</a>。本章没有新增 RTL 同步形式化验证。</p><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-compiler-sources.md#vc-sync\">固定版本证据</a>。</p><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-hardware-rtl.md#vp-handshake\">固定版本证据</a>。</p>"
+      },
+      {
+        "id": "vp-backpressure",
+        "title": "为什么 CAL 空着：沿反压与供数往两边查",
+        "html": "<p>VP 的读端、PreCal、计算链、PostCal 和写端之间使用流控。某一阶段没有前进，可能是没有输入，也可能是下游接不走。只看算术模块 busy，无法区分供数不足、输入来源等待、输出堵塞与命令依赖。</p><table><thead><tr><th>现象</th><th>沿哪条路径查</th><th>不能直接得出的结论</th></tr></thead><tbody><tr><td>CAL 等待输入</td><td>L2 返回 → 输入 FIFO → PreCal 分发 → 所需第二来源</td><td>算术单元本身太慢</td></tr><tr><td>PostCal / 写端等待</td><td>输出有效 → L2 写接受 → 完成条件 → 上游 ready</td><td>需要再加一个 VP</td></tr><tr><td>短 tile 总时延高</td><td>setup、PRG load、命令队列、fill/drain 与依赖</td><td>64-lane 峰值没有实现</td></tr><tr><td>VP4 增益低或变慢</td><td>共享 L2、参数重复装载、split/copy、同步与 SRAM</td><td>硬件只有一个 VP</td></tr><tr><td>VP busy 很高但总时延不变</td><td>它是否与 PE 重叠、是否在关键路径上</td><td>所有 VP busy 都能变成优化收益</td></tr></tbody></table><p>RTL 连线能证明有流控，不能单靠静态代码证明某个业务 job 的实际瓶颈。下一步应冻结源代码、编译器、输入、shape、时钟与计时区间，再看匹配的时间线和关键握手。若要解释 stall 周期，波形或对应事件记录比一个总 busy 数更有判别力。</p><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-hardware-rtl.md#vp-handshake\">固定版本证据</a>。</p><p>trace 也要先审计口径：当前指令控制代码按顺序 FIFO 选择各 VP 的 start/done，done 还受 mailbox 条件约束。因此外显条形宽度可能包含记录顺序或同步等待，不能未经核对就等同纯算术忙碌时间。普通写输出的完成要跟踪写响应，PRG load 则有单独完成分支。</p>"
+      },
+      {
+        "id": "vp-performance",
+        "title": "怎么判断优化有效：字节、模式、重叠与慢核一起看",
+        "html": "<p>先建立需求账本，再与实现观测对应：有效读写字节、PRG 装载次数、wide/pipe 模式、生成指令数量、四个 CSS 的工作分布、临时 SRAM 峰值，以及 PE/VP/LD/ST 的重叠。这里没有一个可以代替最终完成时间的单项计数。</p><p>条件模型可以写成：</p><pre>T_lb = max(B_read / R_read, B_write / R_write, W / R_compute)\nT ≥ T_lb\n前提：各 R 必须属于同一时间单位，且是相应配置的速率上限或显式假设的供给上限；不能拿某次实测速率当严格上限。\n真实时间还受依赖、命令开销、流水启动/排空、资源争用和同步限制。</pre><p>如果读写共享下层瓶颈，还要加联合带宽约束；上式中的 max 不证明读写一定完全重叠。也不能把“64 lane”直接填进任意算子的 <code>R_compute</code>，因为 pipe、归约与格式转换改变工作路径。</p><table><thead><tr><th>比较项</th><th>报告口径</th></tr></thead><tbody><tr><td>功能正确</td><td>普通值、tail、特殊值、近似函数边界和需要的 bit-exact / 容差标准</td></tr><tr><td>编译产物</td><td>实际 CSS、wide/pipe、PRG load、额外 copy/DT、L2 占用</td></tr><tr><td>CycleSim</td><td>模型结果单列，可用于筛选，不能替代 RTL 结论</td></tr><tr><td>VCS / RTL</td><td>固定来源和输入；慢核用 max(core0_end−core0_start, core1_end−core1_start)</td></tr><tr><td>业务范围</td><td>kernel、Graph、完整 MoE、端到端服务分别计量</td></tr><tr><td>频率换算</td><td>若明确为 400 MHz，则 ms=cycles/400000；频率不是默认事实</td></tr></tbody></table><p>尤其注意 PE 与 VP 重叠：假设某段 VP 的 100 个 cycle 已完全隐藏在更长 PE 工作之后，减少这段 VP 不保证慢核缩短 100 cycle。这个数字只是教学反例，不是 518 的实测记录。真正要优化的是使最终结果变晚的那条依赖链。</p><p class=\"source-note\">源码与范围：<a href=\"./evidence/vp-compiler-sources.md#vc-hints\">固定版本证据</a>。</p><p>本轮仅完成源码核对、教程与网页验证，没有声称某个 VP 改动已经获得性能提升。</p>"
+      },
+      {
+        "id": "vp-interview",
+        "title": "把架构讲成面试答案，再落到一次排障",
+        "html": "<h3>90 秒主线</h3><p>“518 单 core 有四个 VP 执行器，编译器对应 CSS4 到 CSS7。VP 从 L2 读取 raw 数据，经 PreCal 整理到内部 FP32 通路，CAL 内部有两组 32-lane engine，wide 模式最多 64 路，FP32 输入要按低 32 路有效情况判断，pipe 模式串接为更长的 32 路链；之后可走归约、标量后处理和 PostCal 转换写回。非线性可以由 PRG 分段参数配合算术实现。融合要满足模块顺序、共享输入、数值与 alias 合法性；多 VP 要同时安排数据、参数和同步。最终收益看固定输入下的关键路径与慢核完成时间。”</p><h3>被追问时沿一条具体例子展开</h3><ol><li>拿 BF16×256 的二元乘法，先算出读 1024 B、写 512 B，注明只是有效 payload。</li><li>画 wide64 / pipe32，解释内部 FP32 lane 与 128 B 外部口如何对应。</li><li>换成 SwiGLU，增加原 gate 保留、PRG 参数与第二向量来源的约束。</li><li>再开四 VP，区分四个独立行和一个 tile 的拆分，追到实际 CSS。</li><li>若结果错误，查数值路径、表归属、offset/alias 和完成事件；若变慢，查复制、容量、争用及被隐藏的 busy。</li></ol><h3>保留能复查的证据</h3><p>面试可以解释源码设计与自己的工程判断，但不要把源码阅读说成本人设计了整颗芯片。讲实测时带仓库与版本、输入、计时边界和验证层级；没有相应记录的峰值、cycle 或收益就作为条件模型讲清前提。</p>"
+      }
+    ],
+    "questions": [
+      {
+        "id": "vp-question-01",
+        "q": "518 一个 core 到底有几个 VP？和 64 lane 什么关系？",
+        "a": "一个 core 有四个 VP 执行器，CSS4…CSS7。每个 VP 内部两组 32-lane engine，wide 模式合计 64 路；pipe 模式将两组串接。执行器数、内部元素 lane 数和端口位宽是不同层次。",
+        "followup": "用图解释 VP4 为什么不等于每元素四路并行。"
+      },
+      {
+        "id": "vp-question-02",
+        "q": "VP 读口只有 128 B，为什么能有 64 路 FP32？",
+        "a": "128 B 是外部 raw 数据口；64×BF16 正好 128 B，展宽后为内部 64×FP32=256 B。累计64个FP32输入的payload为256B，但实际FP32输入常只用低32有效lane，不能据此说两拍聚成一次64路计算。数据整理、模式与握手决定吞吐。",
+        "followup": "INT8、BF16、FP32 各算一次有效载荷，说明不能据此给指令周期。"
+      },
+      {
+        "id": "vp-question-03",
+        "q": "wide 与 pipe 的区别是什么？",
+        "a": "wide 下两个 32-lane engine 分别消费输入的两半；pipe 下同一批 32 元素先经过 A 再经 link pipe 到 B，换取更长算术链。",
+        "followup": "为什么融合后的指令数更少，仍不保证吞吐更高？"
+      },
+      {
+        "id": "vp-question-04",
+        "q": "PRG 是任意代码执行单元吗？",
+        "a": "这里是根据区间选择参数、配合后续算术的近似路径。当前核对到 32/64 段配置；不是任意程序存储器，也不承诺精确超越函数。",
+        "followup": "sigmoid 误差如何分别影响 TopK 选择和最终权重？"
+      },
+      {
+        "id": "vp-question-05",
+        "q": "只找到 RTL 中 FP16 常量，能否宣布 VP 支持 FP16 输入？",
+        "a": "不能。必须从指令编码、顶层端口、decode 到实际数据转换追通；当前核对的外部选择只有 INT8、FP8 E4M3、BF16、FP32。",
+        "followup": "底层通用模块保留更多编码时，公开能力表如何写？"
+      },
+      {
+        "id": "vp-question-06",
+        "q": "为什么两个乘法不能预合并常量？",
+        "a": "round_f32(round_f32(x*a)*b) 与 round_f32(x*round_f32(a*b)) 一般不相等。PostCal 配方需要保留原顺序及每次舍入，还要检查 alias 和参数消费。",
+        "followup": "如果中间还有 BF16 narrowing，需要怎样的 oracle？"
+      },
+      {
+        "id": "vp-question-07",
+        "q": "什么情况下 VPChaining 模块顺序合法也不能融合？",
+        "a": "external Y、PRG.b、FLR.s、DIP.s 共用 CAL FIFO 写入口；一个合并指令不能同时要求多类来源。还可能存在外部读者、alias、dtype 或 placement 冲突。",
+        "followup": "给一个共享输入冲突和一个旧值被覆盖的例子。"
+      },
+      {
+        "id": "vp-question-08",
+        "q": "parallel_executor_hint 与 vp_hint 有何区别？",
+        "a": "前者分配多个独立逻辑操作，保持其完整 tile；后者为一个逻辑 tile 的 VP 计算提供拆分策略。vp_hint 的返回值应继续被消费；最终要核对生成的 CSS 与切片。",
+        "followup": "为何相同 op 的 exact placement 和 split 不能任意叠加？"
+      },
+      {
+        "id": "vp-question-09",
+        "q": "把一行 sum 分给四个 VP，和四行分别用四 VP 一样吗？",
+        "a": "不一样。拆一行要合并 partial 并保持归约/舍入合同；四个独立行不需要合并各行统计。",
+        "followup": "拆 TopK 时还需要什么合并语义？"
+      },
+      {
+        "id": "vp-question-10",
+        "q": "为什么 VP1 正确，VP4 可能错误？",
+        "a": "除切片边界与 output offset 外，要查每个消费者 CSS 的 PRG 表是否正确装载、资源生命周期、物理 alias 和跨执行器同步。",
+        "followup": "AUTO CSS 为什么不表示全执行器广播？"
+      },
+      {
+        "id": "vp-question-11",
+        "q": "发出 VP 指令后，ST 能立即读其输出吗？",
+        "a": "必须证明 VP 对相关字节的写完成先于 ST 的读。指令接受、描述符 snapshot、算术完成与 L2 写完成不是同一事件。",
+        "followup": "如果 output 和输入是同一个 root buffer 的不同 view，如何检查？"
+      },
+      {
+        "id": "vp-question-12",
+        "q": "256 个 BF16 二元乘法拆到四 VP，会减少 L2 字节吗？",
+        "a": "理想无额外传输时仍共读 1024 B、写 512 B；只是每路减少工作。实际可能新增对齐填充、copy、参数装载或同步。",
+        "followup": "用这个例子解释为什么四 VP 不保证四倍加速。"
+      },
+      {
+        "id": "vp-question-13",
+        "q": "VP busy 下降 20%，kernel 一定快 20% 吗？",
+        "a": "不能。busy 可能与 PE 重叠，真正瓶颈可能在 LD、ST、控制或另一个 core。需要固定范围下的关键路径与慢核完成时间。",
+        "followup": "画一个 VP 工作被 PE 完全覆盖的反例。"
+      },
+      {
+        "id": "vp-question-14",
+        "q": "如何证明一个 VP 优化可以交付？",
+        "a": "固定源码、编译器、输入与 ABI，先验证数值和特殊值，再核对指令、CSS、资源和同步，分别报告功能、CycleSim、VCS、kernel 与完整业务范围。",
+        "followup": "如果只有 CycleSim 提升但未跑 VCS，怎样准确描述？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "vp-scope",
+        "label": "RTL 副本与证据范围",
+        "url": "./evidence/vp-hardware-rtl.md#vp-scope",
+        "note": "design 只读参考副本；逐文件 SHA256，2026-10-25",
+        "kind": "源码"
+      },
+      {
+        "id": "vp-topology",
+        "label": "四 VP 与内部 lane 层次",
+        "url": "./evidence/vp-hardware-rtl.md#vp-topology",
+        "note": "design 只读参考副本；逐文件 SHA256，2026-10-25",
+        "kind": "源码"
+      },
+      {
+        "id": "vp-io",
+        "label": "L2 端口与地址路径",
+        "url": "./evidence/vp-hardware-rtl.md#vp-io",
+        "note": "design 只读参考副本；逐文件 SHA256，2026-10-25",
+        "kind": "源码"
+      },
+      {
+        "id": "vp-pipeline",
+        "label": "PreCal、wide/pipe、归约与 PostCal",
+        "url": "./evidence/vp-hardware-rtl.md#vp-pipeline",
+        "note": "design 只读参考副本；逐文件 SHA256，2026-10-25",
+        "kind": "源码"
+      },
+      {
+        "id": "vp-prg",
+        "label": "PRG 分段参数",
+        "url": "./evidence/vp-hardware-rtl.md#vp-prg",
+        "note": "design 只读参考副本；逐文件 SHA256，2026-10-25",
+        "kind": "源码"
+      },
+      {
+        "id": "vp-numerics",
+        "label": "格式与数值路径",
+        "url": "./evidence/vp-hardware-rtl.md#vp-numerics",
+        "note": "design 只读参考副本；逐文件 SHA256，2026-10-25",
+        "kind": "源码"
+      },
+      {
+        "id": "vp-handshake",
+        "label": "反压与完成边界",
+        "url": "./evidence/vp-hardware-rtl.md#vp-handshake",
+        "note": "design 只读参考副本；逐文件 SHA256，2026-10-25",
+        "kind": "源码"
+      },
+      {
+        "id": "vc-scope",
+        "label": "编译器固定版本与工作区状态",
+        "url": "./evidence/vp-compiler-sources.md#vc-scope",
+        "note": "triton_shared@82613bc2eb30；源码静态核对",
+        "kind": "源码"
+      },
+      {
+        "id": "vc-order",
+        "label": "模块顺序与 scalar 依赖",
+        "url": "./evidence/vp-compiler-sources.md#vc-order",
+        "note": "triton_shared@82613bc2eb30；源码静态核对",
+        "kind": "源码"
+      },
+      {
+        "id": "vc-chaining",
+        "label": "融合来源、alias 与值生命周期",
+        "url": "./evidence/vp-compiler-sources.md#vc-chaining",
+        "note": "triton_shared@82613bc2eb30；源码静态核对",
+        "kind": "源码"
+      },
+      {
+        "id": "vc-postcal",
+        "label": "PostCal 配方与舍入",
+        "url": "./evidence/vp-compiler-sources.md#vc-postcal",
+        "note": "triton_shared@82613bc2eb30；源码静态核对",
+        "kind": "源码"
+      },
+      {
+        "id": "vc-hints",
+        "label": "多执行器 placement 与 tile split",
+        "url": "./evidence/vp-compiler-sources.md#vc-hints",
+        "note": "triton_shared@82613bc2eb30；源码静态核对",
+        "kind": "源码"
+      },
+      {
+        "id": "vc-prg",
+        "label": "PRG 表的消费者 CSS",
+        "url": "./evidence/vp-compiler-sources.md#vc-prg",
+        "note": "triton_shared@82613bc2eb30；源码静态核对",
+        "kind": "源码"
+      },
+      {
+        "id": "vc-sync",
+        "label": "资源依赖与同步",
+        "url": "./evidence/vp-compiler-sources.md#vc-sync",
+        "note": "triton_shared@82613bc2eb30；源码静态核对",
+        "kind": "源码"
+      },
+      {
+        "id": "vp-reduction",
+        "label": "归约轴与有状态 Mask",
+        "url": "./evidence/vp-hardware-rtl.md#vp-reduction",
+        "note": "固定 RTL 副本，2026-10-25",
+        "kind": "源码"
+      },
+      {
+        "id": "vc-silu",
+        "label": "真实 SiLU-and-Mul 与 fast sigmoid 配方",
+        "url": "./evidence/vp-compiler-sources.md#vc-silu",
+        "note": "triton_shared@82613bc2eb30；源码静态核对",
+        "kind": "源码"
+      }
+    ],
+    "takeaways": [
+      "区分每 core 四个 VP、单 VP 两组 32-lane engine 与 128 B L2 读写口；用 wide / pipe 解释宽度与链长度。",
+      "从 PreCal 的 raw→FP32 进入 CAL，再沿归约、scalar 与 PostCal 追到实际输出格式和完成。",
+      "PRG 分段参数、共享 FIFO 来源、模块顺序和数值舍入共同限制融合，不能只按数学式或指令数判断。",
+      "多 VP 分独立工作与切分同一 tile 两类；实际 CSS、参数归属、切片、alias 和同步都要核对。",
+      "用有效字节、模式、资源、重叠和慢核时间衡量收益；源码结构、条件模型、CycleSim、VCS 与端到端证据分别报告。"
+    ]
+  }
+]
