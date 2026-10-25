@@ -1,0 +1,370 @@
+[
+  {
+    "id": "ffn-inference-guide",
+    "title": "FFN 与 MoE 推理入门：沿真实 shape 理解参数、带宽和条件计算",
+    "part": "算法与数据流",
+    "order": 14,
+    "subtitle": "一篇读完 Dense SwiGLU、Router、专家归组与 decode 优化",
+    "minutes": 65,
+    "level": "基础 → 工程",
+    "tags": [
+      "Decode",
+      "真实 Shape",
+      "SwiGLU",
+      "MoE",
+      "带宽",
+      "编译器"
+    ],
+    "lead": "从 Qwen3-8B 的 [1,4096] 开始，跟随 Gate、Up、Down 看见 288 MiB 权重如何服务一行 token；再切换到 Qwen3-30B-A3B 的 128 选 8，走完路由、归组和输出还原。把“参数越来越多，却不能每步都同等增加搬运与计算”这条演进主线讲清楚。",
+    "sections": [
+      {
+        "id": "ffn-start",
+        "title": "从一次 decode 出发：FFN 处理眼前这一行",
+        "html": "<p>你已经知道 Attention 会查询历史 token。现在沿着它的输出继续走：一个请求刚生成一个 token，在一层中的 hidden 向量有 4096 个数；FFN 把这 4096 个特征重新组合，最后仍输出 4096 个数。<strong>它不扫描历史 KVCache</strong>，却要使用一大组模型权重。长上下文的压力在 Attention 一侧增长，参数规模的压力在 FFN 一侧增长，这是两篇教程共同的主线。</p><figure class=\"diagram\"><svg viewBox=\"0 0 900 275\" role=\"img\" aria-label=\"Qwen3-8B 单 token decode 中 FFN 的位置\"><title>Qwen3-8B 单 token decode 中 FFN 的位置</title><defs><marker id=\"ffn-arrow-position\" markerWidth=\"8\" markerHeight=\"8\" refX=\"7\" refY=\"4\" orient=\"auto\"><path d=\"M0 0 L8 4 L0 8 Z\" fill=\"#668779\"/></marker></defs><g font-family=\"sans-serif\" font-size=\"16\" fill=\"#243c33\"><polyline points=\"180,105 230,105\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-position)\"/><polyline points=\"390,105 440,105\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-position)\"/><polyline points=\"620,105 690,105\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-position)\"/><polyline points=\"100,145 100,220 780,220 780,145\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-position)\"/><rect x=\"20\" y=\"65\" width=\"160\" height=\"80\" rx=\"9\" fill=\"#e1edf0\" stroke=\"#8ca28e\"/><text x=\"100.0\" y=\"100.0\" text-anchor=\"middle\">Attention 后</text><text x=\"100.0\" y=\"122.0\" text-anchor=\"middle\">R [1,4096]</text><rect x=\"230\" y=\"65\" width=\"160\" height=\"80\" rx=\"9\" fill=\"#e5efde\" stroke=\"#8ca28e\"/><text x=\"310.0\" y=\"100.0\" text-anchor=\"middle\">RMSNorm</text><text x=\"310.0\" y=\"122.0\" text-anchor=\"middle\">X [1,4096]</text><rect x=\"440\" y=\"65\" width=\"180\" height=\"80\" rx=\"9\" fill=\"#f2e4d0\" stroke=\"#8ca28e\"/><text x=\"530.0\" y=\"100.0\" text-anchor=\"middle\">SwiGLU FFN</text><text x=\"530.0\" y=\"122.0\" text-anchor=\"middle\">F [1,4096]</text><rect x=\"690\" y=\"65\" width=\"180\" height=\"80\" rx=\"9\" fill=\"#e5efde\" stroke=\"#8ca28e\"/><text x=\"780.0\" y=\"100.0\" text-anchor=\"middle\">R + F</text><text x=\"780.0\" y=\"122.0\" text-anchor=\"middle\">[1,4096]</text><text x=\"290\" y=\"245\" font-size=\"15\">残差保存的是 norm 前的 R</text></g></svg><figcaption>这是一个 decoder block 中 Attention 后的半层。残差绕过 norm 与 FFN，最后才相加；本图不是完整模型。</figcaption></figure><p>本篇用两个公开 checkpoint 的真实配置讲实现：先用 Qwen3-8B 学会 Dense FFN，再切换到 Qwen3-30B-A3B 学会 MoE。B 表示这次 decode 同时处理的 token 行数；常规一请求一新 token 时，它也就是活跃请求数。B=16 是 16 个请求的 16 行，不是让一个请求一次跨过 16 个自回归依赖。Prefill 可以把很多位置展平成行，FFN 本身仍逐行执行。</p><p>先读 <a href=\"#chapter/attention-inference-guide\">Attention 快速入门</a> 可以补齐上一半层；这里从输入 shape、要读的数据与输出归属展开，不要求先掌握 GPU 指令。</p><p>图中的 RMSNorm 只在本 token 的 4096 个特征上计算尺度，再乘学习到的通道系数；它不混合其他 token。残差则把进入这半层之前的向量保存下来，在 FFN 输出后相加，让新计算表示为对旧表示的修正。两者是 Transformer block 的组成部分，不能把 FFN 函数输出直接当作整个 block 输出。</p>"
+      },
+      {
+        "id": "ffn-model-contract",
+        "title": "固定两个真实配置：不要把 Dense 宽度当成专家宽度",
+        "html": "<div class=\"table-wrap\"><table><thead><tr><th>本篇例子</th><th>hidden H</th><th>中间宽度 I</th><th>专家与路由</th><th>本篇统计边界</th></tr></thead><tbody><tr><td>Qwen3-8B</td><td>4096</td><td>12288</td><td>Dense，一套 SwiGLU</td><td>单层三个矩阵，BF16</td></tr><tr><td>Qwen3-30B-A3B</td><td>2048</td><td>每专家 768</td><td>128 个专家，每 token 选 8 个</td><td>单个 MoE 层，BF16 权重教学账本</td></tr></tbody></table></div><p>配置采集于 2026-10-25：<a href=\"https://huggingface.co/Qwen/Qwen3-8B/blob/b968826d9c46dd6066d109eabc6255188de91218/config.json\">Qwen3-8B 固定 revision b968826d</a>，<a href=\"https://huggingface.co/Qwen/Qwen3-30B-A3B/blob/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/config.json\">Qwen3-30B-A3B 固定 revision ad44e777</a>。后者还有 <code>intermediate_size=6144</code>，但 routed expert 使用的是 <code>moe_intermediate_size=768</code>。同一个配置里的两个字段不能互换；这里也不从别的 Qwen 型号借用 H 或 I。</p><p>计算口径统一为一次乘法加一次加法计 2 FLOPs，MiB=2²⁰ 字节，GFLOPs=10⁹ 次浮点操作。主矩阵账暂不含 norm、SiLU、Router、残差、通信和框架开销；这些开销随后单列。所谓“需要读多少权重”，先指参与这一步计算的<strong>唯一权重 payload</strong>，默认权重未常驻片上、理想只读取一遍；真实 HBM 流量还受缓存命中、分块重读、量化元数据与访存事务影响。</p><div class=\"callout\">本篇所有字节与 FLOPs 都是从公开 shape 推导的教学账本，没有 518、NVIDIA、CycleSim 或 VCS 的实测时延。两个模型的层数、结构与训练不同，不能用这一层的数字直接宣称谁在相同质量下更快。</div>"
+      },
+      {
+        "id": "ffn-swiglu-flow",
+        "title": "把 SwiGLU 打开：Gate 与 Up 并行，Down 把特征带回来",
+        "html": "<p>Qwen3-8B 的一次 FFN 如下。Gate 和 Up 都读取同一行 X，各自投影成 12288 个数；Gate 的结果经过 SiLU，再与 Up 对应元素相乘。Down 将这 12288 个数压回 4096 维。不同 token 行可以共享同一套权重，但不会在 FFN 内彼此相加。</p><figure class=\"diagram\"><svg viewBox=\"0 0 900 395\" role=\"img\" aria-label=\"Qwen3-8B BF16 SwiGLU 的真实数字形状与并行分支\"><title>Qwen3-8B BF16 SwiGLU 的真实数字形状与并行分支</title><defs><marker id=\"ffn-arrow-swiglu\" markerWidth=\"8\" markerHeight=\"8\" refX=\"7\" refY=\"4\" orient=\"auto\"><path d=\"M0 0 L8 4 L0 8 Z\" fill=\"#668779\"/></marker></defs><g font-family=\"sans-serif\" font-size=\"16\" fill=\"#243c33\"><polyline points=\"165,180 190,180 190,82 215,82\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-swiglu)\"/><polyline points=\"165,180 190,180 190,277 215,277\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-swiglu)\"/><polyline points=\"415,82 465,82\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-swiglu)\"/><polyline points=\"635,82 770,82 770,140\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-swiglu)\"/><polyline points=\"415,277 600,277 600,180 670,180\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-swiglu)\"/><polyline points=\"770,220 770,275\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-swiglu)\"/><rect x=\"20\" y=\"140\" width=\"145\" height=\"80\" rx=\"9\" fill=\"#e1edf0\" stroke=\"#8ca28e\"/><text x=\"92.5\" y=\"175.0\" text-anchor=\"middle\">X</text><text x=\"92.5\" y=\"197.0\" text-anchor=\"middle\">[1,4096]</text><rect x=\"215\" y=\"40\" width=\"200\" height=\"85\" rx=\"9\" fill=\"#e5efde\" stroke=\"#8ca28e\"/><text x=\"315.0\" y=\"77.5\" text-anchor=\"middle\">Gate 投影</text><text x=\"315.0\" y=\"99.5\" text-anchor=\"middle\">[1,12288]</text><rect x=\"215\" y=\"235\" width=\"200\" height=\"85\" rx=\"9\" fill=\"#e5efde\" stroke=\"#8ca28e\"/><text x=\"315.0\" y=\"272.5\" text-anchor=\"middle\">Up 投影</text><text x=\"315.0\" y=\"294.5\" text-anchor=\"middle\">[1,12288]</text><rect x=\"465\" y=\"40\" width=\"170\" height=\"85\" rx=\"9\" fill=\"#f2e4d0\" stroke=\"#8ca28e\"/><text x=\"550.0\" y=\"77.5\" text-anchor=\"middle\">SiLU</text><text x=\"550.0\" y=\"99.5\" text-anchor=\"middle\">[1,12288]</text><rect x=\"670\" y=\"140\" width=\"200\" height=\"80\" rx=\"9\" fill=\"#f2e4d0\" stroke=\"#8ca28e\"/><text x=\"770.0\" y=\"175.0\" text-anchor=\"middle\">逐元素乘 A</text><text x=\"770.0\" y=\"197.0\" text-anchor=\"middle\">[1,12288]</text><rect x=\"670\" y=\"275\" width=\"200\" height=\"80\" rx=\"9\" fill=\"#e5efde\" stroke=\"#8ca28e\"/><text x=\"770.0\" y=\"310.0\" text-anchor=\"middle\">Down 输出</text><text x=\"770.0\" y=\"332.0\" text-anchor=\"middle\">[1,4096]</text><text x=\"24\" y=\"370\" font-size=\"15\">分支之间没有 Gate → Up 的先后依赖；此图暂不画 norm 与残差。</text></g></svg><figcaption>Gate/Up 的逻辑右乘权重均为 [4096,12288]，Down 为 [12288,4096]；每份 BF16 权重各 96 MiB。</figcaption></figure><p>SiLU 可以理解成“把一个值乘上它自己的平滑门”：输入很负时接近关闭，输入正且较大时接近保留原值。它的输出可以为负，也可以大于 1；这里的 Gate 不是二值选择，更不是 MoE Router 的专家概率。非线性与逐元素乘使三矩阵不能预先合成一个固定矩阵。</p><p>图按行向量逻辑写 <code>X @ W</code>。<a href=\"https://github.com/huggingface/transformers/blob/v4.51.3/src/transformers/models/qwen3/modeling_qwen3.py#L82\">Transformers v4.51.3 的 Qwen3MLP</a> 用 <code>nn.Linear</code>，存储的 Gate/Up weight 是 <code>[12288,4096]</code>，forward 等价于右乘它的转置；Down 存储形状是 <code>[4096,12288]</code>。读源码遇到顺序相反，先判断是存储约定还是算法真的改了。</p>"
+      },
+      {
+        "id": "ffn-dense-budget",
+        "title": "8 KiB 输入背后是 288 MiB 权重：decode 为什么容易等内存",
+        "html": "<div class=\"table-wrap\"><table><thead><tr><th>张量／操作</th><th>元素或形状</th><th>BF16 payload／主矩阵 FLOPs</th></tr></thead><tbody><tr><td>输入 X</td><td>[1,4096]</td><td>8 KiB</td></tr><tr><td>Gate、Up、Down 每份权重</td><td>50,331,648 个参数</td><td>96 MiB / 100,663,296 FLOPs</td></tr><tr><td>三矩阵合计</td><td>150,994,944 个参数</td><td>288 MiB / 0.301990 GFLOPs</td></tr><tr><td>Gate、Up、A 每份激活</td><td>[1,12288]</td><td>24 KiB</td></tr><tr><td>输出 F</td><td>[1,4096]</td><td>8 KiB</td></tr></tbody></table></div><figure class=\"diagram\"><svg viewBox=\"0 0 900 330\" role=\"img\" aria-label=\"单行 decode 的小输入与大权重账本\"><title>单行 decode 的小输入与大权重账本</title><defs><marker id=\"ffn-arrow-weight\" markerWidth=\"8\" markerHeight=\"8\" refX=\"7\" refY=\"4\" orient=\"auto\"><path d=\"M0 0 L8 4 L0 8 Z\" fill=\"#668779\"/></marker></defs><g font-family=\"sans-serif\" font-size=\"16\" fill=\"#243c33\"><polyline points=\"205,117 245,117 245,67 280,67\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-weight)\"/><polyline points=\"205,117 245,117 245,162 280,162\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-weight)\"/><polyline points=\"525,67 570,67 570,150 610,150\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-weight)\"/><polyline points=\"525,162 610,150\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-weight)\"/><polyline points=\"525,257 570,257 570,150 610,150\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-weight)\"/><rect x=\"25\" y=\"70\" width=\"180\" height=\"95\" rx=\"9\" fill=\"#e1edf0\" stroke=\"#8ca28e\"/><text x=\"115.0\" y=\"112.5\" text-anchor=\"middle\">一个 token</text><text x=\"115.0\" y=\"134.5\" text-anchor=\"middle\">8 KiB 输入</text><rect x=\"280\" y=\"30\" width=\"245\" height=\"75\" rx=\"9\" fill=\"#e5efde\" stroke=\"#8ca28e\"/><text x=\"402.5\" y=\"62.5\" text-anchor=\"middle\">Gate 权重</text><text x=\"402.5\" y=\"84.5\" text-anchor=\"middle\">96 MiB</text><rect x=\"280\" y=\"125\" width=\"245\" height=\"75\" rx=\"9\" fill=\"#e5efde\" stroke=\"#8ca28e\"/><text x=\"402.5\" y=\"157.5\" text-anchor=\"middle\">Up 权重</text><text x=\"402.5\" y=\"179.5\" text-anchor=\"middle\">96 MiB</text><rect x=\"280\" y=\"220\" width=\"245\" height=\"75\" rx=\"9\" fill=\"#e5efde\" stroke=\"#8ca28e\"/><text x=\"402.5\" y=\"252.5\" text-anchor=\"middle\">Down 权重</text><text x=\"402.5\" y=\"274.5\" text-anchor=\"middle\">96 MiB</text><rect x=\"610\" y=\"100\" width=\"255\" height=\"100\" rx=\"9\" fill=\"#f2e4d0\" stroke=\"#8ca28e\"/><text x=\"737.5\" y=\"134.0\" text-anchor=\"middle\">本层主矩阵</text><text x=\"737.5\" y=\"156.0\" text-anchor=\"middle\">0.302 GFLOPs</text><text x=\"737.5\" y=\"178.0\" text-anchor=\"middle\">权重合计 288 MiB</text></g></svg><figcaption>图示体量来自 shape 算术，框面积不按字节比例缩放。Down 的 activation 来自前两支的门控结果。</figcaption></figure><p>一行 token 用每个权重做一次乘加，读一个 BF16 权重需 2 字节，完成约 2 FLOPs，所以只按权重计的算术强度约 <strong>1 FLOP/byte</strong>。算术强度就是“每搬 1 字节能做多少计算”；它低时，给更多乘法单元未必有用，关键往往是权重能否及时供给。是否真正带宽受限，还要拿这个比值与目标设备的可持续算力／带宽对照，再用 profiler 验证。</p><p>门控不是免费增加表达能力：同样 H=4096、I=12288 的普通两矩阵 FFN 只有 192 MiB 权重，SwiGLU 是 1.5 倍。若要维持该两矩阵预算，三矩阵的 I 应改成 8192；这只是预算等价，既不是 Qwen3-8B 的真实配置，也不保证模型质量相同。<a href=\"https://arxiv.org/abs/2002.05202\">GLU Variants</a> 讨论的是函数设计与模型实验，不能把门控本身说成纯性能优化。</p>"
+      },
+      {
+        "id": "ffn-batch-reuse",
+        "title": "B 从 1 变成 16：计算增加，权重有机会只搬一遍",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 900 325\" role=\"img\" aria-label=\"Qwen3-8B 不同 decode batch 下的权重复用\"><title>Qwen3-8B 不同 decode batch 下的权重复用</title><defs><marker id=\"ffn-arrow-batch\" markerWidth=\"8\" markerHeight=\"8\" refX=\"7\" refY=\"4\" orient=\"auto\"><path d=\"M0 0 L8 4 L0 8 Z\" fill=\"#668779\"/></marker></defs><g font-family=\"sans-serif\" font-size=\"16\" fill=\"#243c33\"><polyline points=\"235,105 340,105\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-batch)\"/><polyline points=\"555,105 660,105\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-batch)\"/><polyline points=\"127,165 127,260 235,260\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-batch)\"/><polyline points=\"447,165 447,225\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-batch)\"/><polyline points=\"767,165 767,260 665,260\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-batch)\"/><rect x=\"20\" y=\"45\" width=\"215\" height=\"120\" rx=\"9\" fill=\"#e1edf0\" stroke=\"#8ca28e\"/><text x=\"127.5\" y=\"78.0\" text-anchor=\"middle\">B = 1</text><text x=\"127.5\" y=\"100.0\" text-anchor=\"middle\">X [1,4096]</text><text x=\"127.5\" y=\"122.0\" text-anchor=\"middle\">0.302 GFLOPs</text><text x=\"127.5\" y=\"144.0\" text-anchor=\"middle\">约 1 FLOP/byte</text><rect x=\"340\" y=\"45\" width=\"215\" height=\"120\" rx=\"9\" fill=\"#e5efde\" stroke=\"#8ca28e\"/><text x=\"447.5\" y=\"78.0\" text-anchor=\"middle\">B = 16</text><text x=\"447.5\" y=\"100.0\" text-anchor=\"middle\">X [16,4096]</text><text x=\"447.5\" y=\"122.0\" text-anchor=\"middle\">4.832 GFLOPs</text><text x=\"447.5\" y=\"144.0\" text-anchor=\"middle\">约 16 FLOP/byte</text><rect x=\"660\" y=\"45\" width=\"215\" height=\"120\" rx=\"9\" fill=\"#f2e4d0\" stroke=\"#8ca28e\"/><text x=\"767.5\" y=\"78.0\" text-anchor=\"middle\">B = 32</text><text x=\"767.5\" y=\"100.0\" text-anchor=\"middle\">X [32,4096]</text><text x=\"767.5\" y=\"122.0\" text-anchor=\"middle\">9.664 GFLOPs</text><text x=\"767.5\" y=\"144.0\" text-anchor=\"middle\">约 32 FLOP/byte</text><rect x=\"235\" y=\"225\" width=\"430\" height=\"70\" rx=\"9\" fill=\"#fffdf5\" stroke=\"#8ca28e\"/><text x=\"450.0\" y=\"255.0\" text-anchor=\"middle\">理想唯一权重 payload 都是 288 MiB</text><text x=\"450.0\" y=\"277.0\" text-anchor=\"middle\">让同一权重 tile 服务更多 token 行</text></g></svg><figcaption>忽略激活流量并假设三矩阵每份权重只读取一次；不是任意内核、任意缓存状态下的真实 HBM 字节。</figcaption></figure><p>B=16 时，两条中间支路分别是 <code>[16,12288]</code>，A 也是这个 shape，每份 BF16 激活是 384 KiB；Down 输出 <code>[16,4096]</code>。计算量变成 16 倍，但矩阵权重完全相同。好的分块会将一块权重装入片上后服务多行 X；这就是从小矩阵向量乘走向更有效率 GEMM 的原因。GEMM 是通用矩阵乘法，后面会反复遇到。</p><p>这一机会不等于“B 倍免费吞吐”。B 增大也增加激活容量、排队时间与计算时间；若同一权重 tile 因调度反复加载，实际访存仍会上升。连续批处理还会让每步 B 变化，因此编译器或运行时往往需要小 B 与较大 B 的不同策略。观察吞吐 tokens/s 与单请求每 token 延迟时，应把同批处理的所有请求和等待时间都算进去。</p><div data-decode-explorer=\"ffn\"></div><p>上面的交互只使用 Qwen3-8B Dense FFN 的固定配置。后文 MoE 切换为另一个真实模型，不能沿用这里的 H、I 或权重总量。</p>"
+      },
+      {
+        "id": "ffn-fusion",
+        "title": "融合到底省了什么：省中间搬运，不会让权重消失",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 900 340\" role=\"img\" aria-label=\"Gate Up 与 SiLU 乘法融合的访存区别\"><title>Gate Up 与 SiLU 乘法融合的访存区别</title><defs><marker id=\"ffn-arrow-fusion\" markerWidth=\"8\" markerHeight=\"8\" refX=\"7\" refY=\"4\" orient=\"auto\"><path d=\"M0 0 L8 4 L0 8 Z\" fill=\"#668779\"/></marker></defs><g font-family=\"sans-serif\" font-size=\"16\" fill=\"#243c33\"><polyline points=\"260,87 330,87\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-fusion)\"/><polyline points=\"570,87 640,87\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-fusion)\"/><polyline points=\"570,252 640,252\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-fusion)\"/><rect x=\"20\" y=\"40\" width=\"240\" height=\"95\" rx=\"9\" fill=\"#e1edf0\" stroke=\"#8ca28e\"/><text x=\"140.0\" y=\"71.5\" text-anchor=\"middle\">分开的 Gate / Up</text><text x=\"140.0\" y=\"93.5\" text-anchor=\"middle\">G 与 U 写回 HBM</text><text x=\"140.0\" y=\"115.5\" text-anchor=\"middle\">各 [16,12288]</text><rect x=\"330\" y=\"40\" width=\"240\" height=\"95\" rx=\"9\" fill=\"#f2e4d0\" stroke=\"#8ca28e\"/><text x=\"450.0\" y=\"71.5\" text-anchor=\"middle\">SiLU × Up</text><text x=\"450.0\" y=\"93.5\" text-anchor=\"middle\">读 G、U，写 A</text><text x=\"450.0\" y=\"115.5\" text-anchor=\"middle\">A [16,12288]</text><rect x=\"640\" y=\"40\" width=\"240\" height=\"95\" rx=\"9\" fill=\"#e5efde\" stroke=\"#8ca28e\"/><text x=\"760.0\" y=\"71.5\" text-anchor=\"middle\">Down</text><text x=\"760.0\" y=\"93.5\" text-anchor=\"middle\">从 HBM 读取 A</text><text x=\"760.0\" y=\"115.5\" text-anchor=\"middle\">输出 [16,4096]</text><rect x=\"20\" y=\"205\" width=\"550\" height=\"95\" rx=\"9\" fill=\"#f2e4d0\" stroke=\"#8ca28e\"/><text x=\"295.0\" y=\"236.5\" text-anchor=\"middle\">可选融合：Gate/Up 同调度 + SiLU ×</text><text x=\"295.0\" y=\"258.5\" text-anchor=\"middle\">G、U 片上相遇，只把 A 写出</text><text x=\"295.0\" y=\"280.5\" text-anchor=\"middle\">两个投影仍各有自己的权重</text><rect x=\"640\" y=\"205\" width=\"240\" height=\"95\" rx=\"9\" fill=\"#e5efde\" stroke=\"#8ca28e\"/><text x=\"760.0\" y=\"236.5\" text-anchor=\"middle\">Down</text><text x=\"760.0\" y=\"258.5\" text-anchor=\"middle\">依然读取 A</text><text x=\"760.0\" y=\"280.5\" text-anchor=\"middle\">依然读取 Wdown</text></g></svg><figcaption>教学方案：若 G/U/A 都为 BF16 且各完整落地一次，B16 的三份中间张量读写共 2.25 MiB；保留 A 而省掉 G/U 的完整落地后为 0.75 MiB。</figcaption></figure><p>把 Gate/Up 的权重按输出列拼接，可将两个投影视为一个更宽的矩阵乘：<code>[16,4096] × [4096,24576] → [16,24576]</code>；随后按通道配对做 SiLU 与乘法。拼接只是同一输入的两套投影一起调度，不会把 192 MiB Gate/Up 权重变成 96 MiB。布局必须让成对通道容易相遇，否则一次中间转置会吃掉收益。</p><p>继续把 Down 也放进同一个 kernel，不一定更快：Down 需要沿 12288 个中间通道归约，较多活跃数据会占用寄存器或共享内存；tile 太大可能降低并发。还要保留模型所需的舍入位置，例如原实现先把投影结果写成 BF16，融合后一直保留 FP32 再相乘，可能改变输出。正确的比较是“少搬多少中间数据、是否多读权重、容量够不够、数值合同是否一致”。</p><p>在 B=1 的账本里，省掉 G/U 两份完整读写仅约 96 KiB，相比 288 MiB 权重很小。它仍可减少 kernel 启动与同步，但如果 profiler 显示瓶颈是权重流量，首先应审视 batch 复用或量化，而不是只数少了几个算子。</p>"
+      },
+      {
+        "id": "ffn-moe-capacity",
+        "title": "从 Dense 到 MoE：保留更多参数，每个 token 只调用其中几份",
+        "html": "<p>现在切换到 Qwen3-30B-A3B：一行 hidden 宽 2048；库里有 128 套独立的 SwiGLU 专家，每套中间宽度 768；Router 为每个 token 挑 8 套执行。专家不是某种天然命名的“数学专家／代码专家”，而是结构相同、参数不同、由训练形成分工的函数。</p><figure class=\"diagram\"><svg viewBox=\"0 0 900 255\" role=\"img\" aria-label=\"Qwen3-30B-A3B 的完整专家容量与单 token 激活子集\"><title>Qwen3-30B-A3B 的完整专家容量与单 token 激活子集</title><defs><marker id=\"ffn-arrow-capacity\" markerWidth=\"8\" markerHeight=\"8\" refX=\"7\" refY=\"4\" orient=\"auto\"><path d=\"M0 0 L8 4 L0 8 Z\" fill=\"#668779\"/></marker></defs><g font-family=\"sans-serif\" font-size=\"16\" fill=\"#243c33\"><polyline points=\"270,122 335,122\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-capacity)\"/><polyline points=\"565,122 630,122\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-capacity)\"/><rect x=\"25\" y=\"60\" width=\"245\" height=\"125\" rx=\"9\" fill=\"#e1edf0\" stroke=\"#8ca28e\"/><text x=\"147.5\" y=\"95.5\" text-anchor=\"middle\">128 套专家常驻模型</text><text x=\"147.5\" y=\"117.5\" text-anchor=\"middle\">每套 H2048 / I768</text><text x=\"147.5\" y=\"139.5\" text-anchor=\"middle\">BF16 每套 9 MiB</text><text x=\"147.5\" y=\"161.5\" text-anchor=\"middle\">总专家权重 1.125 GiB</text><rect x=\"335\" y=\"60\" width=\"230\" height=\"125\" rx=\"9\" fill=\"#f2e4d0\" stroke=\"#8ca28e\"/><text x=\"450.0\" y=\"106.5\" text-anchor=\"middle\">Router 选 8 个</text><text x=\"450.0\" y=\"128.5\" text-anchor=\"middle\">输入 [1,2048]</text><text x=\"450.0\" y=\"150.5\" text-anchor=\"middle\">ID / weight [1,8]</text><rect x=\"630\" y=\"60\" width=\"245\" height=\"125\" rx=\"9\" fill=\"#e5efde\" stroke=\"#8ca28e\"/><text x=\"752.5\" y=\"95.5\" text-anchor=\"middle\">执行 8 套 SwiGLU</text><text x=\"752.5\" y=\"117.5\" text-anchor=\"middle\">72 MiB 专家权重</text><text x=\"752.5\" y=\"139.5\" text-anchor=\"middle\">75.497 MFLOPs</text><text x=\"752.5\" y=\"161.5\" text-anchor=\"middle\">再加权得到 [1,2048]</text></g></svg><figcaption>这些数字只覆盖一个 MoE 层的专家三矩阵。Router 另外有 0.5 MiB BF16 权重和每 token 0.524 MFLOPs；未计 Attention 等层。</figcaption></figure><div class=\"table-wrap\"><table><thead><tr><th>看哪个量</th><th>此例数值</th><th>它回答什么问题</th></tr></thead><tbody><tr><td>全部专家参数</td><td>603,979,776</td><td>模型这一层要存多少权重</td></tr><tr><td>单 token 激活专家参数</td><td>37,748,736</td><td>这行 token 调用多少专家权重</td></tr><tr><td>一次 batch 命中的专家并集</td><td>8 到 min(128,8B) 个</td><td>理想跨 token 复用后，本步可能要读多少不同专家</td></tr></tbody></table></div><p>MoE 将总容量和每 token 工作量分开：E=128 控制库有多大，K=8 控制一行调用几份，I=768 控制一份有多宽。它节省的是相对“把全部 128 份都执行”的工作，<strong>不是已经证明比任意 Dense 模型更省</strong>。例如人为构造 H=2048/I=6144 的 Dense SwiGLU，单层专家主矩阵预算恰与 8×768 相等；MoE 另有 Router 和数据重排，但保存了更多可选择参数。此构造用于同预算对照，不宣称两者质量相同。</p><p>这一条件计算思想可追溯到 <a href=\"https://arxiv.org/abs/1701.06538\">稀疏门控 MoE</a>；<a href=\"https://arxiv.org/abs/2505.09388\">Qwen3 技术报告</a> 同时发布 Dense 与 MoE 型号，也说明两条设计路线并存。</p>"
+      },
+      {
+        "id": "ffn-router",
+        "title": "Router 不是 FFN Gate：先评分，再选专家，再决定混合权重",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 900 240\" role=\"img\" aria-label=\"Qwen3-30B-A3B Router 的真实形状与归一化顺序\"><title>Qwen3-30B-A3B Router 的真实形状与归一化顺序</title><defs><marker id=\"ffn-arrow-router\" markerWidth=\"8\" markerHeight=\"8\" refX=\"7\" refY=\"4\" orient=\"auto\"><path d=\"M0 0 L8 4 L0 8 Z\" fill=\"#668779\"/></marker></defs><g font-family=\"sans-serif\" font-size=\"16\" fill=\"#243c33\"><polyline points=\"195,120 245,120\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-router)\"/><polyline points=\"425,120 475,120\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-router)\"/><polyline points=\"655,120 705,120\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-router)\"/><rect x=\"20\" y=\"70\" width=\"175\" height=\"100\" rx=\"9\" fill=\"#e1edf0\" stroke=\"#8ca28e\"/><text x=\"107.5\" y=\"104.0\" text-anchor=\"middle\">输入 X</text><text x=\"107.5\" y=\"126.0\" text-anchor=\"middle\">[16,2048]</text><text x=\"107.5\" y=\"148.0\" text-anchor=\"middle\">BF16</text><rect x=\"245\" y=\"70\" width=\"180\" height=\"100\" rx=\"9\" fill=\"#e5efde\" stroke=\"#8ca28e\"/><text x=\"335.0\" y=\"104.0\" text-anchor=\"middle\">Router 线性层</text><text x=\"335.0\" y=\"126.0\" text-anchor=\"middle\">logits [16,128]</text><text x=\"335.0\" y=\"148.0\" text-anchor=\"middle\">Wr [2048,128]</text><rect x=\"475\" y=\"70\" width=\"180\" height=\"100\" rx=\"9\" fill=\"#f2e4d0\" stroke=\"#8ca28e\"/><text x=\"565.0\" y=\"104.0\" text-anchor=\"middle\">FP32 softmax</text><text x=\"565.0\" y=\"126.0\" text-anchor=\"middle\">概率 [16,128]</text><text x=\"565.0\" y=\"148.0\" text-anchor=\"middle\">Top8 选择</text><rect x=\"705\" y=\"70\" width=\"175\" height=\"100\" rx=\"9\" fill=\"#e5efde\" stroke=\"#8ca28e\"/><text x=\"792.5\" y=\"104.0\" text-anchor=\"middle\">ID [16,8]</text><text x=\"792.5\" y=\"126.0\" text-anchor=\"middle\">weight [16,8]</text><text x=\"792.5\" y=\"148.0\" text-anchor=\"middle\">所选再归一化</text></g></svg><figcaption>逻辑右乘 shape；Wr 在 nn.Linear 中按 [128,2048] 存储。ID 是离散身份，weight 是连续系数，不能混用。</figcaption></figure><p>固定实现 <a href=\"https://github.com/huggingface/transformers/blob/v4.51.3/src/transformers/models/qwen3_moe/modeling_qwen3_moe.py#L252\">Qwen3MoeSparseMoeBlock.forward（v4.51.3）</a> 先对 128 个 logits 做 FP32 softmax，再选 Top8，因为此配置 <code>norm_topk_prob=true</code>，还会把所选 8 个概率除以它们的和，最后转回输入 dtype。只画 TopK 而不画归一化，会漏掉模型的输出定义。</p><p>一个便于手算的局部示意：若某行选中的 8 个概率为 0.20、0.10、0.08、0.06、0.04、0.03、0.02、0.01，它们的和是 0.54；第一位用于 combine 的系数为 0.20/0.54≈0.37037。其余 120 个专家共享剩余 0.46，假定它们各自都小于 0.01。这里是<strong>人工构造的概率</strong>，没有读取真实模型路由。</p><p>SwiGLU Gate 生成每个特征通道的非线性门控，Router gate 生成专家选择，两者名字相同但位置、shape 和语义都不同。另一些模型用 sigmoid 打分，还可能用 correction bias 改变选择；最终混合系数是否使用加 bias 的值、是否再归一化，都必须按各自模型实现核对。不能把本节 Qwen3 的 softmax 换成 sigmoid 后仍称为等价优化。</p>"
+      },
+      {
+        "id": "ffn-route-identity",
+        "title": "一条 route 要带三个身份：token、expert、slot",
+        "html": "<p>B=16、K=8 时，共有 128 条 route；每一条都表示“某 token 的第几个选择槽位，交给哪个 expert”。slot 是一行的第 0 到第 7 个位置，不是 expert ID。Top8 中每行选择不同的专家，但不同 token 可以选择同一个专家。为了复用权重，要把这些 route 按 expert 排序或计数归组，同时保留回来的地址。</p><figure class=\"diagram\"><svg viewBox=\"0 0 900 345\" role=\"img\" aria-label=\"从 token 顺序到 expert 顺序时必须保留的身份\"><title>从 token 顺序到 expert 顺序时必须保留的身份</title><defs><marker id=\"ffn-arrow-identity\" markerWidth=\"8\" markerHeight=\"8\" refX=\"7\" refY=\"4\" orient=\"auto\"><path d=\"M0 0 L8 4 L0 8 Z\" fill=\"#668779\"/></marker></defs><g font-family=\"sans-serif\" font-size=\"16\" fill=\"#243c33\"><polyline points=\"275,97 315,97 315,170 355,170\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-identity)\"/><polyline points=\"275,247 315,247 315,170 355,170\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-identity)\"/><polyline points=\"580,170 650,170\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-identity)\"/><rect x=\"20\" y=\"45\" width=\"255\" height=\"105\" rx=\"9\" fill=\"#e1edf0\" stroke=\"#8ca28e\"/><text x=\"147.5\" y=\"81.5\" text-anchor=\"middle\">token 0 的 8 个 ID</text><text x=\"147.5\" y=\"103.5\" text-anchor=\"middle\">[3,7,12,19,26,44,81,105]</text><text x=\"147.5\" y=\"125.5\" text-anchor=\"middle\">(t0, slot0) → e3</text><rect x=\"20\" y=\"195\" width=\"255\" height=\"105\" rx=\"9\" fill=\"#e1edf0\" stroke=\"#8ca28e\"/><text x=\"147.5\" y=\"231.5\" text-anchor=\"middle\">token 1 的 8 个 ID</text><text x=\"147.5\" y=\"253.5\" text-anchor=\"middle\">[7,3,20,31,44,65,90,112]</text><text x=\"147.5\" y=\"275.5\" text-anchor=\"middle\">(t1, slot1) → e3</text><rect x=\"355\" y=\"110\" width=\"225\" height=\"120\" rx=\"9\" fill=\"#f2e4d0\" stroke=\"#8ca28e\"/><text x=\"467.5\" y=\"143.0\" text-anchor=\"middle\">按 expert 分桶</text><text x=\"467.5\" y=\"165.0\" text-anchor=\"middle\">e3 收到 t0 与 t1</text><text x=\"467.5\" y=\"187.0\" text-anchor=\"middle\">原 slot 分别为 0、1</text><text x=\"467.5\" y=\"209.0\" text-anchor=\"middle\">仍是两个独立输入行</text><rect x=\"650\" y=\"110\" width=\"230\" height=\"120\" rx=\"9\" fill=\"#e5efde\" stroke=\"#8ca28e\"/><text x=\"765.0\" y=\"143.0\" text-anchor=\"middle\">组内输出后回填</text><text x=\"765.0\" y=\"165.0\" text-anchor=\"middle\">Yroute[0,0,:]</text><text x=\"765.0\" y=\"187.0\" text-anchor=\"middle\">Yroute[1,1,:]</text><text x=\"765.0\" y=\"209.0\" text-anchor=\"middle\">每行宽度 2048</text></g></svg><figcaption>只展开 16 个 token 中的前两行，ID 是教学构造。其余行可能也命中 e3，因此完整 batch 的 e3 组不一定只有 2 行。</figcaption></figure><p>归组可以采用 count → prefix sum → scatter：先统计 128 个专家各有多少条输入，前缀和算出每个专家在连续缓冲区的起点，再把 token 行和反向索引写过去。上图 e3 获得的两行是两个不同向量，不能为了“token merge”先求和；只有把它们并排作为矩阵的两行，才能既复用权重又保留原函数。</p><p>不要求物理上真的创建 <code>[16,8,2048]</code> 的全部输入副本：实现可以用索引间接 gather、按分组紧凑打包，或在后续读取时复用原 token 行。但不论布局怎么变，逆向映射必须能找回每一条 route 的 token、slot 与混合系数。</p>"
+      },
+      {
+        "id": "ffn-grouped-gemm",
+        "title": "Grouped GEMM：不同专家各算自己的矩阵，共享一次调度",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 900 385\" role=\"img\" aria-label=\"同一专家多 token 行复用三矩阵权重\"><title>同一专家多 token 行复用三矩阵权重</title><defs><marker id=\"ffn-arrow-grouped\" markerWidth=\"8\" markerHeight=\"8\" refX=\"7\" refY=\"4\" orient=\"auto\"><path d=\"M0 0 L8 4 L0 8 Z\" fill=\"#668779\"/></marker></defs><g font-family=\"sans-serif\" font-size=\"16\" fill=\"#243c33\"><polyline points=\"250,95 325,70\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-grouped)\"/><polyline points=\"450,115 450,165\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-grouped)\"/><polyline points=\"575,205 610,205 610,150 650,150\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-grouped)\"/><rect x=\"20\" y=\"45\" width=\"230\" height=\"100\" rx=\"9\" fill=\"#e1edf0\" stroke=\"#8ca28e\"/><text x=\"135.0\" y=\"79.0\" text-anchor=\"middle\">e3 的两条示意 route</text><text x=\"135.0\" y=\"101.0\" text-anchor=\"middle\">X3 [2,2048]</text><text x=\"135.0\" y=\"123.0\" text-anchor=\"middle\">两行独立</text><rect x=\"325\" y=\"25\" width=\"250\" height=\"90\" rx=\"9\" fill=\"#e5efde\" stroke=\"#8ca28e\"/><text x=\"450.0\" y=\"54.0\" text-anchor=\"middle\">Gate 与 Up</text><text x=\"450.0\" y=\"76.0\" text-anchor=\"middle\">各 [2,768]</text><text x=\"450.0\" y=\"98.0\" text-anchor=\"middle\">使用 e3 自己的权重</text><rect x=\"325\" y=\"165\" width=\"250\" height=\"80\" rx=\"9\" fill=\"#f2e4d0\" stroke=\"#8ca28e\"/><text x=\"450.0\" y=\"200.0\" text-anchor=\"middle\">SiLU × Up</text><text x=\"450.0\" y=\"222.0\" text-anchor=\"middle\">A3 [2,768]</text><rect x=\"650\" y=\"100\" width=\"230\" height=\"100\" rx=\"9\" fill=\"#e5efde\" stroke=\"#8ca28e\"/><text x=\"765.0\" y=\"134.0\" text-anchor=\"middle\">Down</text><text x=\"765.0\" y=\"156.0\" text-anchor=\"middle\">Y3 [2,2048]</text><text x=\"765.0\" y=\"178.0\" text-anchor=\"middle\">回填两条原 route</text><rect x=\"20\" y=\"285\" width=\"860\" height=\"65\" rx=\"9\" fill=\"#fffdf5\" stroke=\"#8ca28e\"/><text x=\"450.0\" y=\"312.5\" text-anchor=\"middle\">同次调度：e7 [M7,2048]、e12 [M12,2048] ……</text><text x=\"450.0\" y=\"334.5\" text-anchor=\"middle\">每个专家有独立权重；每组行数可以不同</text></g></svg><figcaption>Mₑ 是当前 batch 分给专家 e 的行数；图中只展示两条 route 的小组。不同专家的权重不能合并成一套共享权重。</figcaption></figure><p>如果 e3 一次接到 4 行，就可以把 9 MiB 的专家权重用于 4 行，理想权重算术强度也从约 1 提高到 4 FLOPs/byte。普通循环为每个专家启动三个小 GEMM，容易有很多启动开销和空闲计算单元；grouped GEMM 把一组不同大小的矩阵问题交给共同的工作调度器。它不要求所有专家 M 相等，也不意味着把不同专家的权重混在一起。<a href=\"https://docs.nvidia.com/cutlass/latest/media/docs/cpp/grouped_scheduler.html\">CUTLASS grouped scheduler</a> 展示的是这种多问题 tile 调度思路。</p><p>专家行数不整齐时有两个常见选择：padding 将每组向 tile 大小取整，地址简单但可能算很多无效行；ragged／紧凑布局保留各组真实长度，以 offsets 描述，节省空算却增加索引和调度复杂度。例如两组真实行数 1 和 3，若 tile 最少 4 行，简单 padding 会执行 8 行的槽位，其中只有 4 行有效。</p><p>编译器能为固定 H2048/I768 选择 tile、向量化和融合，但 Mₑ 是运行时路由结果。需要动态调度或多版本选择，并保证 padding 行不贡献输出。<a href=\"https://arxiv.org/abs/2211.15841\">MegaBlocks</a> 研究了块稀疏与避免丢 token 的实现取舍；它是训练系统论文，不能把其性能数字当作这里 decode 的结果。</p>"
+      },
+      {
+        "id": "ffn-combine",
+        "title": "Combine 把结果还给原 token：沿 8 个 slot 加权求和",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 900 245\" role=\"img\" aria-label=\"Qwen3-30B-A3B route 结果还原并按 slot 加权求和\"><title>Qwen3-30B-A3B route 结果还原并按 slot 加权求和</title><defs><marker id=\"ffn-arrow-combine\" markerWidth=\"8\" markerHeight=\"8\" refX=\"7\" refY=\"4\" orient=\"auto\"><path d=\"M0 0 L8 4 L0 8 Z\" fill=\"#668779\"/></marker></defs><g font-family=\"sans-serif\" font-size=\"16\" fill=\"#243c33\"><polyline points=\"250,107 335,107\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-combine)\"/><polyline points=\"565,107 650,107\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-combine)\"/><rect x=\"20\" y=\"55\" width=\"230\" height=\"105\" rx=\"9\" fill=\"#e1edf0\" stroke=\"#8ca28e\"/><text x=\"135.0\" y=\"91.5\" text-anchor=\"middle\">各专家返回</text><text x=\"135.0\" y=\"113.5\" text-anchor=\"middle\">route 结果</text><text x=\"135.0\" y=\"135.5\" text-anchor=\"middle\">逻辑 [16,8,2048]</text><rect x=\"335\" y=\"55\" width=\"230\" height=\"105\" rx=\"9\" fill=\"#f2e4d0\" stroke=\"#8ca28e\"/><text x=\"450.0\" y=\"91.5\" text-anchor=\"middle\">逐 route 乘 weight</text><text x=\"450.0\" y=\"113.5\" text-anchor=\"middle\">[16,8,1] 广播</text><text x=\"450.0\" y=\"135.5\" text-anchor=\"middle\">权重只乘一次</text><rect x=\"650\" y=\"55\" width=\"230\" height=\"105\" rx=\"9\" fill=\"#e5efde\" stroke=\"#8ca28e\"/><text x=\"765.0\" y=\"91.5\" text-anchor=\"middle\">沿 8 个 slot 求和</text><text x=\"765.0\" y=\"113.5\" text-anchor=\"middle\">输出 [16,2048]</text><text x=\"765.0\" y=\"135.5\" text-anchor=\"middle\">接回 block 残差</text></g></svg><figcaption>逻辑 route 输出若完整保存为 BF16，payload 是 512 KiB；合并后输出为 64 KiB。物理实现可以直接 scatter-add，不必落地整个三维张量。</figcaption></figure><p>拿 token 0 来看：e3 的输出乘 slot0 系数，e7 的输出乘 slot1 系数，其余六份同样处理，再把 8 个长为 2048 的向量相加。每个 token 独立合并，不能沿 token 轴求和。也不能在 Gate/Up 前先把输入乘路由系数，再期望非线性的专家结果等价；系数一般不能穿过 SwiGLU。</p><p>这里没有 Shared expert。若另一个模型另设 Shared 分支，应按该模型定义加上共享输出，不能顺手把它当作第 9 个 TopK slot 并一起归一化。没有被本 token 选择的专家也不应贡献结果；无效缓冲区可能含 NaN，事后乘 0 不能代替在读和算之前检查有效性。</p><p>浮点加法不满足严格结合律。按固定 slot 次序归约、并行树归约和原子累加可能有不同舍入轨迹；“数学加权和没变”不能保证逐位一致。优化时要事先决定需要 bit-exact 还是容差正确，检查 TopK 集合和最终误差，而不只检查中间张量 shape。</p>"
+      },
+      {
+        "id": "ffn-batch-skew",
+        "title": "MoE 的 B 变大后：专家并集扩大，热门专家也开始复用",
+        "html": "<div class=\"table-wrap\"><table><thead><tr><th>单层 Qwen3-30B-A3B</th><th>route 数 B×8</th><th>不同专家数范围</th><th>理想专家唯一权重 payload</th><th>均匀独立抽样的平均 Mₑ</th></tr></thead><tbody><tr><td>B=1</td><td>8</td><td>8</td><td>72 MiB</td><td>0.0625</td></tr><tr><td>B=16</td><td>128</td><td>8～128</td><td>72～1152 MiB</td><td>1</td></tr><tr><td>B=32</td><td>256</td><td>8～128</td><td>72～1152 MiB</td><td>2</td></tr></tbody></table></div><p>表中每行假设每个 token 选择 8 个不同专家。Mₑ 按全部 128 个专家平均，包含没被命中的零行专家。对 B16 来说，总共 128 条 route 可以全部集中在同样 8 个专家，也可以覆盖全部 128 个专家；因此不能看到“每 token 只用 72 MiB”就断言整个 batch 只读 72 MiB。另一方面，读满 1152 MiB 也不是每个 batch 的必然结果。</p><figure class=\"diagram\"><svg viewBox=\"0 0 900 340\" role=\"img\" aria-label=\"同样 128 条 route 的两种教学分布\"><title>同样 128 条 route 的两种教学分布</title><defs><marker id=\"ffn-arrow-skew\" markerWidth=\"8\" markerHeight=\"8\" refX=\"7\" refY=\"4\" orient=\"auto\"><path d=\"M0 0 L8 4 L0 8 Z\" fill=\"#668779\"/></marker></defs><g font-family=\"sans-serif\" font-size=\"16\" fill=\"#243c33\"><polyline points=\"217,175 217,235\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-skew)\"/><polyline points=\"682,175 682,235\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-skew)\"/><rect x=\"20\" y=\"45\" width=\"395\" height=\"130\" rx=\"9\" fill=\"#e1edf0\" stroke=\"#8ca28e\"/><text x=\"217.5\" y=\"83.0\" text-anchor=\"middle\">B16：都选同样 8 个专家</text><text x=\"217.5\" y=\"105.0\" text-anchor=\"middle\">专家并集 8，Mₑ = 16</text><text x=\"217.5\" y=\"127.0\" text-anchor=\"middle\">理想唯一权重 72 MiB</text><text x=\"217.5\" y=\"149.0\" text-anchor=\"middle\">组内复用好，跨设备可能偏斜</text><rect x=\"485\" y=\"45\" width=\"395\" height=\"130\" rx=\"9\" fill=\"#f2e4d0\" stroke=\"#8ca28e\"/><text x=\"682.5\" y=\"83.0\" text-anchor=\"middle\">B16：128 专家各命中一次</text><text x=\"682.5\" y=\"105.0\" text-anchor=\"middle\">专家并集 128，Mₑ = 1</text><text x=\"682.5\" y=\"127.0\" text-anchor=\"middle\">理想唯一权重 1152 MiB</text><text x=\"682.5\" y=\"149.0\" text-anchor=\"middle\">权重少复用，每组矩阵很小</text><rect x=\"190\" y=\"235\" width=\"520\" height=\"75\" rx=\"9\" fill=\"#e5efde\" stroke=\"#8ca28e\"/><text x=\"450.0\" y=\"267.5\" text-anchor=\"middle\">真实路由介于多种分布之间</text><text x=\"450.0\" y=\"289.5\" text-anchor=\"middle\">应记录 Mₑ 直方图、每设备负载与最长一组</text></g></svg><figcaption>两端都是人工构造的合法路由分布，不代表 Qwen3 实际数据，也不能直接据此预测时延。</figcaption></figure><p>均匀独立抽样模型下，B16 的预期专家并集约 82.4 个，B32 约 111.8 个，来自“128 乘以至少命中一次的概率”；对应唯一专家权重约 741.8 MiB 与 1005.9 MiB。这只是解释 batch 效应的概率模型，真实 token 内容、层号和路由训练会改变分布。不能把均匀期望当成测量，更不能用均值掩盖某台设备上最慢的热门专家。</p><p>负载偏斜带来双重作用：同专家聚集有利于权重复用，但若集中在少数设备，其他设备会等待。负载均衡训练、专家摆放、调度重叠分别作用于不同层级；推理时擅自把热门专家换成冷门专家，会改变模型输出。</p>"
+      },
+      {
+        "id": "ffn-shared-fine",
+        "title": "细粒度与 Shared：更灵活的组合，需要重新算容量和复用",
+        "html": "<p>MoE 演进并非只有“加更多专家”。<a href=\"https://arxiv.org/abs/2401.06066\">DeepSeekMoE</a> 提出更细粒度的 routed experts，以及始终参与的 shared experts：前者让有限激活预算能组合更多细分函数，后者承载公共模式，减少 routed experts 重复学习同类内容。这是模型结构与训练选择，不是编译器可以随意改写的等价变换。</p><figure class=\"diagram\"><svg viewBox=\"0 0 900 380\" role=\"img\" aria-label=\"细粒度拆分与 Shared 分支的独立教学示意\"><title>细粒度拆分与 Shared 分支的独立教学示意</title><defs><marker id=\"ffn-arrow-shared\" markerWidth=\"8\" markerHeight=\"8\" refX=\"7\" refY=\"4\" orient=\"auto\"><path d=\"M0 0 L8 4 L0 8 Z\" fill=\"#668779\"/></marker></defs><g font-family=\"sans-serif\" font-size=\"16\" fill=\"#243c33\"><polyline points=\"265,272 300,272 300,345 765,345 765,315\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-shared)\"/><polyline points=\"575,272 650,272\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-shared)\"/><rect x=\"20\" y=\"45\" width=\"390\" height=\"115\" rx=\"9\" fill=\"#e1edf0\" stroke=\"#8ca28e\"/><text x=\"215.0\" y=\"75.5\" text-anchor=\"middle\">假设原本 E64 / K4 / I1536</text><text x=\"215.0\" y=\"97.5\" text-anchor=\"middle\">改为 E128 / K8 / I768</text><text x=\"215.0\" y=\"119.5\" text-anchor=\"middle\">总专家参数不变</text><text x=\"215.0\" y=\"141.5\" text-anchor=\"middle\">每 token 专家主矩阵预算不变</text><rect x=\"490\" y=\"45\" width=\"390\" height=\"115\" rx=\"9\" fill=\"#f2e4d0\" stroke=\"#8ca28e\"/><text x=\"685.0\" y=\"75.5\" text-anchor=\"middle\">均匀平均 Mₑ = B × K / E</text><text x=\"685.0\" y=\"97.5\" text-anchor=\"middle\">两例 K/E 都为 1/16</text><text x=\"685.0\" y=\"119.5\" text-anchor=\"middle\">所以平均组内行数不变</text><text x=\"685.0\" y=\"141.5\" text-anchor=\"middle\">矩阵更窄，调度问题数量增加</text><rect x=\"20\" y=\"230\" width=\"245\" height=\"85\" rx=\"9\" fill=\"#e5efde\" stroke=\"#8ca28e\"/><text x=\"142.5\" y=\"256.5\" text-anchor=\"middle\">若模型另加 Shared</text><text x=\"142.5\" y=\"278.5\" text-anchor=\"middle\">所有 token 都执行</text><text x=\"142.5\" y=\"300.5\" text-anchor=\"middle\">先单独算共享输出</text><rect x=\"330\" y=\"230\" width=\"245\" height=\"85\" rx=\"9\" fill=\"#e1edf0\" stroke=\"#8ca28e\"/><text x=\"452.5\" y=\"256.5\" text-anchor=\"middle\">Routed TopK</text><text x=\"452.5\" y=\"278.5\" text-anchor=\"middle\">按选择结果执行</text><text x=\"452.5\" y=\"300.5\" text-anchor=\"middle\">route 权重作用在这里</text><rect x=\"650\" y=\"230\" width=\"230\" height=\"85\" rx=\"9\" fill=\"#e5efde\" stroke=\"#8ca28e\"/><text x=\"765.0\" y=\"256.5\" text-anchor=\"middle\">两支按模型定义相加</text><text x=\"765.0\" y=\"278.5\" text-anchor=\"middle\">Shared 贡献计一次</text><text x=\"765.0\" y=\"300.5\" text-anchor=\"middle\">再进入残差</text></g></svg><figcaption>上半图是固定 H 的预算变换示意，不是 Qwen3-30B-A3B 的历史前身；下半图是带 Shared 的另一类架构，Qwen3 主例没有这条支路。</figcaption></figure><p>细分 E 时如果 K 也同比增加，平均 Mₑ 不会因为“专家变多”自动下降；若只增 E 而固定 K，均匀期望才下降。即使参数量与主矩阵 FLOPs 不变，更窄的 I、更多 route、更多小矩阵和更复杂的重排，也可能改变计算效率与通信成本。比较时必须同时给出 E、K、每专家 I 与 Shared 宽度。</p><p>增加一份 Shared 可能让它获得较好的 batch 复用，因为每个 token 都使用它，但也增加每 token 固定工作量；是否缩减 routed 部分以维持预算，是模型设计者的决定。Shared 不天然位于某一张卡，也不天然只启动一次 kernel；“逻辑贡献只加一次”与“物理上权重复制和运行几次”必须分开。</p>"
+      },
+      {
+        "id": "ffn-quantization",
+        "title": "量化改变每个参数的字节数，还要支付 scale 与反量化成本",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 900 340\" role=\"img\" aria-label=\"Qwen3-8B 三矩阵权重在不同教学位宽下的 payload\"><title>Qwen3-8B 三矩阵权重在不同教学位宽下的 payload</title><defs><marker id=\"ffn-arrow-quant\" markerWidth=\"8\" markerHeight=\"8\" refX=\"7\" refY=\"4\" orient=\"auto\"><path d=\"M0 0 L8 4 L0 8 Z\" fill=\"#668779\"/></marker></defs><g font-family=\"sans-serif\" font-size=\"16\" fill=\"#243c33\"><polyline points=\"265,107 330,107\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-quant)\"/><polyline points=\"575,107 640,107\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-quant)\"/><rect x=\"20\" y=\"50\" width=\"245\" height=\"115\" rx=\"9\" fill=\"#e1edf0\" stroke=\"#8ca28e\"/><text x=\"142.5\" y=\"91.5\" text-anchor=\"middle\">BF16 基线</text><text x=\"142.5\" y=\"113.5\" text-anchor=\"middle\">每权重 2 字节</text><text x=\"142.5\" y=\"135.5\" text-anchor=\"middle\">三矩阵 288 MiB</text><rect x=\"330\" y=\"50\" width=\"245\" height=\"115\" rx=\"9\" fill=\"#e5efde\" stroke=\"#8ca28e\"/><text x=\"452.5\" y=\"91.5\" text-anchor=\"middle\">假设 8-bit 权重</text><text x=\"452.5\" y=\"113.5\" text-anchor=\"middle\">纯权重 144 MiB</text><text x=\"452.5\" y=\"135.5\" text-anchor=\"middle\">scale 等元数据另计</text><rect x=\"640\" y=\"50\" width=\"245\" height=\"115\" rx=\"9\" fill=\"#f2e4d0\" stroke=\"#8ca28e\"/><text x=\"762.5\" y=\"91.5\" text-anchor=\"middle\">假设 4-bit 权重</text><text x=\"762.5\" y=\"113.5\" text-anchor=\"middle\">纯权重 72 MiB</text><text x=\"762.5\" y=\"135.5\" text-anchor=\"middle\">解包、scale 另计</text><rect x=\"175\" y=\"225\" width=\"550\" height=\"80\" rx=\"9\" fill=\"#fffdf5\" stroke=\"#8ca28e\"/><text x=\"450.0\" y=\"249.0\" text-anchor=\"middle\">示例：每 128 权重配一个 BF16 scale</text><text x=\"450.0\" y=\"271.0\" text-anchor=\"middle\">三矩阵 scale 额外占 2.25 MiB</text><text x=\"450.0\" y=\"293.0\" text-anchor=\"middle\">4-bit 合计至少 74.25 MiB（此示例格式）</text></g></svg><figcaption>仅比较同一组 150,994,944 个权重的存储体量；没有声称官方 BF16 checkpoint 自带这些量化格式，也没有推断 2×/4× 时延加速。</figcaption></figure><p>在低 B decode 中，压缩权重直接针对最大的搬运项。但 weight-only INT4 的名字不意味着矩阵乘就一定在 INT4 算术单元上完成：实现可能先解包与反量化，再执行更高精度计算；FP8 权重加低精度 activation 又有另一套 scale 和累加约定。<a href=\"https://arxiv.org/abs/2306.00978\">AWQ</a> 是基于激活统计选择量化策略的一种方法，不是所有 4-bit 格式的统称。</p><p>图中的 scale 示例固定每 128 个权重一个 BF16 scale，不带 zero point；如果格式还有零点、分组 padding、重排元数据或硬件回包放大，必须另外计入。矩阵参数字节、实际 load 指令字节、HBM 事务和最终时延是四件事。小矩阵时，解包指令或 launch 开销甚至可能成为主要成本。</p><p>数值验证应覆盖两条不同风险：专家内 Gate/Up、SiLU、Down 的误差会累积；Router 的微小误差还可能让 TopK 第 8 与第 9 名交换，执行完全不同的专家。先检查选中 ID 集合，再检查归一化系数和专家输出，最后看层输出与完整生成质量。量化或近似激活需要独立质量验收，不应藏在“同模型优化”的假设里。</p>"
+      },
+      {
+        "id": "ffn-parallel",
+        "title": "参数放不下一台设备时：TP 切矩阵，EP 分专家",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 900 355\" role=\"img\" aria-label=\"Qwen3-30B-A3B 单专家 TP2 和 128 专家 EP4 的独立布局示意\"><title>Qwen3-30B-A3B 单专家 TP2 和 128 专家 EP4 的独立布局示意</title><defs><marker id=\"ffn-arrow-parallel\" markerWidth=\"8\" markerHeight=\"8\" refX=\"7\" refY=\"4\" orient=\"auto\"><path d=\"M0 0 L8 4 L0 8 Z\" fill=\"#668779\"/></marker></defs><g font-family=\"sans-serif\" font-size=\"16\" fill=\"#243c33\"><polyline points=\"415,85 485,85\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-parallel)\"/><polyline points=\"415,260 485,260\" fill=\"none\" stroke=\"#668779\" stroke-width=\"2\" marker-end=\"url(#ffn-arrow-parallel)\"/><rect x=\"20\" y=\"35\" width=\"395\" height=\"100\" rx=\"9\" fill=\"#e1edf0\" stroke=\"#8ca28e\"/><text x=\"217.5\" y=\"58.0\" text-anchor=\"middle\">TP2：同一个专家拆 I768</text><text x=\"217.5\" y=\"80.0\" text-anchor=\"middle\">rank0 I384；rank1 I384</text><text x=\"217.5\" y=\"102.0\" text-anchor=\"middle\">各自 Gate/Up → SiLU → Down</text><text x=\"217.5\" y=\"124.0\" text-anchor=\"middle\">各产出 [16,2048] partial</text><rect x=\"485\" y=\"35\" width=\"395\" height=\"100\" rx=\"9\" fill=\"#e5efde\" stroke=\"#8ca28e\"/><text x=\"682.5\" y=\"58.0\" text-anchor=\"middle\">TP2 结束：同 token 求和</text><text x=\"682.5\" y=\"80.0\" text-anchor=\"middle\">两份 partial 相加</text><text x=\"682.5\" y=\"102.0\" text-anchor=\"middle\">得到该专家完整 [16,2048]</text><text x=\"682.5\" y=\"124.0\" text-anchor=\"middle\">不能将两份当作两个专家</text><rect x=\"20\" y=\"210\" width=\"395\" height=\"100\" rx=\"9\" fill=\"#f2e4d0\" stroke=\"#8ca28e\"/><text x=\"217.5\" y=\"233.0\" text-anchor=\"middle\">EP4：128 专家分 4 组</text><text x=\"217.5\" y=\"255.0\" text-anchor=\"middle\">每设备放 32 套完整专家</text><text x=\"217.5\" y=\"277.0\" text-anchor=\"middle\">token 发往所选专家的 owner</text><text x=\"217.5\" y=\"299.0\" text-anchor=\"middle\">返回原 token 再 combine</text><rect x=\"485\" y=\"210\" width=\"395\" height=\"100\" rx=\"9\" fill=\"#fffdf5\" stroke=\"#8ca28e\"/><text x=\"682.5\" y=\"233.0\" text-anchor=\"middle\">B16 / K8 路由 payload</text><text x=\"682.5\" y=\"255.0\" text-anchor=\"middle\">128 route × 2048 × 2 B</text><text x=\"682.5\" y=\"277.0\" text-anchor=\"middle\">全展开输入为 512 KiB</text><text x=\"682.5\" y=\"299.0\" text-anchor=\"middle\">回程同量级，元数据另计</text></g></svg><figcaption>TP2 以某专家获得 16 行为例；TP2 与 EP4 是便于看清轴的独立教学方案，不宣称是此公开 checkpoint 的默认部署。通信 payload 不等于物理网络流量。</figcaption></figure><p>TP（Tensor Parallel）切同一矩阵：Gate/Up 沿中间通道拆分，各 rank 做自己的非线性和 Down 部分和，随后归约完整 hidden 输出。EP（Expert Parallel）分不同专家：每个 token 的 route 要找到专家所在设备，输出再回到 token 所在处。这两个求和轴不同；在混合 TP×EP 中重复把已复制的完整结果求和，会重复计数。TP 的这种矩阵划分可参考 <a href=\"https://arxiv.org/abs/1909.08053\">Megatron-LM</a>，但具体 collective 取决于实际 token 布局。</p><p>EP 常用选择性 dispatch/combine，可能用 AllToAll；也存在先广播或 AllGather 输入、各设备只算本地专家、再归约的方案。不能只因为模型叫 MoE，就在调用图里写上 AllToAll。若多个选中专家在同一设备，一份 token 可在设备内复用，图里的 512 KiB route-expanded payload 就不一定都跨网络；输出也可先在 owner 局部合并。</p><p>通信能否与计算重叠，取决于数据依赖、分组大小、链路与计算资源是否冲突。对小 B，启动与同步延迟可能比 payload 时间更重要；对更大 B，热门设备、传输带宽和计算都会变化。因此 kernel 加速必须放回 dispatch → 专家计算 → combine 的完整关键路径。</p>"
+      },
+      {
+        "id": "ffn-evolution",
+        "title": "把演进主线串起来：扩大能力，同时约束每步搬运与计算",
+        "html": "<div class=\"table-wrap\"><table><thead><tr><th>变化方向</th><th>算法或系统选择</th><th>减少／约束什么</th><th>新成本与不能承诺的事</th></tr></thead><tbody><tr><td>希望更多模型容量</td><td>Dense → 稀疏 MoE</td><td>每 token 不必遍历全部专家参数</td><td>Router、归组、偏斜与通信；不保证比同质量 Dense 更快</td></tr><tr><td>希望同预算更灵活</td><td>细粒度专家 + Shared</td><td>更灵活地分配激活参数预算</td><td>组合多与矩阵细碎并存；训练质量仍需实证</td></tr><tr><td>参数仍要搬运</td><td>更低位宽权重</td><td>每份权重 payload</td><td>scale、解包、误差；压缩比不是加速比</td></tr><tr><td>同一权重重复使用</td><td>batch / grouped GEMM</td><td>摊薄每 token 权重加载</td><td>激活容量、动态组长、排队与尾延迟</td></tr><tr><td>中间张量反复落地</td><td>融合与 tile 驻留</td><td>临时激活读写和启动次数</td><td>寄存器／SRAM 容量、同步、舍入约定</td></tr></tbody></table></div><p>这条线并不是“新算法都不读完整数据”。<strong>Dense FFN 对当前 token 仍使用全部本层 Dense 权重；稀疏 MoE 只使用选中专家，但整个 batch 的专家并集可能很大；量化让读到的每份数据更小；融合与复用减少重复搬运。</strong>它们降低的是不同的字节项，应先指出是哪一项再谈优化。</p><p>与 Attention 对照就更清晰：GQA 减少 KV head 份数，但全注意力 decode 仍遍历完整历史位置；稀疏／窗口注意力才改变访问的位置集合，压缩状态又是另一条路线。FFN 一侧则围绕参数容量、激活子集和权重复用演变。上下文和参数同时增长，使带宽越来越重要，但表达能力、训练可行性和质量也在驱动架构，不能把所有变化都归因于带宽。</p><p>到这里再回看公式就不再抽象：每一个乘法都对应一个具体矩阵，每一个求和都对应明确的轴，每一种“节省”都应该能落在容量、字节、FLOPs 或等待时间的账本上。</p>"
+      },
+      {
+        "id": "ffn-compiler-map",
+        "title": "AI 编译器工程师要抓住的合同：shape、身份、数值和调度",
+        "html": "<div class=\"table-wrap\"><table><thead><tr><th>看到的模型语义</th><th>应追踪的实现对象</th><th>可以优化的事</th><th>不能静默改掉的事</th></tr></thead><tbody><tr><td>Dense 三矩阵</td><td>H4096/I12288；B 动态</td><td>Gate/Up 合并调度、布局、tile、融合</td><td>非线性、权重对应关系、必要舍入</td></tr><tr><td>Router</td><td>[B,128] → ID/weight [B,8]</td><td>选择算法、向量化、缓冲复用</td><td>softmax/sigmoid 规则、TopK、归一化</td></tr><tr><td>专家执行</td><td>每专家 [Mₑ,2048]；I768</td><td>grouped 调度、padding 或 ragged、tile</td><td>token/slot 身份、未选专家不参与</td></tr><tr><td>Combine</td><td>逻辑 [B,8,2048] → [B,2048]</td><td>融合加权、减少落地、并行归约</td><td>weight 只乘一次、数值验收和有效行</td></tr><tr><td>多设备</td><td>权重 owner、token owner、partial</td><td>专家摆放、通信调度、重叠</td><td>TP/EP 求和轴、复制与部分和含义</td></tr></tbody></table></div><p>优化前用真实工作负载回答四个问题：B 分布是什么；每层 Mₑ 直方图怎样；权重与 scale 是什么精度和布局；计时是否包含 dispatch/combine 与通信。之后再确定是权重读取、计算、启动、归组还是通信在主导。只有确认瓶颈，编译器选择才不会变成“融合更多一定更快”或“更大 tile 一定更好”。</p><p>正确性也按依赖链检查：先比 Router ID 与 weight，再比每个专家对应 token 的输出，随后比 combine 和 TP/EP 归约；最后进入完整模型。性能报告分别记录单 kernel、完整 FFN/MoE 子层、完整 decoder layer 和端到端每 token 延迟。局部更快只能证明局部收益，尤其不能把 CycleSim 或 VCS 数字写成硅上或真实服务速度。</p>"
+      },
+      {
+        "id": "ffn-next-step",
+        "title": "从公开模型走进真实部署：保留主线，重新固定配置",
+        "html": "<p>如果你能解释“为什么 B1 Dense 要面对 288 MiB 权重、B16 为什么可能复用；MoE 为什么总参数更多而单 token 只选一部分；route 重排后怎样还原；为什么 grouped GEMM 不保证通信变少”，就已经具备阅读推理 kernel 的核心词汇。下一步不是记更多算子名字，而是用同一条方法核对实际仓库：模型配置 → 入口 shape → 路由规则 → 权重放置 → 输出归属 → 数值和性能证据。</p><div class=\"callout\">本站另有内部 GLM5Next 300B 部署案例：H4096、routed E288、每专家 I2048、K8，再加 Shared 分支。它与本篇两个公开 Qwen 模型不同，也不能等同于公开 GLM-5。相关实现与证据按 <a href=\"#chapter/moe-deployment-walkthrough\">完整 MoE 部署教程</a> 固定的仓库版本阅读。开发源码中存在某条路径，不等于已进入生产服务或完成整模型验收。</div><p>三个自测可以直接口述：第一，把 Qwen3-8B 的 B 从 1 改成 32，哪些 shape 变，哪些权重不变；第二，把某个假设 MoE 的 E 翻倍但 K、I 不变，总容量与单 token 主矩阵 FLOPs 各怎么变；第三，同样 128 条 route，集中在 8 个专家和分散到 128 个专家，权重读取、矩阵行数和跨设备负载会怎样变化。能把答案画在纸上，比背一页符号更接近真正的工程能力。</p><p>建议最后把 <a href=\"#chapter/attention-inference-guide\">Attention 推理指南</a> 的“历史状态账”与本篇的“参数账”摆在一起：同一服务增大上下文、增大 batch、切换 Dense/MoE、修改位宽时，两侧瓶颈会重新分配。完整模型的优化需要两本账同时成立。</p><h3>实操练习：给三种路由分布选择第一项实验</h3><div class=\"table-wrap\"><table><thead><tr><th>观察到的输入</th><th>优先验证的假设</th><th>需要同时记录什么</th></tr></thead><tbody><tr><td>Qwen3-8B，B1，权重读占主导</td><td>试同预算 batch 或合规量化；先估算能省多少权重字节</td><td>实际 HBM 字节、scale/解包开销、每请求延迟与数值误差</td></tr><tr><td>Qwen3 MoE，B16，大部分专家 Mₑ=1</td><td>减少小 GEMM 启动与 padding；比较 grouped/ragged 调度</td><td>有效行/执行行比例、重排时间、矩阵单元利用率、整体 MoE 时间</td></tr><tr><td>Qwen3 MoE，B16，少数专家 Mₑ≈16</td><td>为热门组做权重 tile 复用，同时检查专家所在设备的负载</td><td>每专家 Mₑ、权重重读次数、最慢设备时间和通信等待</td></tr></tbody></table></div><p>不要只把三个 kernel 的最快时间拼成结果：用同一批 token、同一份路由、同一精度和完整输出校验跑完整链，再决定 grouping、融合、tiling 或量化是否真的有收益。</p>"
+      }
+    ],
+    "readingStages": [
+      {
+        "id": "ffn-stage-start",
+        "title": "先找到每步处理的数据",
+        "summary": "以公开模型固定 shape 和证据范围，先分清历史状态与模型参数。",
+        "sections": [
+          "ffn-start",
+          "ffn-model-contract"
+        ]
+      },
+      {
+        "id": "ffn-stage-dense",
+        "title": "走完一层 Dense SwiGLU",
+        "summary": "从并行 Gate/Up 到 Down，把 B1 的权重压力、batch 复用与融合收益讲清。",
+        "sections": [
+          "ffn-swiglu-flow",
+          "ffn-dense-budget",
+          "ffn-batch-reuse",
+          "ffn-fusion"
+        ]
+      },
+      {
+        "id": "ffn-stage-route",
+        "title": "参数更多，只选少数专家",
+        "summary": "切换到真实 Qwen3 MoE 配置，认识总容量、Router 与 route 身份。",
+        "sections": [
+          "ffn-moe-capacity",
+          "ffn-router",
+          "ffn-route-identity"
+        ]
+      },
+      {
+        "id": "ffn-stage-execute",
+        "title": "归组计算，再回到原 token",
+        "summary": "顺着 expert 分组、grouped GEMM 和 combine 理解动态负载。",
+        "sections": [
+          "ffn-grouped-gemm",
+          "ffn-combine",
+          "ffn-batch-skew"
+        ]
+      },
+      {
+        "id": "ffn-stage-evolve",
+        "title": "容量、字节和通信如何继续演进",
+        "summary": "把细粒度、Shared、量化、TP/EP 放在各自准确的预算与语义边界。",
+        "sections": [
+          "ffn-shared-fine",
+          "ffn-quantization",
+          "ffn-parallel"
+        ]
+      },
+      {
+        "id": "ffn-stage-engineer",
+        "title": "把演进转成工程判断",
+        "summary": "串起减少搬运的主线，形成编译器合同，再进入实际部署。",
+        "sections": [
+          "ffn-evolution",
+          "ffn-compiler-map",
+          "ffn-next-step"
+        ]
+      }
+    ],
+    "readingLabel": "沿一条数据流，从单行 Dense 走到动态 MoE",
+    "readingStageLabel": "学习阶段",
+    "portableReading": {
+      "file": "ffn.html",
+      "download": "decode-ffn-moe-guide.html",
+      "label": "保存完整 FFN / MoE HTML ↓"
+    },
+    "legacyChapters": {
+      "ffn-to-moe": {
+        "title": "Dense → SwiGLU → MoE：逐 token 变换如何变成条件计算",
+        "section": "ffn-start",
+        "anchors": [
+          "ffn-math",
+          "ffn-diagram",
+          "ffn-cost",
+          "moe-evolution",
+          "glm-router-math",
+          "glm-concrete-shapes",
+          "moe-algorithm-interview"
+        ],
+        "anchorMap": {
+          "ffn-math": "ffn-start",
+          "ffn-diagram": "ffn-swiglu-flow",
+          "ffn-cost": "ffn-dense-budget",
+          "moe-evolution": "ffn-moe-capacity",
+          "glm-router-math": "ffn-router",
+          "glm-concrete-shapes": "ffn-shared-fine",
+          "moe-algorithm-interview": "ffn-batch-skew"
+        }
+      },
+      "ffn-routing-dataflow": {
+        "title": "FFN 算子数据流：从三次投影到专家输出归位",
+        "section": "ffn-swiglu-flow",
+        "anchors": [
+          "dense-shapes",
+          "two-gates",
+          "selection-weight",
+          "token-expert-slot",
+          "combine",
+          "evolution-cost",
+          "read-next"
+        ],
+        "anchorMap": {
+          "dense-shapes": "ffn-swiglu-flow",
+          "two-gates": "ffn-router",
+          "selection-weight": "ffn-router",
+          "token-expert-slot": "ffn-route-identity",
+          "combine": "ffn-combine",
+          "evolution-cost": "ffn-evolution",
+          "read-next": "ffn-next-step"
+        }
+      }
+    },
+    "questions": [
+      {
+        "q": "B=1 到 B=16，Qwen3-8B FFN 为什么可能明显提高吞吐？",
+        "a": "主矩阵计算量增加 16 倍，输入和中间激活行数增加 16 倍，但权重相同。有效分块可让一次权重加载服务多行，使理想权重算术强度由约 1 提高到 16 FLOPs/byte；实际速度仍受容量、重读与计算约束。",
+        "followup": "为什么不能把这个结果直接说成单请求每 token 延迟降低 16 倍？"
+      },
+      {
+        "q": "为什么 Gate 与 Up 可以合并调度，Down 却不一定适合同样融合？",
+        "a": "Gate/Up 共享同一输入且没有相互依赖，可按输出列拼接。Down 依赖门控后的中间通道，并沿它们归约；融合会增加片上活跃数据、同步和数值边界处理。",
+        "followup": "B1 时省掉 G/U 中间落地，与 288 MiB 权重相比有多大？"
+      },
+      {
+        "q": "Qwen3-30B-A3B 的每专家宽度究竟是 768 还是 6144？",
+        "a": "此固定配置的 routed experts 使用 moe_intermediate_size=768。intermediate_size=6144 是另一个字段；需要跟到创建专家的源码，而不能只找第一个 intermediate_size。",
+        "followup": "一个专家的三矩阵 BF16 权重为什么是 9 MiB？"
+      },
+      {
+        "q": "MoE 的总参数、激活参数和 batch 专家并集有什么区别？",
+        "a": "总参数描述所有专家的存储容量；激活参数描述单 token 调用的 K 个专家；batch 专家并集描述本步所有 token 合起来要访问的不同专家，决定理想复用下的唯一权重 payload。",
+        "followup": "B16/K8/E128 时，并集最小和最大各是多少？"
+      },
+      {
+        "q": "归组后的 token merge 能先把两行输入相加再送进专家吗？",
+        "a": "不能。SwiGLU 含非线性，两行相加后计算通常不等于各自计算；归组只将独立行并排，复用同一专家权重，并保存 token 与 slot 的逆映射。",
+        "followup": "如果两行选择同一专家但位于不同 slot，输出该写回哪里？"
+      },
+      {
+        "q": "细粒度专家变多，平均每专家 token 数一定下降吗？",
+        "a": "不一定。均匀模型下平均 Mₑ=B×K/E；若 E 与 K 同比例增大，比值不变。即便如此，每专家 I 变小、问题数量增加，硬件效率仍会改变。",
+        "followup": "为什么同样 FLOPs 不代表同样 grouped GEMM 延迟？"
+      },
+      {
+        "q": "把 BF16 权重改成 INT4 就能快四倍吗？",
+        "a": "只能先说纯权重 payload 降为四分之一。scale、zero point、padding、解包和反量化、实际事务以及计算瓶颈都会影响收益，还要独立验收精度。",
+        "followup": "Router 量化为什么比只观察平均数值误差更敏感？"
+      },
+      {
+        "q": "TP partial 与 EP 专家输出为什么不能用一次任意 world SUM 代替？",
+        "a": "TP partial 是同专家不同矩阵分片的和，EP 汇总是所选专家对同 token 的加权贡献。复制结果、部分和与 token 分片各有不同所有权，任意求和可能重复计数或错配 token。",
+        "followup": "请在纸上画出两路 TP partial 如何先形成一个专家输出。"
+      }
+    ],
+    "sources": [
+      {
+        "id": "ffn-qwen3-8b-config",
+        "label": "Qwen3-8B config.json @ b968826d",
+        "url": "https://huggingface.co/Qwen/Qwen3-8B/blob/b968826d9c46dd6066d109eabc6255188de91218/config.json",
+        "kind": "公开配置",
+        "note": "2026-10-25 读取；H4096、I12288、BF16。字节与 FLOPs 为本篇从 shape 推导。"
+      },
+      {
+        "id": "ffn-qwen3-moe-config",
+        "label": "Qwen3-30B-A3B config.json @ ad44e777",
+        "url": "https://huggingface.co/Qwen/Qwen3-30B-A3B/blob/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/config.json",
+        "kind": "公开配置",
+        "note": "H2048、每专家 I768、E128、K8、norm_topk_prob=true。不是 2507 或其他 Qwen 变体。"
+      },
+      {
+        "id": "ffn-qwen3-dense-code",
+        "label": "Transformers v4.51.3 / Qwen3MLP 与 DecoderLayer",
+        "url": "https://github.com/huggingface/transformers/blob/v4.51.3/src/transformers/models/qwen3/modeling_qwen3.py",
+        "kind": "固定版本源码",
+        "note": "Gate/Up/Down、RMSNorm、残差与 nn.Linear 存储约定；参考实现不代表所有服务 kernel。"
+      },
+      {
+        "id": "ffn-qwen3-moe-code",
+        "label": "Transformers v4.51.3 / Qwen3MoeSparseMoeBlock",
+        "url": "https://github.com/huggingface/transformers/blob/v4.51.3/src/transformers/models/qwen3_moe/modeling_qwen3_moe.py",
+        "kind": "固定版本源码",
+        "note": "FP32 softmax→TopK→所选归一化→input dtype；每专家 SwiGLU 与加权汇总。"
+      },
+      {
+        "id": "ffn-qwen3-report",
+        "label": "Qwen3 Technical Report",
+        "url": "https://arxiv.org/abs/2505.09388",
+        "kind": "论文",
+        "note": "公开 Dense/MoE 家族背景；本文没有复用论文性能作为本机结果。"
+      },
+      {
+        "id": "ffn-glu-paper",
+        "label": "GLU Variants Improve Transformer",
+        "url": "https://arxiv.org/abs/2002.05202",
+        "kind": "论文",
+        "note": "门控 FFN 函数与预算设计；不是免费减少计算的通用结论。"
+      },
+      {
+        "id": "ffn-moe-paper",
+        "label": "The Sparsely-Gated Mixture-of-Experts Layer",
+        "url": "https://arxiv.org/abs/1701.06538",
+        "kind": "论文",
+        "note": "条件计算与稀疏激活的早期工作。"
+      },
+      {
+        "id": "ffn-deepseekmoe",
+        "label": "DeepSeekMoE",
+        "url": "https://arxiv.org/abs/2401.06066",
+        "kind": "论文",
+        "note": "细粒度与 Shared 思路；没有把它的配置拼接进 Qwen 主例。"
+      },
+      {
+        "id": "ffn-cutlass-grouped",
+        "label": "CUTLASS / Grouped Kernel Schedulers",
+        "url": "https://docs.nvidia.com/cutlass/latest/media/docs/cpp/grouped_scheduler.html",
+        "kind": "官方文档",
+        "note": "2026-10-25 读取 grouped 多问题调度设计；不是此例的实测实现。"
+      },
+      {
+        "id": "ffn-megablocks",
+        "label": "MegaBlocks",
+        "url": "https://arxiv.org/abs/2211.15841",
+        "kind": "论文",
+        "note": "块稀疏、padding 与不丢 token 的训练系统取舍，不外推其时延到 decode。"
+      },
+      {
+        "id": "ffn-awq",
+        "label": "AWQ",
+        "url": "https://arxiv.org/abs/2306.00978",
+        "kind": "论文",
+        "note": "weight-only 量化与激活统计；本篇位宽图为自定义教学 payload，不冒充其具体格式。"
+      },
+      {
+        "id": "ffn-megatron",
+        "label": "Megatron-LM",
+        "url": "https://arxiv.org/abs/1909.08053",
+        "kind": "论文",
+        "note": "矩阵张量并行的基础划分思想；本篇 TP2/EP4 为教学布局。"
+      },
+      {
+        "id": "ffn-internal-bridge",
+        "label": "本站 GLM5Next MoE 部署固定证据",
+        "url": "evidence/moe-deployment-current.md#heads",
+        "kind": "仓库证据",
+        "note": "复用既有内部模型身份和源码边界；本轮不据此新增集成或性能验收结论。"
+      }
+    ],
+    "takeaways": [
+      "FFN 按行混合特征，Dense 主要面对模型权重，不能把它的成本写成 KVCache 扫描。",
+      "固定真实 H/I/B 后，才能分别算主矩阵 FLOPs、激活体量、唯一权重 payload 与实际流量。",
+      "MoE 的 E、K、I 控制不同预算；单 token 激活参数不等于整个 batch 的专家并集。",
+      "Router 选择、混合系数、token/slot 身份和 combine 求和轴共同构成实现合同。",
+      "融合、量化、batch 复用、稀疏激活减少的是不同成本；模型改动与等价实现优化需要不同验收。",
+      "细粒度、Shared、TP/EP 和通信必须在完整数据流中解释，不能把 kernel 数字当作整模型加速。"
+    ]
+  }
+]

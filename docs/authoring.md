@@ -15,7 +15,7 @@
 
 ## 连续长文与旧链接
 
-PE、VP 与 MoE 部署分别使用一个 chapter、一个完整 HTML。`readingStages` 的每项包含 `id/title/summary/sections`；所有 `sections` 展平后必须与章内 section 顺序完全相同。侧边栏、页首路径和右侧目录都跳到同一篇文章的锚点，页面不拆载、不重新初始化交互。阶段标题用 h2，小节用 h3，小节内部标题从 h3 转为 h4。可用 `readingLabel` 定义页首路径说明、`readingStageLabel` 定义阶段编号前缀；默认的“从外到内”“放大层次”适合硬件篇，MoE 可使用“沿一次 MoE 调用”“数据路径”。
+Attention、FFN、PE、VP、MoE 部署与性能分析分别使用一个 chapter、一个完整 HTML。`readingStages` 的每项包含 `id/title/summary/sections`；所有 `sections` 展平后必须与章内 section 顺序完全相同。侧边栏、页首路径和右侧目录都跳到同一篇文章的锚点，页面不拆载、不重新初始化交互。阶段标题用 h2，小节用 h3，小节内部标题从 h3 转为 h4。可用 `readingLabel` 定义页首路径说明、`readingStageLabel` 定义阶段编号前缀；默认的“从外到内”“放大层次”适合硬件篇，MoE 可使用“沿一次 MoE 调用”“数据路径”。
 
 正文的硬件字节映射、credit 等补充推导可放在 `<details class="pe-deep-dive">` 中。直接访问其内部锚点会展开对应内容；打印时所有技术补充自动展开，结束后恢复原状态。
 
@@ -27,7 +27,7 @@ PE、VP 与 MoE 部署分别使用一个 chapter、一个完整 HTML。`readingS
 
 之后再次合并章节时，已是 `readingVersion: 2` 的浏览器也必须把消失的旧 chapter 已读状态保留到 `legacyRead`。迁移依靠稳定 ID 和显式 `legacyKeys`，不能靠相同题目标题猜测对应关系；`scripts/check_moe_model.js` 同时检查这类再次迁移与同名锚点分流。
 
-长文章节使用 `portableReading` 指定独立入口，例如 `{"file":"vp.html","download":"518-vp.html","label":"保存完整 VP HTML ↓"}`。`scripts/build.py` 据此生成 `dist/pe.html`、`dist/vp.html`、`dist/moe.html`；它们与 `dist/index.html` 内嵌同一份内容和应用，仅默认路由不同，可保存后独立离线阅读。文件名必须是唯一的英文小写 HTML 文件名，不能占用 `index.html`。下载链接使用当前章的元数据，不能写死为 PE。静态检查验证独立入口内容一致性；浏览器验收验证实际下载目标。它们在同一来源共享浏览器笔记，文件离线副本则需导出/导入来转移笔记。
+长文章节使用 `portableReading` 指定独立入口，例如 `{"file":"vp.html","download":"518-vp.html","label":"保存完整 VP HTML ↓"}`。`scripts/build.py` 据此生成 `dist/attention.html`、`dist/ffn.html`、`dist/pe.html`、`dist/vp.html`、`dist/moe.html`；它们与 `dist/index.html` 内嵌同一份内容和应用，仅默认路由不同，可保存后独立离线阅读。文件名必须是唯一的英文小写 HTML 文件名，不能占用 `index.html`。下载链接使用当前章的元数据，不能写死为 PE。静态检查验证独立入口内容一致性；浏览器验收验证实际下载目标。它们在同一来源共享浏览器笔记，文件离线副本则需导出/导入来转移笔记。
 
 ## 未来专题怎么放
 
@@ -42,7 +42,7 @@ PE、VP 与 MoE 部署分别使用一个 chapter、一个完整 HTML。`readingS
 
 ## 算法与部署的内容边界
 
-`algorithms`从完整模型进入Attention和FFN两条演进线，讲数学、shape、状态和逻辑读写；实际rank、collectives、kernel ABI与性能证据放入`moe`部署域。保留`moe`路由ID以兼容既有链接。专题可继续增加新模型部署或kernel内部章节。
+`algorithms`只保留 Attention 与 FFN 两篇连续教程，各有一个独立 HTML。以真实模型数字 shape 贯穿一次 decode，再解释长上下文、参数增长下的状态、计算和逻辑读写变化；少量公式服务于数据流，不再为每个概念拆章。MHA/MQA 的同维教学对照、真实 Qwen 配置、内部 GLM5Next 和实测必须分开。实际 rank、collectives、kernel ABI 与性能证据放入 `moe` 部署域。保留`moe`路由ID以兼容既有链接。专题可继续增加新模型部署或kernel内部章节。
 
 主题可配置`learningPath`，每步包含`title`、`description`、`chapter`，页面自动生成有顺序的阅读入口。所有chapter引用由静态检查验证；它是推荐路线，不改变章节的唯一主目录位置。
 
@@ -77,8 +77,10 @@ node --check web/catalog.js
 node --check web/reading.js
 node --check web/pe-explorer.js
 node --check web/moe-explorer.js
+node --check web/decode-explorer.js
 node scripts/check_pe_model.js
 node scripts/check_moe_model.js
+node scripts/check_decode_model.js
 python3 -m unittest discover -s practice -v
 TMPDIR=/data/wangxw/tmp g++ -std=c++17 -Wall -Wextra -Werror \
   -fsanitize=address,undefined practice/coding.cpp \
@@ -103,3 +105,9 @@ TMPDIR=/data/wangxw/tmp g++ -std=c++17 -Wall -Wextra -Werror \
 交互用连续的每卡 72 专家归属、I/TP=512 的矩阵分片解释 rank；容量仅计算 Routed FP8 与 Shared BF16 的纯矩阵。通信只计算 BF16 张量元素大小，不把 AllGather 结果容量写成物理线上流量，不从理想均匀 Top-8 分配宣称真实路由均衡。Shared 的真实权重归属和开发脚本零占位分配分开说明。
 
 修改公式时运行 `scripts/check_moe_model.js`，核对全部 1,152 个专家分片与总容量守恒。浏览器检查 T8/16/24/32、EP0/EP3、TP0/TP3、专家 0/71/72/287、非法编号处理、手机与打印；打印保留当前选择和计算结果，隐藏不能操作的控制器。
+
+## Decode 教程的交互账本
+
+正文使用 `<div data-decode-explorer="attention"></div>` 或 `<div data-decode-explorer="ffn"></div>`。`web/decode-explorer.js` 与 CSS 在构建时内嵌，不依赖服务或外部资源。Qwen3-8B 固定 H4096、Q32、KV8、D128、I12288、36 层；BF16 是显式教学口径。MHA32 / MQA1 仅为相同维度的反事实对照，不是另一份 Qwen 配置。
+
+Attention 的 N 包含本步新 token，按等长请求、每步每请求一个 query 计数；完整逻辑 KV 扫描不能写成测得的 HBM 流量。FFN 展示单层 Dense 三矩阵的理想权重复用，N 不改变其矩阵工作量。更新时运行 `node scripts/check_decode_model.js`，并验证两独立入口、旧章节/笔记、搜索、图示放大、B/N 变化、移动与打印。

@@ -1,0 +1,639 @@
+[
+  {
+    "id": "attention-inference-guide",
+    "order": 9,
+    "title": "Attention 推理快速上手：跟着真实 shape 读懂 decode 与算法演进",
+    "subtitle": "Qwen3-8B 一拍数据流 · GQA / Flash / MLA / DSA / KDA · 字节与计算账",
+    "lead": "从一枚 token 穿过真实模型开始，沿投影、缓存、历史读取、归约与输出走完一层，再理解长上下文怎样推动共享 KV、压缩历史、选择精读和固定状态。用同一条带宽与计算主线串起实现和优化。",
+    "part": "模型与算法",
+    "minutes": 120,
+    "level": "研究生入门 · 编译器工程基础",
+    "tags": [
+      "decode",
+      "Qwen3",
+      "Attention",
+      "GQA",
+      "KVCache",
+      "FlashAttention",
+      "MLA",
+      "DSA",
+      "KDA",
+      "shape",
+      "带宽",
+      "计算量"
+    ],
+    "portableReading": {
+      "file": "attention.html",
+      "download": "attention-decode-guide.html",
+      "label": "保存完整 Attention HTML ↓"
+    },
+    "readingStages": [
+      {
+        "id": "attention-stage-orientation",
+        "title": "先走完一枚 token",
+        "summary": "用真实整模型、整层与 prefill/decode 接上已有算法基础。",
+        "sections": [
+          "one-step-model",
+          "block-map",
+          "prefill-to-decode"
+        ]
+      },
+      {
+        "id": "attention-stage-produce",
+        "title": "生成当前 Q/K/V",
+        "summary": "投影、Norm、RoPE、append 与 GQA 共享关系。",
+        "sections": [
+          "projections",
+          "norm-rope-cache",
+          "grouped-query"
+        ]
+      },
+      {
+        "id": "attention-stage-consume",
+        "title": "完整消费历史并记账",
+        "summary": "QK、softmax、PV、O 投影和可调 B/N 的逻辑字节。",
+        "sections": [
+          "full-history",
+          "attention-output",
+          "budget-explorer"
+        ]
+      },
+      {
+        "id": "attention-stage-execute",
+        "title": "把同一个函数高效执行",
+        "summary": "分块、online softmax、布局与拆历史归约。",
+        "sections": [
+          "flash-tile",
+          "online-softmax",
+          "split-layout"
+        ]
+      },
+      {
+        "id": "attention-stage-compress",
+        "title": "从压力读懂 MLA",
+        "summary": "沿不同资源轴看演进，再计算 latent 缓存与吸收代价。",
+        "sections": [
+          "length-growth",
+          "mla-cache",
+          "mla-absorption"
+        ]
+      },
+      {
+        "id": "attention-stage-select",
+        "title": "DSA：选择精读的位置",
+        "summary": "主精算的节省与索引、gather、缓存的剩余成本。",
+        "sections": [
+          "sparse-selection",
+          "sparse-budget"
+        ]
+      },
+      {
+        "id": "attention-stage-remember",
+        "title": "Linear → Delta → KDA",
+        "summary": "固定状态、选择性更新与完整子层，不混同 softmax。",
+        "sections": [
+          "linear-state",
+          "delta-gates",
+          "kda-layer"
+        ]
+      },
+      {
+        "id": "attention-stage-integrate",
+        "title": "混合模型与编译器落地",
+        "summary": "回到完整模型、内部实例与可复算的优化检查。",
+        "sections": [
+          "hybrid-models",
+          "internal-layer-map",
+          "compiler-path",
+          "reading-check"
+        ]
+      }
+    ],
+    "legacyChapters": {
+      "transformer": {
+        "title": "从一个token推导Transformer的基本算子",
+        "section": "block-map",
+        "anchors": [
+          "graph",
+          "notation",
+          "attention",
+          "prefill-decode",
+          "norm-residual",
+          "cost",
+          "compiler-view",
+          "study-route"
+        ],
+        "anchorMap": {
+          "graph": "block-map",
+          "notation": "one-step-model",
+          "attention": "full-history",
+          "prefill-decode": "prefill-to-decode",
+          "norm-residual": "block-map",
+          "cost": "attention-output",
+          "compiler-view": "compiler-path",
+          "study-route": "reading-check"
+        }
+      },
+      "kv-cache": {
+        "title": "MHA、MQA、GQA：共享头与历史状态",
+        "section": "grouped-query",
+        "anchors": [
+          "heads",
+          "capacity",
+          "reads",
+          "ai",
+          "paging",
+          "rope",
+          "tp-cp",
+          "model-history"
+        ],
+        "anchorMap": {
+          "heads": "grouped-query",
+          "capacity": "budget-explorer",
+          "reads": "full-history",
+          "ai": "grouped-query",
+          "paging": "split-layout",
+          "rope": "norm-rope-cache",
+          "tp-cp": "split-layout",
+          "model-history": "length-growth"
+        }
+      },
+      "flash-attention": {
+        "title": "在线softmax：不保存整张分数表也能精确求值",
+        "section": "flash-tile",
+        "anchors": [
+          "io-problem",
+          "online-state",
+          "worked-example",
+          "merge",
+          "tiling",
+          "numerics",
+          "compiler-proof"
+        ],
+        "anchorMap": {
+          "io-problem": "flash-tile",
+          "online-state": "online-softmax",
+          "worked-example": "online-softmax",
+          "merge": "split-layout",
+          "tiling": "flash-tile",
+          "numerics": "online-softmax",
+          "compiler-proof": "compiler-path"
+        }
+      },
+      "mla-dsa": {
+        "title": "MLA与DSA：先压缩每条历史，再选择本次精读集合",
+        "section": "mla-cache",
+        "anchors": [
+          "latent",
+          "tradeoff",
+          "position",
+          "indexer",
+          "complexity",
+          "actual-pipeline",
+          "cache-layout",
+          "interview-story"
+        ],
+        "anchorMap": {
+          "latent": "mla-cache",
+          "tradeoff": "mla-absorption",
+          "position": "mla-absorption",
+          "indexer": "sparse-selection",
+          "complexity": "sparse-budget",
+          "actual-pipeline": "sparse-selection",
+          "cache-layout": "sparse-budget",
+          "interview-story": "hybrid-models"
+        }
+      },
+      "kda-linear": {
+        "title": "KDA：从历史外积到可纠正、可遗忘的矩阵记忆",
+        "section": "linear-state",
+        "anchors": [
+          "linear",
+          "delta",
+          "gate",
+          "prefill-chunks",
+          "real-graph",
+          "state-abi",
+          "memory",
+          "accuracy"
+        ],
+        "anchorMap": {
+          "linear": "linear-state",
+          "delta": "delta-gates",
+          "gate": "delta-gates",
+          "prefill-chunks": "kda-layer",
+          "real-graph": "kda-layer",
+          "state-abi": "kda-layer",
+          "memory": "linear-state",
+          "accuracy": "delta-gates"
+        }
+      },
+      "glm5next-architecture": {
+        "title": "内部GLM5Next300B：45层模型的结构全景",
+        "section": "internal-layer-map",
+        "anchors": [
+          "identity",
+          "layer-map",
+          "resource-ledger",
+          "concurrency",
+          "curve",
+          "benchmark",
+          "deployment",
+          "answer"
+        ],
+        "anchorMap": {
+          "identity": "internal-layer-map",
+          "layer-map": "internal-layer-map",
+          "resource-ledger": "internal-layer-map",
+          "concurrency": "internal-layer-map",
+          "curve": "internal-layer-map",
+          "benchmark": "internal-layer-map",
+          "deployment": "internal-layer-map",
+          "answer": "compiler-path"
+        }
+      },
+      "qwen3-dense-baseline": {
+        "title": "先读懂一个完整模型：Qwen3-8B",
+        "section": "one-step-model",
+        "anchors": [
+          "identity",
+          "whole-model",
+          "one-block",
+          "gqa-shapes",
+          "dense-swiglu",
+          "decode-state",
+          "reading-check"
+        ],
+        "anchorMap": {
+          "identity": "one-step-model",
+          "whole-model": "one-step-model",
+          "one-block": "block-map",
+          "gqa-shapes": "projections",
+          "dense-swiglu": "block-map",
+          "decode-state": "prefill-to-decode",
+          "reading-check": "reading-check"
+        }
+      },
+      "model-evolution-map": {
+        "title": "两条演进线：模型究竟换掉了什么",
+        "section": "length-growth",
+        "anchors": [
+          "two-axes",
+          "attention-axis",
+          "ffn-axis",
+          "real-models",
+          "what-changes",
+          "route"
+        ],
+        "anchorMap": {
+          "two-axes": "length-growth",
+          "attention-axis": "length-growth",
+          "ffn-axis": "hybrid-models",
+          "real-models": "hybrid-models",
+          "what-changes": "length-growth",
+          "route": "compiler-path"
+        }
+      },
+      "attention-evolution": {
+        "title": "Attention演进地图：从显式历史到矩阵记忆",
+        "section": "full-history",
+        "anchors": [
+          "baseline",
+          "head-sharing",
+          "latent-branch",
+          "sparse-branch",
+          "state-branch",
+          "orthogonal"
+        ],
+        "anchorMap": {
+          "baseline": "full-history",
+          "head-sharing": "grouped-query",
+          "latent-branch": "mla-cache",
+          "sparse-branch": "sparse-selection",
+          "state-branch": "linear-state",
+          "orthogonal": "flash-tile"
+        }
+      },
+      "attention-dataflow": {
+        "title": "把 GQA 与 FlashAttention 拆成可执行的数据流",
+        "section": "one-step-model",
+        "anchors": [
+          "contract",
+          "layout",
+          "tile-ledger",
+          "online-schedule",
+          "decode-prefill",
+          "split-history",
+          "operator-review"
+        ],
+        "anchorMap": {
+          "contract": "one-step-model",
+          "layout": "split-layout",
+          "tile-ledger": "flash-tile",
+          "online-schedule": "split-layout",
+          "decode-prefill": "prefill-to-decode",
+          "split-history": "split-layout",
+          "operator-review": "compiler-path"
+        }
+      }
+    },
+    "sections": [
+      {
+        "id": "one-step-model",
+        "title": "先看完整模型：从输入 token 到下一 token 的闭环",
+        "html": "<p><strong>整模型图入口：</strong><a href=\"#chapter/attention-inference-guide/one-step-model\">Qwen3-8B 完整生成闭环</a> → <a href=\"#chapter/attention-inference-guide/block-map\">展开一个 Qwen block</a>；也可直接对照 <a href=\"#chapter/attention-inference-guide/internal-layer-map\">GLM5Next300B 完整模型与 mHC 层内图</a>，再沿正文理解两套结构的带宽取舍。</p><figure class=\"diagram\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 900 870\" role=\"img\" aria-label=\"Qwen3-8B：从输入 token 到下一 token，再回到入口\"><defs><marker id=\"qwen-whole-arrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto-start-reverse\"><path d=\"M0 0L10 5L0 10Z\" fill=\"#637761\"/></marker></defs><rect width=\"900\" height=\"870\" rx=\"14\" fill=\"#eef2e7\"/><text x=\"24\" y=\"34\" font-family=\"sans-serif\" font-size=\"22\" fill=\"#274c3b\" text-anchor=\"start\">Qwen3-8B：从输入 token 到下一 token，再回到入口</text><text x=\"24\" y=\"60\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#274c3b\" text-anchor=\"start\">单请求 B=1 · 单步 decode · 位置从 0 编号</text><rect x=\"230\" y=\"83\" width=\"360\" height=\"62\" rx=\"10\" fill=\"#315c4c\"/><text x=\"410.0\" y=\"108.0\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#fff\" text-anchor=\"middle\">当前输入 token ID [1,1]</text><text x=\"410.0\" y=\"132.0\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#fff\" text-anchor=\"middle\">本步位置 4095</text><path d=\"M410 145V168\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-whole-arrow)\"/><rect x=\"230\" y=\"170\" width=\"360\" height=\"76\" rx=\"10\" fill=\"#506c79\"/><text x=\"410.0\" y=\"190.0\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">Embedding：按 token ID 查一行</text><text x=\"410.0\" y=\"214.0\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">权重 [151936,4096]</text><text x=\"410.0\" y=\"238.0\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">输出 hidden [1,1,4096]</text><path d=\"M410 246V275\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-whole-arrow)\"/><rect x=\"230\" y=\"277\" width=\"360\" height=\"59\" rx=\"10\" fill=\"#796447\"/><text x=\"410.0\" y=\"300.5\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">Block 0：GQA + Dense SwiGLU</text><text x=\"410.0\" y=\"324.5\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">输入 / 输出 [1,1,4096]</text><path d=\"M410 336V356\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-whole-arrow)\"/><rect x=\"230\" y=\"358\" width=\"360\" height=\"59\" rx=\"10\" fill=\"#796447\"/><text x=\"410.0\" y=\"381.5\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">Block 1：同结构、不同参数</text><text x=\"410.0\" y=\"405.5\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">输入 / 输出 [1,1,4096]</text><text x=\"410\" y=\"447\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#274c3b\" text-anchor=\"middle\">⋮ 顺序经过全部 36 层 ⋮</text><rect x=\"230\" y=\"465\" width=\"360\" height=\"59\" rx=\"10\" fill=\"#796447\"/><text x=\"410.0\" y=\"488.5\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">Block 35：最后一个 decoder block</text><text x=\"410.0\" y=\"512.5\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">输出 [1,1,4096]</text><rect x=\"665\" y=\"277\" width=\"207\" height=\"59\" rx=\"10\" fill=\"#416d68\"/><text x=\"768.5\" y=\"300.5\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#fff\" text-anchor=\"middle\">第 0 层自己的 KV</text><text x=\"768.5\" y=\"324.5\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#fff\" text-anchor=\"middle\">旧历史 + 本步 K / V</text><path d=\"M590 297H663\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-whole-arrow)\"/><path d=\"M665 321H592\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-whole-arrow)\"/><rect x=\"665\" y=\"358\" width=\"207\" height=\"59\" rx=\"10\" fill=\"#416d68\"/><text x=\"768.5\" y=\"381.5\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#fff\" text-anchor=\"middle\">第 1 层自己的 KV</text><text x=\"768.5\" y=\"405.5\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#fff\" text-anchor=\"middle\">旧历史 + 本步 K / V</text><path d=\"M590 378H663\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-whole-arrow)\"/><path d=\"M665 402H592\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-whole-arrow)\"/><rect x=\"665\" y=\"465\" width=\"207\" height=\"59\" rx=\"10\" fill=\"#416d68\"/><text x=\"768.5\" y=\"488.5\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#fff\" text-anchor=\"middle\">第 35 层自己的 KV</text><text x=\"768.5\" y=\"512.5\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#fff\" text-anchor=\"middle\">旧历史 + 本步 K / V</text><path d=\"M590 485H663\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-whole-arrow)\"/><path d=\"M665 509H592\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-whole-arrow)\"/><text x=\"664\" y=\"549\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#274c3b\" text-anchor=\"start\">每层 K、V 各自为</text><text x=\"664\" y=\"572\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#274c3b\" text-anchor=\"start\">[1,8,4096,128]</text><text x=\"664\" y=\"595\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#274c3b\" text-anchor=\"start\">层间不共用 KV</text><path d=\"M410 524V550\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-whole-arrow)\"/><rect x=\"230\" y=\"552\" width=\"360\" height=\"59\" rx=\"10\" fill=\"#506c79\"/><text x=\"410.0\" y=\"575.5\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">Final RMSNorm</text><text x=\"410.0\" y=\"599.5\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">[1,1,4096] → [1,1,4096]</text><path d=\"M410 611V635\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-whole-arrow)\"/><rect x=\"230\" y=\"637\" width=\"360\" height=\"65\" rx=\"10\" fill=\"#5d5777\"/><text x=\"410.0\" y=\"663.5\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#fff\" text-anchor=\"middle\">LM head：4096 → 151936</text><text x=\"410.0\" y=\"687.5\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#fff\" text-anchor=\"middle\">logits [1,1,151936]</text><path d=\"M410 702V727\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-whole-arrow)\"/><rect x=\"230\" y=\"729\" width=\"360\" height=\"66\" rx=\"10\" fill=\"#315c4c\"/><text x=\"410.0\" y=\"756.0\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#fff\" text-anchor=\"middle\">生成策略：选择 / 采样 token ID</text><text x=\"410.0\" y=\"780.0\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#fff\" text-anchor=\"middle\">得到下一位置 4096 的 token</text><path d=\"M230 762H74V114H228\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" stroke-dasharray=\"7 5\" marker-end=\"url(#qwen-whole-arrow)\"/><text x=\"91\" y=\"641\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#274c3b\" text-anchor=\"start\">若未结束</text><text x=\"91\" y=\"667\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#274c3b\" text-anchor=\"start\">位置 +1</text><text x=\"91\" y=\"693\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#274c3b\" text-anchor=\"start\">送回入口</text><text x=\"660\" y=\"693\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#274c3b\" text-anchor=\"start\">网络前向到 logits 为止</text><text x=\"660\" y=\"744\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#274c3b\" text-anchor=\"start\">策略决定怎样选 token</text><text x=\"24\" y=\"836\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#274c3b\" text-anchor=\"start\">下一步：输入位置 4096，沿用 36 份缓存，计算位置 4097 的分布。</text></svg><figcaption>模型前向路径与自回归反馈环。36 个 block 结构相同、参数各自独立；每层也维护独立的 K/V 历史。图中标出当前一步的逻辑 shape，不规定分片或物理布局。</figcaption></figure><p><strong>先把整个生成过程接起来：</strong>输入文本先经 tokenizer 变成 token ID；模型并不直接接收汉字。Embedding 将每个 ID 变成一个 4096 维向量，36 个 block 逐层加工这个向量，最后经过 RMSNorm 和 LM head，得到词表中 151936 个候选的 logits。logits 是分数；生成策略再按贪心选择或采样规则确定一个 ID，把它接回输入，直到结束条件成立。</p><p><strong>Prefill 负责启动，decode 负责继续。</strong>第一次将提示词的多个位置送入模型，使用因果 mask，并建立各层 KV Cache；提示词最后一个位置的输出用来预测首个续写 token。之后每步只送入新选出的一个 token。例如本图输入的是位置 4095 的 token，本步输出预测的是<strong>位置 4096</strong>，不是重新预测位置 4095；下一步才把位置 4096 送回网络。</p><p>缓存保留的是<strong>每层过去生成的 K/V</strong>，并非一份全模型共用的 hidden。decode 不再为全部旧 token 重算 Embedding、Q/K/V 投影和 FFN，但当前 Q 仍需读取本层完整可见 K/V。这正是后文讨论带宽的起点：省下历史重算，不等于省下历史读取。训练得到的网络负责将上下文映射为 logits；采样温度、Top-p、贪心选择等属于生成策略，并不是第 37 个 decoder block。</p><p><strong>快速入门路径：</strong>先读前三阶段，走完一次真实 Qwen3 decode 并算清数据账；第四阶段理解这些算子怎样被 kernel 高效执行；最后四阶段沿“历史越长，怎样减少反复搬运”读 MLA、DSA 与 KDA。可以先看每幅 shape 图和表格，再回读解释；手算例子用于证明关键合并与状态顺序。</p><p>读这篇只需要知道：Attention 从历史位置取得信息，FFN 变换当前 token 的通道。我们将一枚 token 放进真实尺寸的模型，逐个回答<strong>读哪块内存、产生什么 shape、哪条轴增长、优化省掉了什么</strong>。你不必先熟记所有公式。</p><p>贯穿基线是官方 Qwen3-8B：H=4096，36 层，32 个 query heads，8 个 KV heads，每头 128 维，Dense FFN 中间宽 12288。用 BF16 的 2 字节做逻辑张量账；归约示例以 FP32 累加。除特别标明外，所有 byte/FLOP 数都是单请求、单步、单层，乘加计 2 FLOPs。没有特定设备带宽、吞吐或耗时假设。</p><p>先通读 Attention，再进入同一层的 <a href=\"#chapter/ffn-inference-guide\">FFN / MoE 连续教程</a>。学完两篇后，<a href=\"#chapter/dsa-dataflow\">DSA 真实算子数据流</a>与 <a href=\"#chapter/moe-deployment-walkthrough\">完整 MoE 部署</a>负责把算法落到分片、通信与 kernel。</p><p class=\"source-note\">依据：<a href=\"https://huggingface.co/Qwen/Qwen3-8B/blob/b968826d9c46dd6066d109eabc6255188de91218/config.json\">Qwen3-8B 固定配置 b968826d</a>。</p><p class=\"source-note\">完整前向链依据：<a href=\"https://github.com/huggingface/transformers/blob/50e35cc0ca18ec19b80653690de553e6decf74f5/src/transformers/models/qwen3/modeling_qwen3.py\">Qwen3Model 与 Qwen3ForCausalLM，固定版本 50e35cc0</a>。图中的输出投影与 Embedding 是不同操作；该固定配置的 tie_word_embeddings=false。</p>"
+      },
+      {
+        "id": "block-map",
+        "title": "展开一层：Attention 与 Dense FFN 的完整数据流",
+        "html": "<figure class=\"diagram\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 900 1260\" role=\"img\" aria-label=\"展开 Qwen3 的一个 block：两条残差、三路投影、两路 FFN\"><defs><marker id=\"qwen-block-arrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto-start-reverse\"><path d=\"M0 0L10 5L0 10Z\" fill=\"#637761\"/></marker></defs><rect width=\"900\" height=\"1260\" rx=\"14\" fill=\"#eef2e7\"/><text x=\"24\" y=\"34\" font-family=\"sans-serif\" font-size=\"22\" fill=\"#274c3b\" text-anchor=\"start\">展开 Qwen3 的一个 block：两条残差、三路投影、两路 FFN</text><text x=\"24\" y=\"60\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#274c3b\" text-anchor=\"start\">逻辑 shape；头张量顺序 [B,heads,positions,d]；虚线保留子层输入。</text><rect x=\"280\" y=\"80\" width=\"340\" height=\"58\" rx=\"10\" fill=\"#315c4c\"/><text x=\"450.0\" y=\"115.0\" font-family=\"sans-serif\" font-size=\"19\" fill=\"#fff\" text-anchor=\"middle\">层输入 x [1,1,4096]</text><path d=\"M450 138V162\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-block-arrow)\"/><rect x=\"280\" y=\"164\" width=\"340\" height=\"58\" rx=\"10\" fill=\"#506c79\"/><text x=\"450.0\" y=\"187.0\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">Pre-Attention RMSNorm</text><text x=\"450.0\" y=\"211.0\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">沿 4096 通道归一化</text><path d=\"M450 222V243M185 243H715\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\"/><path d=\"M185 243V263\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-block-arrow)\"/><path d=\"M450 243V263\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-block-arrow)\"/><path d=\"M715 243V263\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-block-arrow)\"/><rect x=\"70\" y=\"265\" width=\"230\" height=\"60\" rx=\"10\" fill=\"#315c4c\"/><text x=\"185.0\" y=\"289.0\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">Q 投影 4096 → 4096</text><text x=\"185.0\" y=\"313.0\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">[1,1,4096]</text><rect x=\"335\" y=\"265\" width=\"230\" height=\"60\" rx=\"10\" fill=\"#315c4c\"/><text x=\"450.0\" y=\"289.0\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">K 投影 4096 → 1024</text><text x=\"450.0\" y=\"313.0\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">[1,1,1024]</text><rect x=\"600\" y=\"265\" width=\"230\" height=\"60\" rx=\"10\" fill=\"#315c4c\"/><text x=\"715.0\" y=\"289.0\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">V 投影 4096 → 1024</text><text x=\"715.0\" y=\"313.0\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">[1,1,1024]</text><path d=\"M185 325V346\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-block-arrow)\"/><path d=\"M450 325V346\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-block-arrow)\"/><path d=\"M715 325V346\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-block-arrow)\"/><rect x=\"70\" y=\"348\" width=\"230\" height=\"73\" rx=\"10\" fill=\"#506c79\"/><text x=\"185.0\" y=\"378.5\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#fff\" text-anchor=\"middle\">Q head RMSNorm → RoPE</text><text x=\"185.0\" y=\"402.5\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#fff\" text-anchor=\"middle\">Q [1,32,1,128]</text><rect x=\"335\" y=\"348\" width=\"230\" height=\"73\" rx=\"10\" fill=\"#506c79\"/><text x=\"450.0\" y=\"378.5\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#fff\" text-anchor=\"middle\">K head RMSNorm → RoPE</text><text x=\"450.0\" y=\"402.5\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#fff\" text-anchor=\"middle\">K [1,8,1,128]</text><rect x=\"600\" y=\"348\" width=\"230\" height=\"73\" rx=\"10\" fill=\"#506c79\"/><text x=\"715.0\" y=\"378.5\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">V 分头</text><text x=\"715.0\" y=\"402.5\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">V [1,8,1,128]</text><path d=\"M450 421V462\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-block-arrow)\"/><path d=\"M715 421V462\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-block-arrow)\"/><rect x=\"335\" y=\"464\" width=\"495\" height=\"86\" rx=\"10\" fill=\"#416d68\"/><text x=\"582.5\" y=\"489.0\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#fff\" text-anchor=\"middle\">追加本步 K / V 到这一层的缓存</text><text x=\"582.5\" y=\"513.0\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#fff\" text-anchor=\"middle\">原有 4095 行 → 当前可见 4096 行</text><text x=\"582.5\" y=\"537.0\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#fff\" text-anchor=\"middle\">K、V 各 [1,8,4096,128]</text><path d=\"M185 421V582\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-block-arrow)\"/><path d=\"M583 550V582\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-block-arrow)\"/><rect x=\"130\" y=\"584\" width=\"640\" height=\"82\" rx=\"10\" fill=\"#796447\"/><text x=\"450.0\" y=\"607.0\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#fff\" text-anchor=\"middle\">GQA：Q 与全历史 K 打分 → softmax → 加权 V</text><text x=\"450.0\" y=\"631.0\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#fff\" text-anchor=\"middle\">32 个 Q heads；每 4 个共用 1 组 K / V</text><text x=\"450.0\" y=\"655.0\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#fff\" text-anchor=\"middle\">输出 [1,32,1,128] → 合头 [1,1,4096]</text><path d=\"M450 666V690\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-block-arrow)\"/><rect x=\"280\" y=\"692\" width=\"340\" height=\"58\" rx=\"10\" fill=\"#315c4c\"/><text x=\"450.0\" y=\"715.0\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">O 投影 4096 → 4096</text><text x=\"450.0\" y=\"739.0\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">输出 [1,1,4096]</text><path d=\"M450 750V773\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-block-arrow)\"/><circle cx=\"450\" cy=\"793\" r=\"18\" fill=\"#796447\"/><text x=\"450\" y=\"800\" font-family=\"sans-serif\" font-size=\"25\" fill=\"#fff\" text-anchor=\"middle\">+</text><path d=\"M280 108H31V793H430\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" stroke-dasharray=\"7 5\" marker-end=\"url(#qwen-block-arrow)\"/><text x=\"44\" y=\"765\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#274c3b\" text-anchor=\"start\">残差 x</text><text x=\"488\" y=\"823\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#274c3b\" text-anchor=\"start\">z [1,1,4096]</text><path d=\"M450 811V834\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-block-arrow)\"/><rect x=\"280\" y=\"836\" width=\"340\" height=\"58\" rx=\"10\" fill=\"#506c79\"/><text x=\"450.0\" y=\"859.0\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">Post-Attention RMSNorm</text><text x=\"450.0\" y=\"883.0\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">沿 4096 通道归一化</text><path d=\"M450 894V914M270 914H630\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\"/><path d=\"M270 914V936\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-block-arrow)\"/><path d=\"M630 914V936\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-block-arrow)\"/><rect x=\"130\" y=\"938\" width=\"280\" height=\"62\" rx=\"10\" fill=\"#5d5777\"/><text x=\"270.0\" y=\"963.0\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">Gate：4096 → 12288 → SiLU</text><text x=\"270.0\" y=\"987.0\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">[1,1,12288]</text><rect x=\"490\" y=\"938\" width=\"280\" height=\"62\" rx=\"10\" fill=\"#5d5777\"/><text x=\"630.0\" y=\"963.0\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">Up：4096 → 12288</text><text x=\"630.0\" y=\"987.0\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#fff\" text-anchor=\"middle\">[1,1,12288]</text><path d=\"M270 1000V1020H630V1000\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\"/><path d=\"M450 1020V1042\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-block-arrow)\"/><rect x=\"280\" y=\"1044\" width=\"340\" height=\"52\" rx=\"10\" fill=\"#5d5777\"/><text x=\"450.0\" y=\"1076.0\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#fff\" text-anchor=\"middle\">逐元素相乘 [1,1,12288]</text><path d=\"M450 1096V1118\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-block-arrow)\"/><rect x=\"280\" y=\"1120\" width=\"340\" height=\"52\" rx=\"10\" fill=\"#315c4c\"/><text x=\"450.0\" y=\"1152.0\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#fff\" text-anchor=\"middle\">Down：12288 → 4096</text><path d=\"M450 1172V1192\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" marker-end=\"url(#qwen-block-arrow)\"/><circle cx=\"450\" cy=\"1212\" r=\"18\" fill=\"#796447\"/><text x=\"450\" y=\"1219\" font-family=\"sans-serif\" font-size=\"25\" fill=\"#fff\" text-anchor=\"middle\">+</text><path d=\"M468 793H865V1212H470\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2.5\" stroke-dasharray=\"7 5\" marker-end=\"url(#qwen-block-arrow)\"/><text x=\"785\" y=\"1170\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#274c3b\" text-anchor=\"start\">残差 z</text><text x=\"205\" y=\"1218\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#274c3b\" text-anchor=\"start\">层输出 [1,1,4096]</text><text x=\"23\" y=\"1244\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#274c3b\" text-anchor=\"start\">Gate 与 Up 同读 Norm 输出；图中相连的是数据依赖，并不规定 kernel 数量。</text></svg><figcaption>一个完整 decoder block。Q、K、V 都从同一份 Norm 输出投影；只有 Q/K 做 head RMSNorm 与 RoPE。K/V 更新本层缓存后与 Q 一起进入 GQA。FFN 的 Gate 和 Up 也是并行分支，随后相乘再 Down。</figcaption></figure><p><strong>先读 Attention 半层。</strong>保存原始 x 后做 RMSNorm，Q 投影得到 32 个头，K/V 各得到 8 个头；每个头宽 128。Q/K 在各自的 128 维上再做 head RMSNorm，并按当前位置做 RoPE，V 不走这两项。新 K/V 追加到本层历史，Q 与当前可见的全部 4096 个位置计算注意力，合头与 O 投影后加回 x。到这里得到的 z 仍为 [1,1,4096]。</p><p><strong>再读 FFN 半层。</strong>保存 z，第二次 RMSNorm 的输出同时进入 Gate 和 Up，分别扩展到 12288 通道；Gate 做 SiLU 后与 Up 逐元素相乘，Down 再压回 4096 通道，最后加回 z。FFN 处理当前 token 的通道，不读取其他位置的 KV；12288 是中间通道数，并不是 token 数。这里的 Qwen3-8B 每层都是 Dense SwiGLU，没有专家路由。</p><p>RMSNorm 沿当前行的通道求平方均值、加 epsilon、乘倒数平方根与可学习 scale；它不减均值，也不会混合不同请求或位置。两次残差的来源不同，融合 kernel 时必须保留正确的旧值。图中各个分支是数据依赖，Q/K/V 可以合并投影，Gate/Up 也可以合并，不能把图上的框数当作 launch 次数。</p><p>一层输入和输出都为 [1,1,4096]，内部张量却可以更宽、更窄。把<strong>位置轴 N、头轴 heads、通道轴 d</strong>分清，才能判断一个优化究竟减少哪项成本。后续按这张图展开 Attention 的每一步，<a href=\"#chapter/ffn-inference-guide\">FFN / MoE 教程</a>再展开后半层及其演进。</p><p class=\"source-note\">依据：<a href=\"https://github.com/huggingface/transformers/blob/50e35cc0ca18ec19b80653690de553e6decf74f5/src/transformers/models/qwen3/modeling_qwen3.py\">Transformers Qwen3 固定模型定义 50e35cc0</a>，对应 Qwen3Attention、Qwen3DecoderLayer 与 Qwen3MLP；尺寸来自 <a href=\"https://huggingface.co/Qwen/Qwen3-8B/blob/b968826d9c46dd6066d109eabc6255188de91218/config.json\">Qwen3-8B 配置 b968826d</a>。</p>"
+      },
+      {
+        "id": "prefill-to-decode",
+        "title": "Prefill 填历史，decode 追加一行：不要把一拍算成 N²",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 900 195\" role=\"img\" aria-label=\"本步之前已经有 4095 个位置\"><rect width=\"900\" height=\"195\" rx=\"14\" fill=\"#eef2e7\"/><text x=\"22\" y=\"32\" fill=\"#274c3b\" font-size=\"20\" font-family=\"sans-serif\">本步之前已经有 4095 个位置</text><rect x=\"22.0\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#315c4c\"/><text x=\"119.25\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">Prefill / 已完成步</text><text x=\"119.25\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">旧 K、V 各自</text><text x=\"119.25\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">[1,4095,8,128]</text><path d=\"M218.5 117H239.5 M233.5 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"242.5\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#506c79\"/><text x=\"339.75\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">当前 decode</text><text x=\"339.75\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">新 x [1,1,4096]</text><text x=\"339.75\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">只投影当前一行</text><path d=\"M439.0 117H460.0 M454.0 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"463.0\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#796447\"/><text x=\"560.25\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">追加新 K / V</text><text x=\"560.25\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">各 [1,1,8,128]</text><text x=\"560.25\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">写到位置 4095</text><path d=\"M659.5 117H680.5 M674.5 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"683.5\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#5d5777\"/><text x=\"780.75\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">本步可见历史</text><text x=\"780.75\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">K、V 各自</text><text x=\"780.75\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">[1,4096,8,128]</text></svg><figcaption>这里用 [B,N,KVheads,d] 统一记逻辑轴。实际模型接口也可能以 [B,heads,N,d] 表达，同一 shape 语义可以对应不同 stride。</figcaption></figure><p>Prefill 同时已知一段输入，能把许多 query 行组成矩阵计算。因果 Attention 的第 j 行只能看不晚于 j 的位置：N=4096 的完整 prefill 有 8,390,656 个合法位置对，而不是 4096 个。单步 decode 只有最后一行 query，它恰好能看全部 4096 个已存在位置。</p><p>因此本步每个 query head 只生成 4096 个 score，32 heads 合计 131,072 个；不是 32×4096×4096。decode 的 QK+PV 随可见历史线性增长；连续生成很多步的累计成本才要把每步的历史长度加起来。Q/K/V 投影也只对新 token 执行，历史 K/V 不应每步重新由所有旧 hidden 投影。</p><p>同一请求未来的 token 依赖本步采样结果，不能把未知未来强行并成普通 GEMM；服务端可以把多个独立请求的当前行合批。连续批处理的意义是增加权重复用和任务数，同时承担排队与状态容量成本。</p><p><strong>接下来：</strong>现在已经知道本步只处理哪一行。下一步从这行 hidden 出发，追踪 Q/K/V 的生成与缓存写入。</p>"
+      },
+      {
+        "id": "projections",
+        "title": "第一站：一行 4096 维 hidden，变成 32 个 Q 和 8 组 K/V",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 900 195\" role=\"img\" aria-label=\"Q / K / V 的三次投影：真实矩阵尺寸\"><rect width=\"900\" height=\"195\" rx=\"14\" fill=\"#eef2e7\"/><text x=\"22\" y=\"32\" fill=\"#274c3b\" font-size=\"20\" font-family=\"sans-serif\">Q / K / V 的三次投影：真实矩阵尺寸</text><rect x=\"22.0\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#315c4c\"/><text x=\"119.25\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">归一化输入 x</text><text x=\"119.25\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">[1,4096]</text><text x=\"119.25\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">BF16：8 KiB</text><path d=\"M218.5 117H239.5 M233.5 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"242.5\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#506c79\"/><text x=\"339.75\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">右乘三个 W</text><text x=\"339.75\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">Q [4096,4096]</text><text x=\"339.75\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">K、V [4096,1024]</text><path d=\"M439.0 117H460.0 M454.0 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"463.0\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#796447\"/><text x=\"560.25\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">三个投影结果</text><text x=\"560.25\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">Q [1,4096]</text><text x=\"560.25\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">K、V 各 [1,1024]</text><path d=\"M659.5 117H680.5 M674.5 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"683.5\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#5d5777\"/><text x=\"780.75\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">仅重排解释维度</text><text x=\"780.75\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">Q [1,32,128]</text><text x=\"780.75\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">K、V 各 [1,8,128]</text></svg><figcaption>右乘记法的 W 与 PyTorch Linear 保存的 [out,in] 权重相差一次转置；reshape 不代表必须复制。</figcaption></figure><div class=\"table-wrap\"><table><thead><tr><th>线性层</th><th>BF16 权重逻辑大小</th><th>本步主矩阵计算</th></tr></thead><tbody><tr><td>Wq：4096×4096</td><td>32 MiB</td><td>33,554,432 FLOPs</td></tr><tr><td>Wk：4096×1024</td><td>8 MiB</td><td>8,388,608 FLOPs</td></tr><tr><td>Wv：4096×1024</td><td>8 MiB</td><td>8,388,608 FLOPs</td></tr><tr><td>三路合计</td><td>48 MiB</td><td>50,331,648 FLOPs</td></tr></tbody></table></div><p>当前输入只有 8 KiB，三套矩阵却有 48 MiB。B=1 时每个权重参与一次乘加，若权重必须从外存读取，主矩阵的逻辑算术强度约为 1 FLOP/byte。把三次投影融合可以复用 x、减少 launch 与小中间量，但不能凭融合把 48 MiB 训练权重变没。</p><p>同形矩阵中多放 16 个独立请求，权重可在一次 tile 里复用给 16 行，工作量与激活随 B 增长，权重字节不必按 B 重读。这解释了为什么同一个线性层，小 batch 的优化重点常是带宽和利用率，而大 batch 更可能受计算吞吐约束。</p>"
+      },
+      {
+        "id": "norm-rope-cache",
+        "title": "第二站：Q/K 先归一化与旋转，再写入当前历史",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 900 195\" role=\"img\" aria-label=\"Qwen3 的真实顺序不能省略\"><rect width=\"900\" height=\"195\" rx=\"14\" fill=\"#eef2e7\"/><text x=\"22\" y=\"32\" fill=\"#274c3b\" font-size=\"20\" font-family=\"sans-serif\">Qwen3 的真实顺序不能省略</text><rect x=\"22.0\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#315c4c\"/><text x=\"119.25\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">Q [1,32,128]</text><text x=\"119.25\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">K [1,8,128]</text><text x=\"119.25\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">V [1,8,128]</text><path d=\"M218.5 117H239.5 M233.5 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"242.5\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#506c79\"/><text x=\"339.75\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">Q/K head RMSNorm</text><text x=\"339.75\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">每头归约 128 元素</text><text x=\"339.75\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">V 不走该 Norm</text><path d=\"M439.0 117H460.0 M454.0 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"463.0\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#796447\"/><text x=\"560.25\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">Q/K RoPE</text><text x=\"560.25\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">当前位置 4095</text><text x=\"560.25\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">V 不做旋转</text><path d=\"M659.5 117H680.5 M674.5 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"683.5\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#5d5777\"/><text x=\"780.75\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">Append K / V</text><text x=\"780.75\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">共 2048 个 BF16</text><text x=\"780.75\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">新增 4 KiB / 层</text></svg><figcaption>Q/K Norm 保持 shape；RoPE 按模型的配对与频率规则旋转 Q/K。缓存中的 K 已经完成当前位置处理。</figcaption></figure><p>这里有两种 Norm：上一节输入 Norm 沿 H4096；Q/K Norm 分别沿每个 head 的 128 维。把二者混成一个 Norm 会改变模型。RoPE 让位置影响 Q 与 K 的相对方向，因此“当前 Q”与“位置 j 的历史 K”可以在内积里带入相对位置信息。</p><p>位置 4095 只算一次新 K 的旋转并写入对应缓存槽。下一步读它时，通常直接使用已经旋转的结果，不应按新的 query 位置重新旋转全部旧 K。V 保持内容表示。位置 ID、配对维序、sin/cos 与缓存布局一旦接错，shape 仍可能全部正确。</p><p>每层本步追加 2×8×128×2 = 4096 字节。36 层合计写入 144 KiB 的新 KV；这与下一节的数百 MiB 历史扫描是两个不同数量级。分页缓存解决物理分配和映射，不能自动缩短模型允许访问的历史。</p><p class=\"source-note\">依据：<a href=\"https://github.com/huggingface/transformers/blob/50e35cc0ca18ec19b80653690de553e6decf74f5/src/transformers/models/qwen3/modeling_qwen3.py\">Qwen3Attention.forward：投影 → head Norm → RoPE → cache.update</a>。</p><p class=\"source-note\">依据：<a href=\"https://arxiv.org/abs/2104.09864v5\">RoFormer v5：旋转位置表示</a>。</p>"
+      },
+      {
+        "id": "grouped-query",
+        "title": "GQA 的核心：4 个 query 共用历史，但各自决定关注哪里",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 900 365\" role=\"img\" aria-label=\"Q32 / KV8：四份 query 共同消费一份 KV 历史\"><rect width=\"900\" height=\"365\" rx=\"14\" fill=\"#eef2e7\"/><text x=\"22\" y=\"32\" fill=\"#274c3b\" font-size=\"20\" font-family=\"sans-serif\">Q32 / KV8：四份 query 共同消费一份 KV 历史</text><rect x=\"30\" y=\"65\" width=\"265\" height=\"84\" rx=\"9\" fill=\"#315c4c\"/><text x=\"162.5\" y=\"101.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">Q0 / Q1 / Q2 / Q3</text><text x=\"162.5\" y=\"123.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">四份不同 query [128]</text><rect x=\"30\" y=\"200\" width=\"265\" height=\"84\" rx=\"9\" fill=\"#506c79\"/><text x=\"162.5\" y=\"236.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">KV head 0 的完整历史</text><text x=\"162.5\" y=\"258.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">K、V 各 [4096,128]</text><rect x=\"440\" y=\"133\" width=\"420\" height=\"105\" rx=\"9\" fill=\"#796447\"/><text x=\"650.0\" y=\"168.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">4 个 query 分别计算 QK → softmax → PV</text><text x=\"650.0\" y=\"190.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">四行独立概率 P [4,4096]</text><text x=\"650.0\" y=\"212.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">四个输出 [4,128]</text><path d=\"M297 107H367.0V165H437 M431 160l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M297 242H367.0V207H437 M431 202l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><text x=\"32\" y=\"328\" font-size=\"16\" fill=\"#274c3b\" font-family=\"sans-serif\">Q4–7 使用 KV1　 ···　 Q28–31 使用 KV7　　共 8 组</text></svg><figcaption>Q 与 K/V 是独立投影的结果，箭头指向共同消费者。共享 K/V 不意味着共享 Q、softmax 或输出。</figcaption></figure><p>在这个 Qwen3 实例中，Q0–3 都读取 KV0，Q4–7 读取 KV1，依此类推。MHA 让 32 个 Q 各有一套 K/V；MQA 让 32 个 Q 共用一套；GQA 取中间的 8 套。三者都保留 32 个 Q，也都可访问相同的 4096 个位置。</p><div class=\"table-wrap\"><table><thead><tr><th>保持 Q32 / d128 / N4096</th><th>MHA：KV32</th><th>GQA：KV8</th><th>MQA：KV1</th></tr></thead><tbody><tr><td>单层 K+V 容量</td><td>64 MiB</td><td>16 MiB</td><td>2 MiB</td></tr><tr><td>每步新增 K+V</td><td>16 KiB</td><td>4 KiB</td><td>512 B</td></tr><tr><td>QK+PV 主计算</td><td>67,108,864 FLOPs</td><td>67,108,864 FLOPs</td><td>67,108,864 FLOPs</td></tr><tr><td>理想 KV 复用后的核心 FLOP/byte</td><td>1</td><td>4</td><td>32</td></tr></tbody></table></div><p>表格是<strong>固定 Q32/d128 的反事实结构对照</strong>；Qwen3-8B 的真实配置只有中间一列，不能把其 checkpoint 直接删掉几个 KV heads 就宣称得到同质量 MQA。MHA→GQA 减少 K/V 投影宽度和历史数据量，QK/PV 的 query 数没有跟着除以 4。实际外存读量还取决于共享 KV 是否真的留在片上复用。</p><p>两头共享 V=[2,8]，若各自 score 是 [0,ln3] 与 [ln3,0]，输出分别为 6.5 与 3.5。共享内容不等于共享答案；不能把四个 Q 平均后只计算一遍。</p><p class=\"source-note\">依据：<a href=\"https://arxiv.org/html/2305.13245v3\">GQA v3 的分组共享定义</a>。</p><p class=\"source-note\">依据：<a href=\"https://arxiv.org/abs/1911.02150v1\">MQA v1 的单套 K/V 定义</a>。</p><p><strong>接下来：</strong>共享头已经让历史变小，但本步究竟还要访问多少位置？接下来直接走完 QK、softmax、PV 和输出投影。</p>"
+      },
+      {
+        "id": "full-history",
+        "title": "第三站：GQA 仍然要看完整可见 KV，这才是长上下文压力",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 900 442\" role=\"img\" aria-label=\"同一拍的三条输入：Q 问历史，K 定权重，V 给内容\"><rect width=\"900\" height=\"442\" rx=\"14\" fill=\"#eef2e7\"/><text x=\"22\" y=\"32\" fill=\"#274c3b\" font-size=\"20\" font-family=\"sans-serif\">同一拍的三条输入：Q 问历史，K 定权重，V 给内容</text><rect x=\"22\" y=\"66\" width=\"230\" height=\"95\" rx=\"9\" fill=\"#315c4c\"/><text x=\"137.0\" y=\"96.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">当前 Q</text><text x=\"137.0\" y=\"118.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">[32,1,128]</text><text x=\"137.0\" y=\"140.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">BF16：8 KiB</text><rect x=\"22\" y=\"191\" width=\"230\" height=\"95\" rx=\"9\" fill=\"#506c79\"/><text x=\"137.0\" y=\"221.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">历史 K</text><text x=\"137.0\" y=\"243.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">[8,4096,128]</text><text x=\"137.0\" y=\"265.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">BF16：8 MiB</text><rect x=\"22\" y=\"316\" width=\"230\" height=\"95\" rx=\"9\" fill=\"#796447\"/><text x=\"137.0\" y=\"346.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">历史 V</text><text x=\"137.0\" y=\"368.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">[8,4096,128]</text><text x=\"137.0\" y=\"390.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">BF16：8 MiB</text><rect x=\"332\" y=\"66\" width=\"230\" height=\"95\" rx=\"9\" fill=\"#5d5777\"/><text x=\"447.0\" y=\"96.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">QK + 模型缩放</text><text x=\"447.0\" y=\"118.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">score [32,1,4096]</text><text x=\"447.0\" y=\"140.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">Q / K 分别输入</text><rect x=\"642\" y=\"66\" width=\"236\" height=\"95\" rx=\"9\" fill=\"#416d68\"/><text x=\"760.0\" y=\"96.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">按位置 softmax</text><text x=\"760.0\" y=\"118.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">P [32,1,4096]</text><text x=\"760.0\" y=\"140.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">每个 head 独立</text><rect x=\"642\" y=\"316\" width=\"236\" height=\"95\" rx=\"9\" fill=\"#315c4c\"/><text x=\"760.0\" y=\"346.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">P × V</text><text x=\"760.0\" y=\"368.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">O [32,1,128]</text><text x=\"760.0\" y=\"390.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">各 head 输出 128 维</text><path d=\"M254 113H329 M323 108l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M254 238H291.5V132H329 M323 127l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M564 113H639 M633 108l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M760 163V313 M755 307l5 6l5 -6\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M254 363H639 M633 358l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><text x=\"335\" y=\"224\" font-size=\"15\" fill=\"#274c3b\" font-family=\"sans-serif\">四个 Q heads 共用一份 K/V；</text><text x=\"335\" y=\"249\" font-size=\"15\" fill=\"#274c3b\" font-family=\"sans-serif\">K 与 V 沿历史位置一一对应。</text></svg><figcaption>K/V 各有 8 套历史，query 有 32 套问题。16 MiB 是完整 KV 逻辑 footprint；当前新行若留在片上，旧历史外存部分为 16 MiB−4 KiB。</figcaption></figure><p><strong>是的：标准全上下文 GQA 每步仍需覆盖当前 query 可见的完整 KV 历史。</strong>“完整”指未被 mask 排除的位置，不是所有预分配容量，也不是每个 head 必须从外存重复拉一次同样的字节。这里 use_sliding_window=false，所以最后一行能看 0–4095 全部位置。</p><p>QK 阶段让每个 128 维 query 与 4096 个 key 做点积，乘以 1/√128；得到的是相关性分数。softmax 在<strong>同一个 head 的历史位置轴</strong>归一化。PV 再按这些概率加权 4096 个 128 维 value，输出仍只有 128 维。</p><p>QK 与 PV 各计 32×4096×128×2 = 33,554,432 FLOPs，总计 67,108,864。这个数不含 exp、max/sum、位置处理和四次投影。正因几十 MiB 历史只服务一行 query，单步 decode 往往缺少重用；N 加倍，主计算和完整 KV 逻辑扫描都加倍。</p>"
+      },
+      {
+        "id": "attention-output",
+        "title": "第四站：概率汇总完，还要 O 投影与残差才能回到主干",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 900 195\" role=\"img\" aria-label=\"把 32 个 head 的答案接回 hidden\"><rect width=\"900\" height=\"195\" rx=\"14\" fill=\"#eef2e7\"/><text x=\"22\" y=\"32\" fill=\"#274c3b\" font-size=\"20\" font-family=\"sans-serif\">把 32 个 head 的答案接回 hidden</text><rect x=\"22.0\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#315c4c\"/><text x=\"119.25\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">PV 输出</text><text x=\"119.25\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">[1,32,1,128]</text><text x=\"119.25\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">每头独立答案</text><path d=\"M218.5 117H239.5 M233.5 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"242.5\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#506c79\"/><text x=\"339.75\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">转置 / 合并 heads</text><text x=\"339.75\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">[1,1,4096]</text><text x=\"339.75\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">可在布局中完成</text><path d=\"M439.0 117H460.0 M454.0 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"463.0\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#796447\"/><text x=\"560.25\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">O 投影</text><text x=\"560.25\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">[4096,4096]</text><text x=\"560.25\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">32 MiB BF16 权重</text><path d=\"M659.5 117H680.5 M674.5 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"683.5\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#5d5777\"/><text x=\"780.75\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">残差相加</text><text x=\"780.75\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">加原始 x [1,1,4096]</text><text x=\"780.75\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">交给 FFN Norm</text></svg><figcaption>O 投影混合不同 heads 的通道；残差来自 Attention 前的原始层输入，不是缓存或归一化结果。</figcaption></figure><p>WO 再执行 33,554,432 FLOPs。Q/K/V/O 四投影合计 80 MiB BF16 权重、83,886,080 FLOPs；加上 N4096 的 QK+PV，Attention 的主矩阵计算为 150,994,944 FLOPs。若每套权重与逻辑 KV 都从外存读一遍，对应主数据为 96 MiB，其他小激活与写回另计。</p><p>这里不能用“Attention 核心省了 4 倍 cache”推导“整层快 4 倍”：Q/O 权重没有变，softmax、投影、FFN、通信都仍在。下一子层 Dense SwiGLU 的三套矩阵是 288 MiB BF16 权重、301,989,888 FLOPs；它与 Attention 的历史扫描是 decode 中两条并行增长的压力来源。</p><p>小 batch、较短上下文时，权重流量可能更突出；长上下文或大量并发请求时，KV 容量与扫描更突出。先写清计时边界和数据账，再判断一个优化是在降低模型内存、每步流量还是实际关键路径。</p>"
+      },
+      {
+        "id": "budget-explorer",
+        "title": "动手改 B 和 N：把“带宽瓶颈”变成一张可复算的账",
+        "html": "<p>下方固定 Qwen3-8B 的 Q32 / d128 / 36 层，改变请求数 B 与当前可见长度 N。GQA8 是真实模型，其余两列只改变 KV heads 作结构对照。为避免把上下文扩展混进基础例子，交互范围限制 N≤32768；冻结配置的 max_position_embeddings 为 40960。</p><div data-decode-explorer=\"attention\"></div><p>先保持 B=1，把 N 从 4096 改成 32768：完整 GQA KV 从 16 MiB/层变成 128 MiB/层，36 层从 576 MiB 变成 4.5 GiB；QK+PV 也增加 8 倍，四投影权重不变。再把 B 改成 16：各请求历史通常不同，KV 总量继续增加 16 倍；同层权重则可供这些请求共用。</p><p>这些是容量与逻辑流量，不是运行计时。真实服务还包含缓存分页碎片、对齐、索引、量化 scale、跨层临时量；前缀共享、片上缓存和调度也可能改变实际传输。不要用“逻辑 byte ÷ 峰值 GB/s”替代一次完整测量。</p><div class=\"table-wrap\"><table><thead><tr><th>单层每拍的主要逻辑对象</th><th>B1 / N4096</th><th>B1 / N32768</th><th>B16 / N4096</th></tr></thead><tbody><tr><td>Q/K/V/O 的 BF16 权重</td><td>80 MiB</td><td>80 MiB</td><td>80 MiB，可在本批复用</td></tr><tr><td>Dense FFN 的 BF16 权重</td><td>288 MiB</td><td>288 MiB</td><td>288 MiB，可在本批复用</td></tr><tr><td>GQA 完整 KV 逻辑读取</td><td>16 MiB</td><td>128 MiB</td><td>256 MiB，各请求历史独立</td></tr><tr><td>权重按每请求摊销</td><td>368 MiB</td><td>368 MiB</td><td>理想复用时为 23 MiB</td></tr></tbody></table></div><p>表中权重按本批每套只读一次的理想主矩阵账；不含激活、状态写回、分页、量化或通信。短上下文 B1 不能泛称“整层一定是 KV 主导”：此时权重逻辑量明显更大。N 增加让 KV 上升，B 增加让权重按请求摊薄，却不能把不同请求的历史当同一份复用。最终瓶颈仍需实际运行确认。</p><p><strong>接下来：</strong>字节账说明了哪些数据不可凭空消失。先不改模型函数，下一阶段只改变这些算子的执行与中间量存放方式。</p>"
+      },
+      {
+        "id": "flash-tile",
+        "title": "FlashAttention：不保存整张分数表，但仍分块读遍历史",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 900 328\" role=\"img\" aria-label=\"4 个 Q 共同消费一块 KV，分数留在片上\"><rect width=\"900\" height=\"328\" rx=\"14\" fill=\"#eef2e7\"/><text x=\"22\" y=\"32\" fill=\"#274c3b\" font-size=\"20\" font-family=\"sans-serif\">4 个 Q 共同消费一块 KV，分数留在片上</text><rect x=\"22\" y=\"65\" width=\"235\" height=\"95\" rx=\"9\" fill=\"#315c4c\"/><text x=\"139.5\" y=\"95.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">当前 Q tile</text><text x=\"139.5\" y=\"117.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">[4,128] BF16</text><text x=\"139.5\" y=\"139.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">1 KiB</text><rect x=\"22\" y=\"197\" width=\"235\" height=\"95\" rx=\"9\" fill=\"#506c79\"/><text x=\"139.5\" y=\"227.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">K / V tile：128 个位置</text><text x=\"139.5\" y=\"249.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">各 [128,128] BF16</text><text x=\"139.5\" y=\"271.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">合计 64 KiB</text><rect x=\"335\" y=\"132\" width=\"230\" height=\"110\" rx=\"9\" fill=\"#796447\"/><text x=\"450.0\" y=\"170.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">QK → online softmax</text><text x=\"450.0\" y=\"192.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">片上 score [4,128]</text><text x=\"450.0\" y=\"214.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">FP32 示例：2 KiB</text><rect x=\"645\" y=\"132\" width=\"233\" height=\"110\" rx=\"9\" fill=\"#5d5777\"/><text x=\"761.5\" y=\"170.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">立即加权 V 并累计</text><text x=\"761.5\" y=\"192.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">u [4,128] FP32：2 KiB</text><text x=\"761.5\" y=\"214.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">每 KV head 共 32 块</text><path d=\"M259 112H295.5V167H332 M326 162l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M259 244H295.5V207H332 M326 202l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M567 187H642 M636 182l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M257 263H761V245m-5 6l5 -6l5 6\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><text x=\"421\" y=\"294\" font-size=\"14\" fill=\"#274c3b\" font-family=\"sans-serif\">同一 tile 的 V 直接用于加权汇总</text></svg><figcaption>tile=128 是教学参数，不宣称适合某设备。8 个 KV heads 各处理一组 4 queries；每组遍历 4096/128=32 块。</figcaption></figure><p>朴素实现可能把整行 score 写到外存，再做 softmax，再写 probability，再做 PV。本例 score [32,1,4096] 若用 FP32 就是 512 KiB；probability 若同格式又是 512 KiB。Flash 的关键是让一小块 score 生成后就参与归约与 value 加权，最终只写输出，而不是永久保存这些中间表。</p><p>“不落完整 score”不等于“不读完整 KV”。标准精确 FlashAttention 每一块仍会参与相同的 softmax；32 块都要覆盖。它与 GQA 可以叠加：GQA 减少不同 K/V 表的数量，Flash 改变同一个函数的内存读写顺序。</p><p>一组示例片上账为 KV64 KiB + Q1 KiB + score2 KiB + u2 KiB + m/l32 B，即约 69.03 KiB。若 K/V 双缓冲，再增加 64 KiB。寄存器、概率存储格式、流水 stage 与实现临时量尚未计入；tile 加倍可能提升复用，也可能压低 occupancy 或直接溢出片上容量。</p><p class=\"source-note\">依据：<a href=\"https://arxiv.org/html/2205.14135v2\">FlashAttention v2 的分块精确求值与 IO 目标</a>。</p>"
+      },
+      {
+        "id": "online-softmax",
+        "title": "为什么能逐块精确合并：记住最大值、分母和未除分母的输出",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 900 195\" role=\"img\" aria-label=\"每个 Q head 的临时归约状态\"><rect width=\"900\" height=\"195\" rx=\"14\" fill=\"#eef2e7\"/><text x=\"22\" y=\"32\" fill=\"#274c3b\" font-size=\"20\" font-family=\"sans-serif\">每个 Q head 的临时归约状态</text><rect x=\"22.0\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#315c4c\"/><text x=\"119.25\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">历史块 A</text><text x=\"119.25\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">mA、lA、uA[128]</text><text x=\"119.25\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">使用 A 内最大值作尺度</text><path d=\"M218.5 117H239.5 M233.5 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"242.5\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#506c79\"/><text x=\"339.75\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">读新块 B</text><text x=\"339.75\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">mB、lB、uB[128]</text><text x=\"339.75\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">使用 B 内最大值作尺度</text><path d=\"M439.0 117H460.0 M454.0 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"463.0\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#796447\"/><text x=\"560.25\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">统一到更大最大值</text><text x=\"560.25\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">旧分母与旧分子</text><text x=\"560.25\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">同时乘缩放系数</text><path d=\"M659.5 117H680.5 M674.5 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"683.5\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#5d5777\"/><text x=\"780.75\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">完成全部 32 块</text><text x=\"780.75\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">o[128] = u / l</text><text x=\"780.75\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">最后才做一次归一化</text></svg><figcaption>这是一次 Attention 调用内的临时归约状态；它不能替代未来 token 所需的逐位置 K/V。</figcaption></figure><p>softmax 的稳定实现先减最大值再取 exp。新块若出现更大 score，旧块的 exp 尺度就要一起调整。对同一 query 维护 m（目前最大 score）、l（当前尺度下 exp 总和）、u（相同尺度下 exp×V 的 128 维和）。合并 A/B 时取 m=max(mA,mB)，分别用 exp(mA−m)、exp(mB−m) 同时缩放各自的 l 和 u，再相加。</p><p>最小算例：A 只有 score=0、value=2，故 mA=0、lA=1、uA=2；B 只有 score=ln3、value=8，故 mB=ln3、lB=1、uB=8。统一到 m=ln3 后，l=1/3+1=4/3，u=2/3+8=26/3，最终输出 6.5，与完整 softmax 一致。直接平均两块输出会得到 5，显然错误。</p><p>对 32 个 query heads，m/l 各 32 个 FP32；u 是 [32,128] FP32。归约顺序改变会带来浮点舍入差异，因此 exact 指同一数学 softmax，而不是任意实现都逐位相同。全被 mask 的行、尾块、极大负 score 与指数上溢也必须有明确处理。</p>"
+      },
+      {
+        "id": "split-layout",
+        "title": "从数据流到 kernel：布局、流水与 split-history 各解决什么",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 900 303\" role=\"img\" aria-label=\"拆历史增加并行任务，最后按 softmax 权重合并\"><rect width=\"900\" height=\"303\" rx=\"14\" fill=\"#eef2e7\"/><text x=\"22\" y=\"32\" fill=\"#274c3b\" font-size=\"20\" font-family=\"sans-serif\">拆历史增加并行任务，最后按 softmax 权重合并</text><rect x=\"22\" y=\"75\" width=\"182\" height=\"84\" rx=\"9\" fill=\"#315c4c\"/><text x=\"113.0\" y=\"111.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">当前 Q</text><text x=\"113.0\" y=\"133.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">[32,1,128]</text><rect x=\"244\" y=\"65\" width=\"196\" height=\"84\" rx=\"9\" fill=\"#506c79\"/><text x=\"342.0\" y=\"90.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">历史位置 0–2047</text><text x=\"342.0\" y=\"112.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">partial O [32,128]</text><text x=\"342.0\" y=\"134.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">LSE [32]</text><rect x=\"244\" y=\"184\" width=\"196\" height=\"84\" rx=\"9\" fill=\"#796447\"/><text x=\"342.0\" y=\"209.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">历史位置 2048–4095</text><text x=\"342.0\" y=\"231.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">partial O [32,128]</text><text x=\"342.0\" y=\"253.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">LSE [32]</text><rect x=\"520\" y=\"126\" width=\"345\" height=\"84\" rx=\"9\" fill=\"#5d5777\"/><text x=\"692.5\" y=\"151.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">合并每个 head 的概率质量</text><text x=\"692.5\" y=\"173.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">O [32,128]</text><text x=\"692.5\" y=\"195.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">不是直接平均两个 partial O</text><path d=\"M206 117H223.5V107H241 M235 102l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M206 117H223.5V226H241 M235 221l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M442 107H479.5V168H517 M511 163l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M442 226H479.5V168H517 M511 163l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/></svg><figcaption>LSE=log(sum(exp(score)))。两个分区把 O 与 LSE 配对输出，合并者才能恢复每块在全局的权重。</figcaption></figure><p>decode 的 query 行少，即使 KV 很长，按 query 分工也可能没有足够任务。split-history 将历史拆给多个任务，增加并行度，但要付出 partial 输出、LSE、二次归约与 launch 的代价。两分区 FP32 partial O 合计 32 KiB、LSE 合计 256 B；更多分区并非永远更快。</p><p>逻辑 [N,8,128] 的 K 若按 token 连续，元素 (t,kv,d) 的 BF16 字节偏移是 <code>2×((t×8+kv)×128+d)</code>。同一 head 的相邻位置起点相隔 2048 B，128 维内则连续。换成 [8,N,128] 可让同一 head 的位置 tile 连续；分页缓存还要先查逻辑页到物理页。优化前先确认真实 stride，不能看到方括号就推断 coalescing。</p><p>块 i 的 m/l/u 更新依赖块 i−1；块 i+1 的 KV 加载却可能与块 i 计算重叠。编译器应保住前者的归约依赖，利用后者的可重叠窗口。不同 head 是不同答案，不能跨 head 合并；同一 head 的不同历史分区可以用上述 softmax 规则合并。</p><p><strong>接下来：</strong>分块与调度保住了相同答案，却没有消除逐位置历史。要继续降低长上下文成本，就需要改变模型保存或选择历史的方式。</p>"
+      },
+      {
+        "id": "length-growth",
+        "title": "把演进看成四个问题：少存几组、每组更短、少精读位置、改写历史",
+        "html": "<div class=\"table-wrap\"><table><thead><tr><th>方法</th><th>改动的轴 / 对象</th><th>N 增长后的每步主核心</th><th>要付出的代价</th></tr></thead><tbody><tr><td>MHA → GQA / MQA</td><td>KV heads：32→8→1</td><td>仍扫描 N 个位置</td><td>表示共享，需要训练/适配；实际复用需实现</td></tr><tr><td>FlashAttention</td><td>score / probability 的落地方式</td><td>精确全扫描仍依赖 N</td><td>片上容量、归约调度、实现复杂度</td></tr><tr><td>MLA</td><td>每位置的联合 latent 宽度</td><td>仍扫描 N 个 latent</td><td>吸收后点积可能更宽，另有位置项</td></tr><tr><td>DSA 等选择式稀疏</td><td>主 Attention 精读的位置集合</td><td>主精算受 TopK 限制</td><td>索引、TopK、gather、选错位置的质量代价</td></tr><tr><td>Linear / Delta / KDA</td><td>跨 token 的历史表示</td><td>固定矩阵状态更新，按 N 为常数</td><td>有限记忆、递推数值、模型函数改变</td></tr></tbody></table></div><p>这条趋势来自两个压力同时变大：上下文长，显式状态更大且每拍反复访问；模型参数多，当前 token 需要的投影与 FFN 权重更多。算法不断提高每次搬运的利用率，或者减少必须搬运的状态/权重。但它<strong>不是所有模型依次替换前代的单一路线</strong>：全上下文 Attention、GQA、MLA、稀疏和递归结构仍会按质量、硬件、任务组合使用。</p><p>下一阶段会切换模型实例，图标题会写清身份。Qwen3 的 32/8/128 不会与 DeepSeek 的 latent512 或内部 KDA64×128 混装成一个不存在的模型。至于“只激活部分参数”这条 FFN 演进线，继续读 <a href=\"#chapter/ffn-inference-guide\">Dense → SwiGLU → MoE</a>。</p>"
+      },
+      {
+        "id": "mla-cache",
+        "title": "MLA 先改“每个位置存什么”：仍有 N 行，但一行更紧凑",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 900 195\" role=\"img\" aria-label=\"切换实例：DeepSeek-V2 的 MLA，N4096、BF16 教学账\"><rect width=\"900\" height=\"195\" rx=\"14\" fill=\"#eef2e7\"/><text x=\"22\" y=\"32\" fill=\"#274c3b\" font-size=\"20\" font-family=\"sans-serif\">切换实例：DeepSeek-V2 的 MLA，N4096、BF16 教学账</text><rect x=\"22.0\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#315c4c\"/><text x=\"119.25\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">当前 hidden</text><text x=\"119.25\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">[1,5120]</text><text x=\"119.25\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">此处不是 Qwen3</text><path d=\"M218.5 117H239.5 M233.5 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"242.5\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#506c79\"/><text x=\"339.75\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">压缩并追加</text><text x=\"339.75\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">联合 latent [1,512]</text><text x=\"339.75\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">位置 key [1,64]</text><path d=\"M439.0 117H460.0 M454.0 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"463.0\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#796447\"/><text x=\"560.25\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">历史长期保存</text><text x=\"560.25\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">c [4096,512]</text><text x=\"560.25\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">kR [4096,64]</text><path d=\"M659.5 117H680.5 M674.5 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"683.5\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#5d5777\"/><text x=\"780.75\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">紧凑历史合计</text><text x=\"780.75\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">576 元素 / 位置</text><text x=\"780.75\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">4.5 MiB / 层</text></svg><figcaption>真实维度取 DeepSeek-V2 v5：128 heads，内容每头 128 维，latent512，分离位置维64；字节数额外假设 BF16。</figcaption></figure><p>MLA 学习一份联合 latent，足以通过不同的线性映射生成各 head 的内容 K 与 V。它不是把旧 K/V 每行简单截断，也不是从 4096 个位置里删掉一些位置。DeepSeek-V2 还保留独立位置 key，所以不能把 latent512 误写成完整缓存只有 512 个元素/位置。</p><p>在本例，若把每头内容 K/V 都展开保存，仅内容部分就有 2×128×128=32768 个元素/位置，另加位置 key。联合 latent 只需 512 个内容元素。两种都是同一 MLA 参数化的可能求值表示；教材按展开内容+共享位置 key 的逻辑账比较，为 256.5 MiB 与 4.5 MiB/层。这个比值不能直接拿来宣布对 Qwen3 GQA 的速度提升。</p><p>N 从 4096 增到 32768，两种容量都扩大 8 倍。MLA 降低斜率，却没有把历史增长从线性变成固定。量化还可以减少每元素字节数，但要另外计入 scale、反量化和精度合同。</p><p class=\"source-note\">依据：<a href=\"https://arxiv.org/html/2405.04434v5\">DeepSeek-V2 v5 的 MLA 与 3.1.2 模型维度</a>。</p>"
+      },
+      {
+        "id": "mla-absorption",
+        "title": "MLA 怎样避免每次展开所有历史：把线性映射移到两端",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 900 195\" role=\"img\" aria-label=\"同一份 latent 同时提供 key 内容与 value 内容\"><rect width=\"900\" height=\"195\" rx=\"14\" fill=\"#eef2e7\"/><text x=\"22\" y=\"32\" fill=\"#274c3b\" font-size=\"20\" font-family=\"sans-serif\">同一份 latent 同时提供 key 内容与 value 内容</text><rect x=\"22.0\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#315c4c\"/><text x=\"119.25\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">当前每头 qC</text><text x=\"119.25\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">[128]</text><text x=\"119.25\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">先乘该头 K 上投影</text><path d=\"M218.5 117H239.5 M233.5 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"242.5\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#506c79\"/><text x=\"339.75\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">吸收后的 qC</text><text x=\"339.75\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">[512]</text><text x=\"339.75\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">与 c [4096,512] 点积</text><path d=\"M439.0 117H460.0 M454.0 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"463.0\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#796447\"/><text x=\"560.25\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">latent 空间加权和</text><text x=\"560.25\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">u [512] / head</text><text x=\"560.25\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">复用同一历史 c</text><path d=\"M659.5 117H680.5 M674.5 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"683.5\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#5d5777\"/><text x=\"780.75\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">V 上投影</text><text x=\"780.75\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">[512,128]</text><text x=\"780.75\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">每头输出 [128]</text></svg><figcaption>完整 score 还包含 qR[64] 与历史位置 key kR[4096,64] 的点积；图中主线仅展开内容路径。</figcaption></figure><p>直观地说：“先把每条历史 c 放大成 k，再与 q 点积”，可以改成“先把本步 q 变到 latent 空间，再与每条 c 点积”。V 一侧则把“逐位置放大后加权”改成“先加权 latent，最后只放大一次”。这利用线性映射的结合与分配关系，避免为所有历史恢复大 K/V。</p><p>代价不能漏算：DeepSeek-V2 的内容点积原本每头 128 维，吸收后是 512 维；加位置项后 score 内积宽 576，latent value 汇总宽 512。本例主 QK/PV 逻辑计算约 2×128×4096×(576+512)=1,140,850,688 FLOPs，另有 query 吸收和输出映射。<strong>更少缓存可以伴随更多计算</strong>，实现会根据 batch、序列长和设备选求值方式。latent 被 score/PV 使用两次，也不保证只有一次外存传输。</p><p>缩放系数必须保留模型原定义，不能看吸收后宽度变为 576 就自作主张改成 1/√576。RoPE 又随历史位置变化，通常不能把位置旋转和 K 映射任意交换；DeepSeek 的分离位置分支就是需要认真处理的部分。内部 NoPE 配置则有不同分支，不能照搬公开 MLA 图。</p><p><strong>接下来：</strong>每行已经压紧，N 行仍都在。接下来观察 DSA 怎样决定本步只精读其中一部分。</p>"
+      },
+      {
+        "id": "sparse-selection",
+        "title": "DSA 再改“本步精读哪些位置”：先找候选，再用主 query 算答案",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 900 330\" role=\"img\" aria-label=\"DSA 的两条 query 路径：选择与答案分开\"><rect width=\"900\" height=\"330\" rx=\"14\" fill=\"#eef2e7\"/><text x=\"22\" y=\"32\" fill=\"#274c3b\" font-size=\"20\" font-family=\"sans-serif\">DSA 的两条 query 路径：选择与答案分开</text><rect x=\"22\" y=\"126\" width=\"165\" height=\"84\" rx=\"9\" fill=\"#315c4c\"/><text x=\"104.5\" y=\"162.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">当前 hidden</text><text x=\"104.5\" y=\"184.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">本步 token</text><rect x=\"232\" y=\"62\" width=\"200\" height=\"84\" rx=\"9\" fill=\"#506c79\"/><text x=\"332.0\" y=\"87.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">Indexer query</text><text x=\"332.0\" y=\"109.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">匹配索引历史</text><text x=\"332.0\" y=\"131.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">N=32768</text><rect x=\"477\" y=\"62\" width=\"178\" height=\"84\" rx=\"9\" fill=\"#796447\"/><text x=\"566.0\" y=\"87.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">TopK IDs</text><text x=\"566.0\" y=\"109.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">最多 2048 个</text><text x=\"566.0\" y=\"131.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">保留位置身份</text><rect x=\"232\" y=\"211\" width=\"200\" height=\"84\" rx=\"9\" fill=\"#5d5777\"/><text x=\"332.0\" y=\"236.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">主 Attention query</text><text x=\"332.0\" y=\"258.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">独立内容表示</text><text x=\"332.0\" y=\"280.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">不是索引 score</text><rect x=\"698\" y=\"126\" width=\"180\" height=\"84\" rx=\"9\" fill=\"#416d68\"/><text x=\"788.0\" y=\"151.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">主 Attention</text><text x=\"788.0\" y=\"173.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">只精读入选 KV</text><text x=\"788.0\" y=\"195.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">集合内 softmax</text><path d=\"M189 168H209.0V104H229 M223 99l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M189 168H209.0V253H229 M223 248l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M434 104H474 M468 99l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M657 104H676.0V168H695 M689 163l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M434 253H564.5V168H695 M689 163l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/></svg><figcaption>切换为 DeepSeek-V3.2 v1 的 DSA 机制；N32768 是教学长度，TopK2048 为论文预算。实际有效候选数不能超过可见位置数。</figcaption></figure><p>MLA 已经把每行历史变短，DSA 希望主 Attention 不再每次精读全部行。Indexer 用较便宜的 query/key 表示给历史打分，TopK 产生位置 IDs；主 query 再读取这些 IDs 对应的真实 latent / key-value，用主模型自己的 score 在选中集合内归一化。</p><p>N32768、预算 2048 时，主精算位置数最多是全历史的 1/16；N4096 时只是 1/2；N≤2048 时预算本身不保证有任何位置可省。选择器的分数不是主 softmax 概率，TopK 的数值最大项也不是已经得到的 Attention 答案。</p><p>一个小验证：索引分数 [9,2,8,1] 选位置 {0,2}。这两处主 score 是 [0,ln3]，latent value 是 [2,0]、[0,4]，那么 latent 输出是 [0.5,3]；再右乘输出映射 [1,2] 得到 6.5。改主 query 会改权重；改 indexer 可能先改集合。这两个扰动应分别测试。</p><p class=\"source-note\">依据：<a href=\"https://arxiv.org/html/2512.02556v1\">DeepSeek-V3.2 v1 的 lightning indexer、TopK2048 与主 Attention</a>。</p>"
+      },
+      {
+        "id": "sparse-budget",
+        "title": "稀疏不是 O(1) 的免费午餐：索引仍可能全扫，历史仍要保留",
+        "html": "<div class=\"table-wrap\"><table><thead><tr><th>DSA 组件</th><th>N4096 → N32768，TopK2048 不变</th><th>编译器应追踪的对象</th></tr></thead><tbody><tr><td>主 Attention 精读集合</td><td>2048 → 2048（有效位置足够时）</td><td>IDs → gather → 主 score → softmax → 输出</td></tr><tr><td>Indexer 历史扫描</td><td>常见全扫描路径增加 8 倍</td><td>索引 key、点积、归约、候选 score</td></tr><tr><td>TopK / 合并候选</td><td>输入候选更多；成本依算法</td><td>候选覆盖、去重、tie、无效位置 mask</td></tr><tr><td>长期 latent / 索引缓存</td><td>一般继续随 N 增大</td><td>本次未选位置，下次仍可能入选</td></tr><tr><td>实际主数据传输</td><td>不一定恰好减少为 1/16</td><td>离散 gather、页/行粒度、重复读取、对齐</td></tr></tbody></table></div><p>以每条 latent512 且 BF16 的纯教学内容 payload 为例，精读 2048 行是 2 MiB，精读 32768 行是 32 MiB。但这个 16 倍只覆盖内容行 payload；位置表示、索引缓存、scale、页表、传输粒度和投影均不在其中，更不是完整 DSA 或整模型的加速比。</p><p>公开 DSA 论文明确区分主 Attention 与 lightning indexer 的复杂度：在整段 prefill 上，主核心可降为随长度×TopK 增长，indexer 仍有全位置比较。对应单步 decode，就是主精算按 TopK，索引路径仍可能按 N。只说“Attention 已从 O(N) 变成 O(K)”会漏掉这部分成本。</p><p>模型也要为选择负责：若检索问题的关键历史没入选，即使 kernel 完全正确，答案仍可能退化。稀疏 attention 的训练/质量验证与 kernel 的 IDs/数值正确性是两层验收。固定窗口是另一种位置选择，但会直接限制可见范围，不能说成全上下文 softmax 的无损实现。</p><p><strong>接下来：</strong>稀疏选择仍保存可重新检索的位置历史。另一条更根本的路线，是直接把过去写进固定大小的动态记忆。</p>"
+      },
+      {
+        "id": "linear-state",
+        "title": "另一条路线：把历史写成固定矩阵，不再保留每一个位置",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 900 195\" role=\"img\" aria-label=\"固定状态的 shape 示例：先看一头 128×128\"><rect width=\"900\" height=\"195\" rx=\"14\" fill=\"#eef2e7\"/><text x=\"22\" y=\"32\" fill=\"#274c3b\" font-size=\"20\" font-family=\"sans-serif\">固定状态的 shape 示例：先看一头 128×128</text><rect x=\"22.0\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#315c4c\"/><text x=\"119.25\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">当前 k / v</text><text x=\"119.25\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">各 [128]</text><text x=\"119.25\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">写入一条关联</text><path d=\"M218.5 117H239.5 M233.5 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"242.5\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#506c79\"/><text x=\"339.75\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">旧矩阵状态 S</text><text x=\"339.75\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">[128,128]</text><text x=\"339.75\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">行是 key，列是 value</text><path d=\"M439.0 117H460.0 M454.0 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"463.0\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#796447\"/><text x=\"560.25\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">更新后的 S</text><text x=\"560.25\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">[128,128]</text><text x=\"560.25\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">N 增长，shape 不变</text><path d=\"M659.5 117H680.5 M674.5 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"683.5\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#5d5777\"/><text x=\"780.75\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">当前 q 读出</text><text x=\"780.75\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">q [128] → o [128]</text><text x=\"780.75\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">不再扫描 N 行 KV</text></svg><figcaption>128×128 用于说明真实常见的 head 尺度，不声称把 Qwen3-8B 的 checkpoint 改成这样仍是同一个模型。</figcaption></figure><p>特征线性 Attention 的出发点是把 key 与 value 的外积累计进矩阵 S，再用 query 从 S 读出。带归一化的版本还需保存 key 特征累计向量 z 来计算分母；例如 feature width=128、value width=128，S 就是 [128,128]，z 是 [128]。每步只更新固定 shape，而不是回头访问每个位置。</p><p>这要求相似度有指定的特征内积形式。标准 exp-softmax 对所有历史 query/key 的关系，不能仅靠改乘法括号就精确缩成任意小矩阵。线性、Delta、KDA 的状态定义与归一化方式也不完全相同；下面的 Delta/KDA 采用模型规定的矩阵读出，不把标准线性 Attention 的分母擅自删除后宣称等价。</p><p>固定只针对历史长度 N：64 heads 的 [64,128,128] 若假设 BF16 为 2 MiB，若 FP32 则 4 MiB；并发 B 加倍依然加倍。固定状态也不意味着零带宽：每步读写整份状态就有固定字节成本，短序列时未必比小 KV 更少。有限矩阵承载更多历史，还会出现关联干扰和记忆遗忘。</p><p class=\"source-note\">依据：<a href=\"https://arxiv.org/abs/2006.16236v3\">Transformers are RNNs v3 的特征线性 Attention</a>。</p>"
+      },
+      {
+        "id": "delta-gates",
+        "title": "Delta 与 KDA：先看旧记忆预测了什么，再有选择地纠正",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 900 215\" role=\"img\" aria-label=\"Delta 更新的真实大尺寸由一个 2×2 例子看懂\"><rect width=\"900\" height=\"215\" rx=\"14\" fill=\"#eef2e7\"/><text x=\"22\" y=\"32\" fill=\"#274c3b\" font-size=\"20\" font-family=\"sans-serif\">Delta 更新的真实大尺寸由一个 2×2 例子看懂</text><rect x=\"22\" y=\"75\" width=\"184\" height=\"84\" rx=\"9\" fill=\"#315c4c\"/><text x=\"114.0\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">旧 S = 单位矩阵</text><text x=\"114.0\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">k=[1,0]</text><text x=\"114.0\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">v=[3,4]</text><rect x=\"248\" y=\"75\" width=\"184\" height=\"84\" rx=\"9\" fill=\"#506c79\"/><text x=\"340.0\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">旧预测 [1,0]</text><text x=\"340.0\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">残差 [2,4]</text><text x=\"340.0\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">写入系数 β=0.5</text><rect x=\"474\" y=\"75\" width=\"184\" height=\"84\" rx=\"9\" fill=\"#796447\"/><text x=\"566.0\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">外积增量</text><text x=\"566.0\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">[[1,2],</text><text x=\"566.0\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\"> [0,0]]</text><rect x=\"700\" y=\"75\" width=\"178\" height=\"84\" rx=\"9\" fill=\"#5d5777\"/><text x=\"789.0\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">新 S</text><text x=\"789.0\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">[[2,2],</text><text x=\"789.0\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\"> [0,1]]</text><path d=\"M208 117H245 M239 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M434 117H471 M465 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M660 117H697 M691 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/></svg><figcaption>此图是明确标注的手算缩小例子；实际内部 KDA 每头是 128×128。同一 key 方向的预测向目标移动一半。</figcaption></figure><p>简单外积累加每次完整写一遍 value，容易把重复关联叠大。Delta 先用 k 从旧 S 预测 value，求出“目标 value−旧预测”，再把残差乘 β 写回。key 归一化与 β 的范围关系到更新强弱；方阵的行列大小相同，也不表示可以把 key/value 轴交换。</p><p>Gated Delta 先遗忘部分旧记忆，再做预测与残差更新。KDA 将一个 head 的标量遗忘细化为 key 通道门：128 个 key 方向可以保留不同时间尺度。沿图中的状态约定，门缩放 S 的行。β 控制当前写入量，衰减门控制旧状态保留量，输出门控制本步答案通过多少，三者不能合成同一个“门”。</p><p>沿用图例，若先把第一行旧状态乘 0.5，再计算预测，旧预测变为 [0.5,0]，残差 [2.5,4]，新第一行为 [1.75,2]。先预测再遗忘会得到另一个结果。测试应比较新 S，不仅比较当前输出：当前 q=[0,1] 只读第二行，第一行即使算错也可能暂时藏住。</p><p class=\"source-note\">依据：<a href=\"https://arxiv.org/html/2406.06484v1\">DeltaNet v1 的残差写入</a>。</p><p class=\"source-note\">依据：<a href=\"https://arxiv.org/html/2412.06464v1\">Gated Delta Networks v1 的遗忘与写入职责</a>。</p><p class=\"source-note\">依据：<a href=\"https://arxiv.org/html/2510.26692v2\">Kimi Linear v2 的细粒度门控</a>。</p>"
+      },
+      {
+        "id": "kda-layer",
+        "title": "把 KDA 补成完整子层：矩阵更新之外，还有投影、短卷积和输出门",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 900 195\" role=\"img\" aria-label=\"切换实例：内部 next 配置的 KDA 逻辑尺寸\"><rect width=\"900\" height=\"195\" rx=\"14\" fill=\"#eef2e7\"/><text x=\"22\" y=\"32\" fill=\"#274c3b\" font-size=\"20\" font-family=\"sans-serif\">切换实例：内部 next 配置的 KDA 逻辑尺寸</text><rect x=\"22.0\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#315c4c\"/><text x=\"119.25\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">输入 hidden</text><text x=\"119.25\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">[1,4096]</text><text x=\"119.25\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">另行生成多个门</text><path d=\"M218.5 117H239.5 M233.5 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"242.5\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#506c79\"/><text x=\"339.75\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">Q / K / V 投影</text><text x=\"339.75\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">各 [1,64,128]</text><text x=\"339.75\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">每路合头宽 8192</text><path d=\"M439.0 117H460.0 M454.0 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"463.0\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#796447\"/><text x=\"560.25\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">短卷积与递推</text><text x=\"560.25\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">窗口长度 4</text><text x=\"560.25\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">S [1,64,128,128]</text><path d=\"M659.5 117H680.5 M674.5 112l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"683.5\" y=\"65\" width=\"194.5\" height=\"104\" rx=\"9\" fill=\"#5d5777\"/><text x=\"780.75\" y=\"100.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">归一化 / 输出门</text><text x=\"780.75\" y=\"122.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">拼接 [1,8192]</text><text x=\"780.75\" y=\"144.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">O 投影回 [1,4096]</text></svg><figcaption>内部配置版本 05ee10f9；图只给全逻辑 shape，没有代入 TP、具体存储格式或 kernel 性能。</figcaption></figure><p>短卷积沿时间、逐通道保留最近输入，提供精确的局部信息。长度 4 意味着另存前三步 Q/K/V 的历史，并不是整个模型只能记四个 token。示例旧输入 [1,2,3]、新输入 4，旧到新权重 [0.1,0.2,0.3,0.4]，卷积值为 3.0；若随后做 SiLU，下一步仍保存原输入 [2,3,4]，不把激活后的结果塞进历史。</p><p>内部 64 heads、d128 的矩阵共有 1,048,576 元素。按教材 BF16 假设为 2 MiB/层，短卷积历史另有 3×3×64×128 个元素，即 144 KiB/层。34 个 KDA 层合计 72.78125 MiB 的这两类逻辑状态；实际 ABI、精度、padding 及其他缓存须在部署篇另查。</p><p>decode 是逐步读取/更新矩阵。prefill 已知一段输入后，可把因果更新按 chunk 组织成矩阵运算；连续更新可以重新分组，但不能颠倒 token 顺序。Kimi Linear 的块算法利用门控和低秩结构，并不是凭“可并行”就把未来输入提前给 decode。完整子层的投影、Norm、卷积与门仍有成本，单个 state kernel 不能代表子层延迟。</p><p class=\"source-note\">依据：<a href=\"https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/configs/config_next.json\">内部 config_next.json 的 KDA 维度与层号</a>。</p><p class=\"source-note\">依据：<a href=\"https://arxiv.org/html/2510.26692v2\">Kimi Linear v2 的短卷积、归一化、门控与 chunk/recurrent 路径</a>。</p><p><strong>接下来：</strong>固定状态与显式历史各有取舍。最后把这些算子放回整模型，理解混合层与编译器的实际决策。</p>"
+      },
+      {
+        "id": "hybrid-models",
+        "title": "为什么最终常是混合模型：长记忆成本与精确检索各有所长",
+        "html": "<div class=\"table-wrap\"><table><thead><tr><th>结构层级</th><th>它解决的主要压力</th><th>仍需保留的判断</th></tr></thead><tbody><tr><td>GQA + Dense（本篇 Qwen3 基线）</td><td>共享 KV，保留逐位置全上下文查询</td><td>权重读取和 KV 扫描都会随工作负载变化</td></tr><tr><td>MLA + MoE（公开 DeepSeek 路线）</td><td>压缩逐位置状态；条件激活专家权重</td><td>压缩后的计算、全量专家驻留、通信成本</td></tr><tr><td>DSA + MLA</td><td>对压缩历史再做主精读选择</td><td>索引成本、离散读取、选择质量</td></tr><tr><td>KDA + 显式历史层</td><td>多数层用固定状态，部分层保留检索能力</td><td>含显式历史层的整模型状态仍随 N 增长</td></tr></tbody></table></div><p>混合结构的目标是让不同层承担不同的记忆任务，而不是宣称固定状态已经无损保存所有原文。Kimi Linear v2 用 KDA 与 MLA 混合；内部 next 的配置则把 KDA 与 DSA/MLA 分配到不同层。二者可以共享思想，但具体层数、投影、位置项和训练结论不能互相借用。</p><p>同样，Attention 选历史与 MoE 选专家是两个独立轴：前者决定当前 query 从哪里取信息，后者决定当前 hidden 经过哪些参数。Qwen3 家族中既有 Dense 也有 MoE，这不意味着 Dense 一定用 MHA 或 MoE 必须用 MLA。把模型名字拆回“历史机制＋通道变换＋残差连接”，才能读懂新结构。</p><p>工程上的“降低带宽压力”也可能是把流量换成计算、把完整扫描换成索引、把逐位置访问换成状态更新。每次转换都应同时写三项：主字节减少多少、新增哪些运算、模型或数值合同改变什么。</p>"
+      },
+      {
+        "id": "internal-layer-map",
+        "title": "内部 GLM5Next300B 完整模型：从 token 到 45 层，再回到下一个 token",
+        "html": "<p>现在把前面的算子装回一个完整模型。下面选用<strong>内部 GLM5Next300B</strong>固定配置：一条输入序列先变成 token IDs，再经 embedding、45 个 block、最终 Norm 和 LM head，选出下一个 token。“300B”是内部项目名；这里不凭几个配置字段重新认证总参数，也不把它当作公开 GLM-5。</p><p>图中统一看单请求、每步一个 token：模型语义写成 <code>[batch, token, hidden]</code>，实现把当前 token 展平成 <code>[T,hidden]</code>，此时 T=1。历史长度 N 包含本步新增位置；prefill 负责先建立历史状态，decode 继续读取和更新。mHC 的额外维度代表残差流，和 token 维不同。</p><figure class=\"diagram\"><svg viewBox=\"0 0 900 1235\" role=\"img\" aria-label=\"内部 GLM5Next300B完整模型：embedding、四流残差、45层、平均收缩、RMSNorm、词表投影和采样\"><rect width=\"900\" height=\"1235\" rx=\"14\" fill=\"#eef2e7\"/><text x=\"24\" y=\"34\" text-anchor=\"start\" fill=\"#274c3b\" font-size=\"20\" font-family=\"sans-serif\">内部 GLM5Next300B：从当前 token 到下一个 token</text><text x=\"24\" y=\"61\" text-anchor=\"start\" fill=\"#274c3b\" font-size=\"14\" font-family=\"sans-serif\">单请求单步 decode；全逻辑 shape；不含设备分片；不是公开 GLM-5</text><rect x=\"120\" y=\"90\" width=\"500\" height=\"66\" rx=\"10\" fill=\"#315c4c\"/><text x=\"370.0\" y=\"116.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">当前 token ID [1,1]</text><text x=\"370.0\" y=\"139.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">首步先对提示词做 prefill，建立各层状态</text><path d=\"M370 156 L370 176\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M365 169 L370 176 L375 169\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"120\" y=\"176\" width=\"500\" height=\"82\" rx=\"10\" fill=\"#315c4c\"/><text x=\"370.0\" y=\"210.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">Embedding：词表 154880 × hidden 4096</text><text x=\"370.0\" y=\"233.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">查一行 → [1,1,4096]；展平 token 维为 [1,4096]</text><path d=\"M370 258 L370 280\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M365 273 L370 280 L375 273\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"120\" y=\"280\" width=\"500\" height=\"70\" rx=\"10\" fill=\"#5d5777\"/><text x=\"370.0\" y=\"308.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">hc_expand：复制成 4 条残差流</text><text x=\"370.0\" y=\"331.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">[1,4,4096]，源码也可展平为 [1,16384]</text><path d=\"M370 350 L370 383\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M365 376 L370 383 L375 376\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"100\" y=\"383\" width=\"540\" height=\"361\" rx=\"14\" fill=\"#dde6d5\" stroke=\"#637761\"/><text x=\"120\" y=\"409\" text-anchor=\"start\" fill=\"#274c3b\" font-size=\"16\" font-family=\"sans-serif\">同一条 45 层主干，每层都含 Attention + FFN + mHC</text><rect x=\"120\" y=\"430\" width=\"500\" height=\"70\" rx=\"10\" fill=\"#506c79\"/><text x=\"370.0\" y=\"458.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">层 0–2：KDA + Dense SwiGLU</text><text x=\"370.0\" y=\"481.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">Dense 中间宽 12288；每层输入/输出均为四流</text><path d=\"M370 500 L370 521\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M365 514 L370 521 L375 514\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"120\" y=\"521\" width=\"500\" height=\"103\" rx=\"10\" fill=\"#796447\"/><text x=\"370.0\" y=\"554.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">层 3–43：KDA / DSA 按层混合 + MoE</text><text x=\"370.0\" y=\"577.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">DSA：3、7、11、…、43；其他层 KDA</text><text x=\"370.0\" y=\"600.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">每层 288 routed 选 8 + 1 shared；expert 宽 2048</text><path d=\"M370 624 L370 645\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M365 638 L370 645 L375 638\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"120\" y=\"645\" width=\"500\" height=\"72\" rx=\"10\" fill=\"#506c79\"/><text x=\"370.0\" y=\"674.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">层 44：KDA + MoE</text><text x=\"370.0\" y=\"697.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">主干合计：34 KDA / 11 DSA；3 Dense / 42 MoE</text><rect x=\"665\" y=\"420\" width=\"215\" height=\"142\" rx=\"10\" fill=\"#506c79\"/><text x=\"772.5\" y=\"450.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">34 层各有自己的 KDA 状态</text><text x=\"772.5\" y=\"473.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">矩阵 [1,64,128,128]</text><text x=\"772.5\" y=\"496.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">Q/K/V 各保留 3 步</text><text x=\"772.5\" y=\"519.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">卷积历史，窗口长度 4</text><text x=\"772.5\" y=\"542.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">长度不随上下文 N 增长</text><rect x=\"665\" y=\"583\" width=\"215\" height=\"142\" rx=\"10\" fill=\"#796447\"/><text x=\"772.5\" y=\"613.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">11 层各有自己的 DSA 状态</text><text x=\"772.5\" y=\"636.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">KV latent [1,N,512]</text><text x=\"772.5\" y=\"659.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">另有 pool4 索引与尾部状态</text><text x=\"772.5\" y=\"682.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">N 随 token 追加</text><text x=\"772.5\" y=\"705.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">索引后选择位置做主精算</text><text x=\"772\" y=\"759\" text-anchor=\"middle\" fill=\"#274c3b\" font-size=\"13\" font-family=\"sans-serif\">每个请求、每一层独立保存</text><text x=\"772\" y=\"782\" text-anchor=\"middle\" fill=\"#274c3b\" font-size=\"13\" font-family=\"sans-serif\">本步读取 / 更新，下步接着用</text><path d=\"M640 462H660 M640 607H660\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\" stroke-dasharray=\"4 3\"/><path d=\"M370 744 L370 779\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M365 772 L370 779 L375 772\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"120\" y=\"779\" width=\"500\" height=\"76\" rx=\"10\" fill=\"#5d5777\"/><text x=\"370.0\" y=\"810.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">末层 mHC post 完成后：hc_contract</text><text x=\"370.0\" y=\"833.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">4 条流按流维取平均 → [1,4096]</text><path d=\"M370 855 L370 878\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M365 871 L370 878 L375 871\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"120\" y=\"878\" width=\"500\" height=\"65\" rx=\"10\" fill=\"#315c4c\"/><text x=\"370.0\" y=\"904.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">最终 RMSNorm：沿 4096 个通道归一化</text><text x=\"370.0\" y=\"927.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">输出仍为 [1,4096]</text><path d=\"M370 943 L370 966\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M365 959 L370 966 L375 959\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"120\" y=\"966\" width=\"500\" height=\"82\" rx=\"10\" fill=\"#796447\"/><text x=\"370.0\" y=\"989.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"14\" font-family=\"sans-serif\">LM head：4096 → 154880</text><text x=\"370.0\" y=\"1012.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"14\" font-family=\"sans-serif\">逻辑 logits [1,1,154880]；词表中每个 token 一个分数</text><text x=\"370.0\" y=\"1035.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"14\" font-family=\"sans-serif\">配置不共享 embedding 与 LM head 权重</text><path d=\"M370 1048 L370 1070\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M365 1063 L370 1070 L375 1063\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"120\" y=\"1070\" width=\"500\" height=\"74\" rx=\"10\" fill=\"#315c4c\"/><text x=\"370.0\" y=\"1100.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">按生成设置选下一个 token ID [1,1]</text><text x=\"370.0\" y=\"1123.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">追加到序列；位置前移；EOS / 长度条件决定停止</text><path d=\"M120 1107H55V123H115 M108 118L115 123L108 128\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><text x=\"66\" y=\"1181\" text-anchor=\"start\" fill=\"#274c3b\" font-size=\"15\" font-family=\"sans-serif\">下一步只送入新 token，各层复用上步状态；不重新计算整段历史</text></svg><figcaption>结构字段来自 config_next.json@05ee10f9；入口复制、末层平均收缩、最终 Norm 与词表投影顺序来自固定 SGLang 模型定义@acc98d7d。图是算法逻辑图，不表示该组合已完成本轮全模型部署验收。nextn 预测层属于额外路径，未混入这 45 个主干 block。</figcaption></figure><p><strong>先沿主线读一遍。</strong>Embedding 从 154880 行权重里查出当前 token 的 4096 维向量，复制成四流。每个 block 先跨 token/历史做 Attention，再在当前 token 内做 FFN；两段都由 mHC 接回四流残差。直到层 44 完成，才将四流取平均，做最终 RMSNorm，再映射到整个词表。这一步得到的是下一个 token 的分数；采样或贪心选择由生成设置决定，选出的 ID 又成为下一轮输入。</p><p><strong>为何既需要总图，也需要层型地图？</strong>45 层并不是同一个 kernel 重复 45 次。Attention 轴决定保存怎样的记忆、访问哪些历史；FFN 轴决定访问哪一组参数。它们同时作用在同一层上，不能把 34+11 与 3+42 相加成 90 层。</p><figure class=\"diagram\"><svg viewBox=\"0 0 900 865\" role=\"img\" aria-label=\"内部GLM5Next每层：四流pre-mix与RMSNorm、attention、post回注、FFN前mix、FFN和post回注\"><rect width=\"900\" height=\"865\" rx=\"14\" fill=\"#eef2e7\"/><text x=\"24\" y=\"34\" text-anchor=\"start\" fill=\"#274c3b\" font-size=\"20\" font-family=\"sans-serif\">放大任意一个 block：Attention 和 FFN 各有一次 mHC</text><text x=\"24\" y=\"61\" text-anchor=\"start\" fill=\"#274c3b\" font-size=\"14\" font-family=\"sans-serif\">4 是残差流数，既不是 batch，也不是 4 个独立语言模型</text><rect x=\"130\" y=\"84\" width=\"510\" height=\"62\" rx=\"10\" fill=\"#5d5777\"/><text x=\"385.0\" y=\"120.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">输入 residual [1,4,4096]</text><path d=\"M385 146 L385 166\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M380 159 L385 166 L390 159\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"130\" y=\"166\" width=\"510\" height=\"68\" rx=\"10\" fill=\"#315c4c\"/><text x=\"385.0\" y=\"193.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">Attention 的 mHC pre：四流加权混成一流</text><text x=\"385.0\" y=\"216.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">随后 input RMSNorm → [1,4096]</text><path d=\"M385 234 L385 254\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M380 247 L385 254 L390 247\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"130\" y=\"254\" width=\"510\" height=\"66\" rx=\"10\" fill=\"#506c79\"/><text x=\"385.0\" y=\"280.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"14\" font-family=\"sans-serif\">KDA 或 DSA：输入 [1,4096] → 输出 [1,4096]</text><text x=\"385.0\" y=\"303.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"14\" font-family=\"sans-serif\">读写本层、本请求的状态；层型由层号决定</text><path d=\"M385 320 L385 340\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M380 333 L385 340 L390 333\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"130\" y=\"340\" width=\"510\" height=\"68\" rx=\"10\" fill=\"#5d5777\"/><text x=\"385.0\" y=\"367.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"14\" font-family=\"sans-serif\">Attention 的 mHC post：混合旧残差 + 回注新输出</text><text x=\"385.0\" y=\"390.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"14\" font-family=\"sans-serif\">得到 residual_mid [1,4,4096]</text><path d=\"M640 115H805V374H645 M652 369L645 374L652 379\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><text x=\"718\" y=\"205\" text-anchor=\"middle\" fill=\"#274c3b\" font-size=\"13\" font-family=\"sans-serif\">保留原 4 流</text><text x=\"718\" y=\"228\" text-anchor=\"middle\" fill=\"#274c3b\" font-size=\"13\" font-family=\"sans-serif\">pre 同时生成</text><text x=\"718\" y=\"251\" text-anchor=\"middle\" fill=\"#274c3b\" font-size=\"13\" font-family=\"sans-serif\">post / residual</text><text x=\"718\" y=\"274\" text-anchor=\"middle\" fill=\"#274c3b\" font-size=\"13\" font-family=\"sans-serif\">混合系数</text><path d=\"M385 408 L385 438\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M380 431 L385 438 L390 431\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"130\" y=\"438\" width=\"510\" height=\"68\" rx=\"10\" fill=\"#315c4c\"/><text x=\"385.0\" y=\"465.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">FFN 的 mHC pre：再次四流加权混成一流</text><text x=\"385.0\" y=\"488.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">随后 post-attention RMSNorm → [1,4096]</text><path d=\"M385 506 L385 526\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M380 519 L385 526 L390 519\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"130\" y=\"526\" width=\"510\" height=\"88\" rx=\"10\" fill=\"#796447\"/><text x=\"385.0\" y=\"552.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"14\" font-family=\"sans-serif\">Dense（层 0–2）或 MoE（层 3–44）</text><text x=\"385.0\" y=\"575.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"14\" font-family=\"sans-serif\">Dense：Gate/Up [1,12288]；MoE：每 expert [1,2048]</text><text x=\"385.0\" y=\"598.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"14\" font-family=\"sans-serif\">Down 与路由合并后输出 [1,4096]</text><path d=\"M385 614 L385 634\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M380 627 L385 634 L390 627\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"130\" y=\"634\" width=\"510\" height=\"68\" rx=\"10\" fill=\"#5d5777\"/><text x=\"385.0\" y=\"661.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"14\" font-family=\"sans-serif\">FFN 的 mHC post：混合中间残差 + 回注 FFN 输出</text><text x=\"385.0\" y=\"684.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"14\" font-family=\"sans-serif\">得到下一个 block 的 [1,4,4096]</text><path d=\"M640 389H805V669H645 M652 664L645 669L652 674\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><text x=\"718\" y=\"483\" text-anchor=\"middle\" fill=\"#274c3b\" font-size=\"13\" font-family=\"sans-serif\">保留中间 4 流</text><text x=\"718\" y=\"506\" text-anchor=\"middle\" fill=\"#274c3b\" font-size=\"13\" font-family=\"sans-serif\">Attention 与 FFN</text><text x=\"718\" y=\"529\" text-anchor=\"middle\" fill=\"#274c3b\" font-size=\"13\" font-family=\"sans-serif\">分别使用自己的</text><text x=\"718\" y=\"552\" text-anchor=\"middle\" fill=\"#274c3b\" font-size=\"13\" font-family=\"sans-serif\">mHC 权重</text><path d=\"M385 702 L385 728\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M380 721 L385 728 L390 721\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"130\" y=\"728\" width=\"510\" height=\"64\" rx=\"10\" fill=\"#315c4c\"/><text x=\"385.0\" y=\"753.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">继续下一个 block</text><text x=\"385.0\" y=\"776.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">只有最后一层之后才平均收缩为一流</text><text x=\"24\" y=\"828\" text-anchor=\"start\" fill=\"#274c3b\" font-size=\"15\" font-family=\"sans-serif\">pre / post 可与相邻操作融合，但上述数据依赖和归一化次数必须保持</text></svg><figcaption>mHC pre 里的系数计算归一化，与混成一流后给 Attention / FFN 使用的 RMSNorm 是不同环节。若实现把后者融合到 pre 中，不能再重复执行一次。20 次 Sinkhorn 用于构造残差混合矩阵，不是重复运行 20 次 Attention。</figcaption></figure><figure class=\"diagram\"><svg viewBox=\"0 0 900 350\" role=\"img\" aria-label=\"内部 GLM5Next：结构地图，不是公开 GLM-5 配置\"><rect width=\"900\" height=\"350\" rx=\"14\" fill=\"#eef2e7\"/><text x=\"22\" y=\"32\" fill=\"#274c3b\" font-size=\"20\" font-family=\"sans-serif\">内部 GLM5Next：结构地图，不是公开 GLM-5 配置</text><rect x=\"22\" y=\"68\" width=\"205\" height=\"84\" rx=\"9\" fill=\"#315c4c\"/><text x=\"124.5\" y=\"93.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">45 层同一主干</text><text x=\"124.5\" y=\"115.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">hidden 4096</text><text x=\"124.5\" y=\"137.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">mHC 残差流 ×4</text><rect x=\"295\" y=\"56\" width=\"265\" height=\"84\" rx=\"9\" fill=\"#506c79\"/><text x=\"427.5\" y=\"81.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">Attention 分类：34 + 11</text><text x=\"427.5\" y=\"103.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">34 KDA：64 heads ×128</text><text x=\"427.5\" y=\"125.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">11 DSA/MLA：latent512</text><rect x=\"614\" y=\"56\" width=\"264\" height=\"84\" rx=\"9\" fill=\"#796447\"/><text x=\"746.0\" y=\"81.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">FFN 分类：3 + 42</text><text x=\"746.0\" y=\"103.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">前 3 Dense：I12288</text><text x=\"746.0\" y=\"125.0\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">后 42 MoE：288 选 8</text><path d=\"M229 110H260.5V98H292 M286 93l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><path d=\"M562 98H611 M605 93l6 5l-6 5\" fill=\"none\" stroke=\"#637761\" stroke-width=\"2\"/><rect x=\"295\" y=\"197\" width=\"583\" height=\"85\" rx=\"9\" fill=\"#5d5777\"/><text x=\"586.5\" y=\"233.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">每层的 mHC 都连接 Attention / FFN 与残差流</text><text x=\"586.5\" y=\"255.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">4 条 hidden 流 [1,4,4096]；主子层消费混合后的 [1,4096]</text><text x=\"26\" y=\"318\" font-size=\"16\" fill=\"#274c3b\" font-family=\"sans-serif\">层 0–2：KDA + Dense　｜　层 3：DSA + MoE　｜　层 4：KDA + MoE</text></svg><figcaption>34+11 与 3+42 分别划分同一组 45 层，不能相加成 90 层。mHC 位于层内连接上，不是 45 层之后再执行一次。</figcaption></figure><p>配置中 DSA 层号为 3、7、11、15、19、23、27、31、35、39、43，其余 34 层是 KDA。DSA 的内容 head_dim=256、latent512、query rank1536，索引为 32 heads×128、TopK 预算2048、pool4；KDA 则为 64 heads×128。不要把一个分支的 head_dim 套到另一个。主 MLA 配置 qk_rope_head_dim=0、mla_nope=true，也不等于整个模型没有顺序机制。</p><p>公开 <code>zai-org/GLM-5@c183ef8c</code> 的 H6144、78 层、256 routed experts 属于另一模型。这里与 Qwen3 的并排阅读用于理解结构与访存机制，不能推出两者质量、服务速度或硬件性价比结论。</p><p><strong>长上下文的主线到这里才完整：</strong>Qwen3 的 GQA 层仍要在逻辑上访问全部可见 K/V 位置；这里的 34 个 KDA 层将历史压进固定大小的矩阵和短卷积状态，11 个 DSA 层继续保存随 N 增长的 latent 历史，并通过索引选择主 Attention 的读取位置。因此整模型仍有随上下文增长的容量和读取成本，只是增长发生在较少层、每位置保存内容也更紧凑。索引本身还有扫描、TopK 和离散访问开销，不能把“主精算少读”说成“整个步骤不读历史”。</p><p><strong>参数规模是另一条线：</strong>后 42 层用 MoE，让每个 token 只走 288 个 routed experts 中的 8 个，并始终走 1 个 shared expert；每个 expert 的中间宽为 2048。它减少的是相对于遍历全体专家的活跃计算和权重访问，整个专家库仍需存放。这里 8+1 个 I2048 专家的主矩阵工作量甚至高于单个 I12288 Dense，不能直接声称该 MoE 层比前面的 Dense 更省计算。</p><p>每层、每请求保存自己的状态：不能让 34 层共用一个 KDA 矩阵，也不能让不同请求混用 DSA 历史。前文 KDA 的 2 MiB 矩阵与 144 KiB 卷积历史是明确采用 BF16 的教学容量；本图不指定实际状态格式、量化、padding、分页和物理布局。</p><p class=\"source-note\">配置依据：<a href=\"https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/configs/config_next.json\">内部 config_next.json@05ee10f9</a>。全模型顺序依据：<a href=\"https://github.com/bjxx-algo/sglang/blob/acc98d7d924630d43cd4796f462f015b7aef8670/python/sglang/srt/models/glm5_next.py#L1700\">Glm5NextModel / Glm5NextForCausalLM@acc98d7d</a>；<a href=\"https://github.com/bjxx-algo/sglang/blob/acc98d7d924630d43cd4796f462f015b7aef8670/python/sglang/srt/layers/communicator_mhc.py#L250\">末层 post 与 contract</a>；<a href=\"https://github.com/bjxx-algo/sglang/blob/acc98d7d924630d43cd4796f462f015b7aef8670/python/sglang/srt/layers/communicator_mhc.py#L422\">首层 expand 与子层 Norm</a>；<a href=\"https://github.com/bjxx-algo/sglang/blob/acc98d7d924630d43cd4796f462f015b7aef8670/python/sglang/srt/layers/mhc/functional.py#L284\">hc_expand / hc_contract 的复制与取平均定义</a>。</p><p class=\"source-note\">证据范围：acc98d7d 是 <a href=\"https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/full_model_test/config/test_300b_fp8_in_h20.py#L39\">固定全模型 runner 配置绑定的 SGLang 版本</a>；本轮只读核验源码，没有运行权重、设备或全模型测试。它与当前独立开发 kernel 的版本、验收状态分开，不能据图认定整套最新实现已上线。部署接口另见 <a href=\"#chapter/moe-deployment-walkthrough\">部署连续教程</a>。</p>"
+      },
+      {
+        "id": "compiler-path",
+        "title": "AI 编译器工程师怎么读一个新 Attention：先追生产者与消费者",
+        "html": "<div class=\"table-wrap\"><table><thead><tr><th>先交付的产物</th><th>用本篇例子填写</th><th>由此选择优化</th></tr></thead><tbody><tr><td>完整 shape 图</td><td>x4096 → Q32/KV8 → N4096 → O4096</td><td>决定 GEMV/GEMM、归约、gather、状态更新的边界</td></tr><tr><td>长期与临时状态清单</td><td>KV16 MiB；Flash 的 m/l/u 仅活一拍</td><td>避免错删历史或把临时 score 当持久缓存</td></tr><tr><td>字节 / FLOPs 账</td><td>QK+PV67.1 MFLOPs；四投影80 MiB</td><td>区分读取权重、读取历史、片上复用不足</td></tr><tr><td>依赖与布局合同</td><td>RoPE→append；m/l/u串行；KV可预取</td><td>融合、小张量常驻、双缓冲、split-history</td></tr><tr><td>正确性与证据范围</td><td>固定配置/源码/输入；输出+新状态</td><td>防止 shape 正确但位置、mask、IDs、递推错误</td></tr></tbody></table></div><p>先用真实一层画出数据，再谈融合。Q/K Norm 与 RoPE 可以靠近投影和 append；grouped queries 可共同消费一块 KV；online softmax 让 score 不出片；split-history 提高长 KV 下的并行度。每个优化都应指出省去的具体读写与新引入的同步/归约，不能只看 kernel 个数减少。</p><p>看到 MLA，继续问缓存到底保存 latent 还是展开 K/V，以及 query 吸收的宽度和 scale。看到 DSA，追踪 indexer IDs 到真实地址，检查集合归一化与 gather。看到 KDA，检查 key/value 轴、先遗忘后预测、state 写回与多步漂移。遇到量化再补上 scale、反量化、累加精度，而不是只把 byte 乘 0.5。</p><p>算法层先能复算，部署层再谈 TP/CP、分页、传输、launch 和 overlap。继续：<a href=\"#chapter/dsa-dataflow\">DSA 三阶段与真实缓存</a>、<a href=\"#chapter/kda-dataflow\">KDA 卷积与状态 ABI</a>、<a href=\"#chapter/ffn-inference-guide\">FFN / MoE 的对应数据流</a>。</p>"
+      },
+      {
+        "id": "reading-check",
+        "title": "用一条完整推理链检查自己：从 shape 到算法取舍",
+        "html": "<p>现在给你一张只有“B=1、N=32768、Q32/KV8/d128”的图。应先说出：当前 Q 有32行，每行128维；K与V各有8×32768×128元素；BF16合计128 MiB/层；QK+PV为536,870,912 FLOPs；36层KV为4.5 GiB。四投影不随N变宽，但batch可以改变权重复用。</p><p>接着解释三个改动：KV8→KV1降低头轴数据量但不减少N或Q头数；Flash不保存完整score但仍扫描可见历史；TopK2048让主精算集合缩小，但索引、选择与长期缓存不能消失。若改成KDA，应明确这是固定状态的不同模型函数，必须重新评价记忆质量和多步状态数值。</p><p>最后回到整层：Attention混历史，FFN变通道，残差把各子层接回主干。读新模型时，用<strong>真实shape → 持久状态 → 一拍字节/FLOPs → 可用并行 → 算法与数值边界</strong>这条顺序说明它。掌握这条推理链，比背下每篇论文的缩写更接近编译器工程中真正需要的能力。</p>"
+      }
+    ],
+    "questions": [
+      {
+        "id": "attention-guide-question-01",
+        "q": "为什么 GQA8 的缓存是 MHA32 的 1/4，QK+PV 却没有变成 1/4？",
+        "a": "只减少独立 KV heads，32 个 Q 仍各自对全部 N 位置打分并汇总。主点积工作量不随 KV heads 直接减少；实际读取则取决于共享复用。",
+        "followup": "N4096、d128 时分别复算三个结构的 KV byte 与 FLOPs。"
+      },
+      {
+        "id": "attention-guide-question-02",
+        "q": "FlashAttention 为什么不能直接跳过 score 较小的历史块？",
+        "a": "精确 Flash 求相同完整 softmax，省掉 score/probability 的外存落地。任意删块改变归一化分母和输出，属于另外的稀疏或近似算法。",
+        "followup": "用两块 score=0 与 ln3、value=2与8证明平均 partial output 错误。"
+      },
+      {
+        "id": "attention-guide-question-03",
+        "q": "Qwen3 当前 decode 为什么只追加 4 KiB，却讨论 16 MiB 扫描？",
+        "a": "4 KiB 是当前新 K/V，16 MiB 是 N4096 的全层完整 KV 逻辑 footprint；新行可片上直接使用，历史仍需被本步 query 消费。",
+        "followup": "36 层新增量和完整缓存分别多少？"
+      },
+      {
+        "id": "attention-guide-question-04",
+        "q": "MLA 缓存更小，为什么 FLOPs 可能更多？",
+        "a": "联合 latent 比所有头展开的 K/V 总量小，但可能大于单头内容维度。吸收后每头要在更宽 latent 空间打分和累加，还需两端映射与位置项。",
+        "followup": "DeepSeek-V2 的128内容维、512 latent 和64位置维怎样进入计算账？"
+      },
+      {
+        "id": "attention-guide-question-05",
+        "q": "DSA 主 Attention 只精读 TopK，整个子层就与 N 无关了吗？",
+        "a": "不能。Indexer 仍可能扫描全历史，TopK/gather 有成本，latent 和索引缓存还随 N 增长；只有主精算集合预算被限制。",
+        "followup": "N1024、4096、32768 时 TopK2048 各能省多少位置？"
+      },
+      {
+        "id": "attention-guide-question-06",
+        "q": "KDA 的固定状态能否当作全上下文 softmax 的无损压缩？",
+        "a": "不能。它使用不同的记忆更新函数，固定的是相对于 N 的状态 shape，质量取决于有限记忆、遗忘和训练；混合模型仍可能保留逐位置历史层。",
+        "followup": "为什么只检查本步输出不能验证状态更新？"
+      },
+      {
+        "id": "attention-guide-question-07",
+        "q": "decode 线性层融合后，权重带宽问题一定解决了吗？",
+        "a": "融合可以省 launch、输入重读与中间量；B1 时主体矩阵仍需参与一次乘加。合批、权重复用、量化及硬件缓存会进一步改变成本。",
+        "followup": "用 Q/K/V 三矩阵 48 MiB 与输入 8 KiB 比较优化收益边界。"
+      },
+      {
+        "id": "attention-guide-question-08",
+        "q": "内部 next 的34+11与3+42说明什么？",
+        "a": "它们是同一45层沿Attention与FFN两个轴的分类。34 KDA+11 DSA，3 Dense+42 MoE；内部H4096与公开GLM-5 H6144等配置不能混用。",
+        "followup": "层3和层4各走哪两类子层？"
+      }
+    ],
+    "takeaways": [
+      "先固定模型、版本、B/N/head/d、dtype与计数范围，再讨论算法或性能。",
+      "GQA共享KV头，减少历史数据量；每个query仍精确扫描完整可见历史。",
+      "Flash避免score/probability大表落地，保持全位置softmax；不自动减少KV历史。",
+      "MLA压缩每位置的联合表示，并用线性吸收换求值方式；缓存下降与FLOPs上升可以同时发生。",
+      "DSA限制主精算集合，indexer、TopK、gather与长期历史仍有成本。",
+      "Linear/Delta/KDA采用固定shape的递推记忆，改变模型函数；需要多步状态与质量验证。",
+      "Attention历史机制与FFN条件参数是两条独立演进线，最终常由混合模型组合。",
+      "编译器优化要指出省掉的真实读写、保住的依赖和新增的代价，不能只数kernel或引用峰值。"
+    ],
+    "sources": [
+      {
+        "label": "Qwen3-8B 固定官方配置",
+        "url": "https://huggingface.co/Qwen/Qwen3-8B/blob/b968826d9c46dd6066d109eabc6255188de91218/config.json",
+        "kind": "固定源码 / 配置",
+        "note": "2026-10-25 重新读取核验；教学 shape 与容量由文中范围推导，不构成设备测量。"
+      },
+      {
+        "label": "Qwen3 模型定义固定源码",
+        "url": "https://github.com/huggingface/transformers/blob/50e35cc0ca18ec19b80653690de553e6decf74f5/src/transformers/models/qwen3/modeling_qwen3.py",
+        "kind": "固定源码 / 配置",
+        "note": "2026-10-25 重新读取核验；教学 shape 与容量由文中范围推导，不构成设备测量。"
+      },
+      {
+        "label": "GQA v3",
+        "url": "https://arxiv.org/html/2305.13245v3",
+        "kind": "论文",
+        "note": "2026-10-25 重新读取核验；教学 shape 与容量由文中范围推导，不构成设备测量。"
+      },
+      {
+        "label": "Fast Transformer Decoding / MQA v1",
+        "url": "https://arxiv.org/abs/1911.02150v1",
+        "kind": "论文",
+        "note": "2026-10-25 重新读取核验；教学 shape 与容量由文中范围推导，不构成设备测量。"
+      },
+      {
+        "label": "RoFormer v5",
+        "url": "https://arxiv.org/abs/2104.09864v5",
+        "kind": "论文",
+        "note": "2026-10-25 重新读取核验；教学 shape 与容量由文中范围推导，不构成设备测量。"
+      },
+      {
+        "label": "FlashAttention v2",
+        "url": "https://arxiv.org/html/2205.14135v2",
+        "kind": "论文",
+        "note": "2026-10-25 重新读取核验；教学 shape 与容量由文中范围推导，不构成设备测量。"
+      },
+      {
+        "label": "DeepSeek-V2 v5",
+        "url": "https://arxiv.org/html/2405.04434v5",
+        "kind": "论文",
+        "note": "2026-10-25 重新读取核验；教学 shape 与容量由文中范围推导，不构成设备测量。"
+      },
+      {
+        "label": "DeepSeek-V3.2 v1",
+        "url": "https://arxiv.org/html/2512.02556v1",
+        "kind": "论文",
+        "note": "2026-10-25 重新读取核验；教学 shape 与容量由文中范围推导，不构成设备测量。"
+      },
+      {
+        "label": "Transformers are RNNs v3",
+        "url": "https://arxiv.org/abs/2006.16236v3",
+        "kind": "论文",
+        "note": "2026-10-25 重新读取核验；教学 shape 与容量由文中范围推导，不构成设备测量。"
+      },
+      {
+        "label": "DeltaNet v1",
+        "url": "https://arxiv.org/html/2406.06484v1",
+        "kind": "论文",
+        "note": "2026-10-25 重新读取核验；教学 shape 与容量由文中范围推导，不构成设备测量。"
+      },
+      {
+        "label": "Gated Delta Networks v1",
+        "url": "https://arxiv.org/html/2412.06464v1",
+        "kind": "论文",
+        "note": "2026-10-25 重新读取核验；教学 shape 与容量由文中范围推导，不构成设备测量。"
+      },
+      {
+        "label": "Kimi Linear v2",
+        "url": "https://arxiv.org/html/2510.26692v2",
+        "kind": "论文",
+        "note": "2026-10-25 重新读取核验；教学 shape 与容量由文中范围推导，不构成设备测量。"
+      },
+      {
+        "label": "内部 GLM5Next 固定配置",
+        "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/configs/config_next.json",
+        "kind": "固定源码 / 配置",
+        "note": "2026-10-25 重新读取核验；教学 shape 与容量由文中范围推导，不构成设备测量。"
+      },
+      {
+        "label": "公开 GLM-5 固定配置",
+        "url": "https://huggingface.co/zai-org/GLM-5/blob/c183ef8c61faee82855eca1ed9bb3a9a7ce3b0b2/config.json",
+        "kind": "固定源码 / 配置",
+        "note": "2026-10-25 重新读取核验；教学 shape 与容量由文中范围推导，不构成设备测量。"
+      },
+      {
+        "label": "本次 Attention 连续教程证据与算术验收",
+        "url": "./evidence/attention-guide-sources.md",
+        "kind": "工程记录",
+        "note": "来源、旧锚点映射、图与字节边界；全站浏览器验收由集成记录补充。"
+      },
+      {
+        "label": "内部 mHC 固定数学参考",
+        "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_mhc_dup4_dp4.py",
+        "kind": "固定源码",
+        "note": "05ee10f9：只读核对输入混合、输出回注与残差流混合；没有运行设备。"
+      },
+      {
+        "label": "内部 GLM5Next 完整模型：glm5_next.py",
+        "url": "https://github.com/bjxx-algo/sglang/blob/acc98d7d924630d43cd4796f462f015b7aef8670/python/sglang/srt/models/glm5_next.py",
+        "kind": "固定源码",
+        "note": "acc98d7d：本轮只读核验入口复制、层内 mHC、末层平均收缩、最终 RMSNorm 与 LM head 顺序；没有运行模型或设备。"
+      },
+      {
+        "label": "内部 GLM5Next 完整模型：communicator_mhc.py",
+        "url": "https://github.com/bjxx-algo/sglang/blob/acc98d7d924630d43cd4796f462f015b7aef8670/python/sglang/srt/layers/communicator_mhc.py",
+        "kind": "固定源码",
+        "note": "acc98d7d：本轮只读核验入口复制、层内 mHC、末层平均收缩、最终 RMSNorm 与 LM head 顺序；没有运行模型或设备。"
+      },
+      {
+        "label": "内部 GLM5Next 完整模型：functional.py",
+        "url": "https://github.com/bjxx-algo/sglang/blob/acc98d7d924630d43cd4796f462f015b7aef8670/python/sglang/srt/layers/mhc/functional.py",
+        "kind": "固定源码",
+        "note": "acc98d7d：本轮只读核验入口复制、层内 mHC、末层平均收缩、最终 RMSNorm 与 LM head 顺序；没有运行模型或设备。"
+      }
+    ]
+  }
+]

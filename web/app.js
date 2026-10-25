@@ -93,6 +93,7 @@ function renderChapter(id, section) {
  initPeExplorers();
  initMoeExplorers();
  initPerformanceExplorers();
+ initDecodeExplorers();
  enableFigureZoom();
  if(section)scrollChapterAnchor(section);
 }

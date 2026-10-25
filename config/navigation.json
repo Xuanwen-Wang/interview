@@ -21,61 +21,43 @@
       "id": "algorithms",
       "title": "算法与数据流",
       "number": "02",
-      "description": "从 Qwen3-8B 的 GQA + Dense FFN 出发，看懂 GLM5Next 的完整模型，再分 Attention 与 FFN 两条线逐层拆解算法和张量。",
+      "description": "两篇连续教程，用真实模型 shape 走完一次 decode：Attention 解释长上下文与历史状态，FFN 解释参数规模、专家路由与权重复用。",
       "groups": [
         {
-          "id": "models",
-          "title": "先看完整模型：从 Qwen3 到 GLM5Next",
-          "chapters": [
-            "qwen3-dense-baseline",
-            "glm5next-architecture",
-            "model-evolution-map",
-            "transformer"
-          ]
-        },
-        {
           "id": "operators",
-          "title": "Attention 演进与算子数据流",
+          "title": "Attention：从完整 KV 到压缩、稀疏与递归状态",
           "chapters": [
-            "attention-evolution",
-            "kv-cache",
-            "flash-attention",
-            "mla-dsa",
-            "kda-linear",
-            "attention-dataflow"
+            "attention-inference-guide"
           ]
         },
         {
           "id": "ffn",
-          "title": "FFN 演进与专家路由数据流",
+          "title": "FFN：从 Dense 到 MoE 的参数与数据流",
           "chapters": [
-            "ffn-to-moe",
-            "ffn-routing-dataflow"
+            "ffn-inference-guide"
           ]
         }
       ],
       "learningPath": [
         {
-          "title": "传统模型",
-          "description": "先走完一次 GQA + Dense 推理",
-          "chapter": "qwen3-dense-baseline"
+          "title": "走完一次 Attention",
+          "description": "从 Qwen3-8B 的数字 shape 理解历史读取、计算和算法演进",
+          "chapter": "attention-inference-guide"
         },
         {
-          "title": "现代模型",
-          "description": "完整看见 KDA / DSA / MoE",
-          "chapter": "glm5next-architecture"
-        },
-        {
-          "title": "两条演进线",
-          "description": "Attention 与 FFN 分别拆到算子",
-          "chapter": "model-evolution-map"
+          "title": "走完一次 FFN",
+          "description": "从三矩阵到专家路由，分清容量、激活量与 batch 复用",
+          "chapter": "ffn-inference-guide"
         },
         {
           "title": "进入真实部署",
-          "description": "带着数学合同理解 518 执行",
-          "chapter": "glm-deployment-overview"
+          "description": "带着算子与访存直觉理解 EP、TP 和四个 kernel",
+          "chapter": "moe-deployment-walkthrough"
         }
-      ]
+      ],
+      "legacyGroups": {
+        "models": "operators"
+      }
     },
     {
       "id": "moe",
