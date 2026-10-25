@@ -25,7 +25,7 @@
       {
         "id": "learning-paths",
         "title": "三条阅读路线，服务不同阶段",
-        "html": "<ol><li><strong>基础恢复：</strong>Transformer → MHA/GQA/KV → FlashAttention → MLA/DSA/KDA → SwiGLU/MoE。每次阅读都写下输入、输出、中间状态和计算复杂度。</li><li><strong>岗位主线：</strong>518 资源图 → Triton 接入 → IR 与分析 → 调度、地址、同步 → 后端验证。每个 pass 都要能说出前置条件、改变的语义与不变量。</li><li><strong>冲刺叙事：</strong>GLM5Next 真实配置 → 四算子 ABI → 真实优化案例 → 数值定位 → 性能归因 → 模拟问答。用自己能证明的经历替换通用模板。</li></ol><p>不要一开始试图背全站。先用 20 分钟定位一个薄弱环节，再用图与算例建立理解，最后合上页面口述两分钟。只有能解释“为什么”，才算从阅读变成了自己的能力。</p>"
+        "html": "<ol><li><strong>先走完传统模型：</strong>从<a href=\"#chapter/qwen3-dense-baseline\">Qwen3-8B</a>看一轮prefill和decode，画清GQA、KV cache、Dense SwiGLU和残差。</li><li><strong>再看现代模型全貌：</strong><a href=\"#chapter/glm5next-architecture\">内部GLM5Next完整结构</a>，随后沿<a href=\"#chapter/attention-evolution\">Attention</a>与<a href=\"#chapter/ffn-to-moe\">FFN</a>两条演进线拆到算子；这一阶段只建立算法与张量合同。</li><li><strong>进入真实部署：</strong><a href=\"#chapter/glm-deployment-overview\">模型、版本与16rank地图</a> → <a href=\"#chapter/glm-parallel-communication\">通信和token所有权</a> → KDA/DSA阶段与MoE四kernel → sigmoid、TopK、GEMM、状态与加权归位。</li><li><strong>落到编译与硬件：</strong>沿518 pass、资源依赖、调度、地址分配和指令解释一个真实优化；把算法收益与硬件代价联系起来。</li><li><strong>面试与练习：</strong>按公司题源查缺口，每个知识点都准备数学推导、实现权衡、反例与本人经历证据。</li></ol>"
       },
       {
         "id": "evidence-contract",

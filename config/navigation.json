@@ -21,67 +21,139 @@
       "id": "algorithms",
       "title": "算法与数据流",
       "number": "02",
-      "description": "从模型结构进入张量、状态、读写量和真实算子流水。",
+      "description": "从 Qwen3-8B 的 GQA + Dense FFN 出发，看懂 GLM5Next 的完整模型，再分 Attention 与 FFN 两条线逐层拆解算法和张量。",
       "groups": [
         {
           "id": "models",
-          "title": "Transformer 与 Attention 演进",
+          "title": "先看完整模型：从 Qwen3 到 GLM5Next",
           "chapters": [
-            "transformer",
-            "kv-cache",
-            "flash-attention",
-            "mla-dsa",
-            "kda-linear",
-            "glm5next-architecture"
+            "qwen3-dense-baseline",
+            "glm5next-architecture",
+            "model-evolution-map",
+            "transformer"
           ]
         },
         {
           "id": "operators",
-          "title": "算子级数据流深挖",
+          "title": "Attention 演进与算子数据流",
           "chapters": [
-            "attention-dataflow",
-            "dsa-dataflow",
-            "kda-dataflow"
+            "attention-evolution",
+            "kv-cache",
+            "flash-attention",
+            "mla-dsa",
+            "kda-linear",
+            "attention-dataflow"
           ]
+        },
+        {
+          "id": "ffn",
+          "title": "FFN 演进与专家路由数据流",
+          "chapters": [
+            "ffn-to-moe",
+            "ffn-routing-dataflow"
+          ]
+        }
+      ],
+      "learningPath": [
+        {
+          "title": "传统模型",
+          "description": "先走完一次 GQA + Dense 推理",
+          "chapter": "qwen3-dense-baseline"
+        },
+        {
+          "title": "现代模型",
+          "description": "完整看见 KDA / DSA / MoE",
+          "chapter": "glm5next-architecture"
+        },
+        {
+          "title": "两条演进线",
+          "description": "Attention 与 FFN 分别拆到算子",
+          "chapter": "model-evolution-map"
+        },
+        {
+          "title": "进入真实部署",
+          "description": "带着数学合同理解 518 执行",
+          "chapter": "glm-deployment-overview"
         }
       ]
     },
     {
       "id": "moe",
-      "title": "MoE 全栈实战",
+      "title": "GLM5Next 300B 真实部署",
       "number": "03",
-      "description": "贯通 EP×TP 部署、四个 kernel、通信与瓶颈证据。",
+      "description": "从完整模型与 16-rank 所有权，走到 KDA、DSA、MoE 的通信、kernel、算子实现和优化证据。",
       "groups": [
         {
-          "id": "moe-foundation",
-          "title": "语义、拓扑与历史证据",
+          "id": "deploy-model",
+          "title": "整张部署图与通信窗口",
           "chapters": [
-            "ffn-to-moe",
+            "glm-deployment-overview",
+            "glm-parallel-communication"
+          ]
+        },
+        {
+          "id": "deploy-attention",
+          "title": "Attention 部署：KDA 与 DSA",
+          "chapters": [
+            "kda-dataflow",
+            "kda-kernel-walkthrough",
+            "dsa-dataflow",
+            "dsa-kernel-walkthrough"
+          ]
+        },
+        {
+          "id": "moe-foundation",
+          "title": "MoE 部署决策与四 kernel 合同",
+          "chapters": [
             "moe-topology",
-            "moe-four-kernel-contract",
-            "moe-token-merge",
-            "moe-quantization-and-592",
-            "moe-evidence-and-interview"
+            "moe-topology-tradeoffs",
+            "moe-four-kernel-contract"
           ]
         },
         {
           "id": "moe-kernels",
-          "title": "部署决策与 kernel 内部",
+          "title": "进入 kernel：从 Router 到输出归位",
           "chapters": [
-            "moe-topology-tradeoffs",
             "moe-router-internals",
+            "moe-sigmoid-topk-implementation",
             "moe-shared-dataflow",
             "moe-routed-dataflow",
+            "moe-projection-weight-implementation",
             "moe-combine-reduce"
           ]
         },
         {
           "id": "moe-systems",
-          "title": "集体通信、重叠与性能预算",
+          "title": "优化实战、通信重叠与数值证据",
           "chapters": [
             "moe-communication-overlap",
-            "moe-hardware-budget"
+            "moe-token-merge",
+            "moe-hardware-budget",
+            "moe-quantization-and-592",
+            "moe-evidence-and-interview"
           ]
+        }
+      ],
+      "learningPath": [
+        {
+          "title": "整层视角",
+          "description": "固定模型、版本与状态生命周期",
+          "chapter": "glm-deployment-overview"
+        },
+        {
+          "title": "数据如何移动",
+          "description": "TP / CP / DP / EP 与 collectives",
+          "chapter": "glm-parallel-communication"
+        },
+        {
+          "title": "拆到 kernel",
+          "description": "Attention 阶段与 MoE 四 kernel",
+          "chapter": "moe-four-kernel-contract"
+        },
+        {
+          "title": "进入算子内部",
+          "description": "sigmoid、TopK、GEMM 与加权",
+          "chapter": "moe-sigmoid-topk-implementation"
         }
       ]
     },

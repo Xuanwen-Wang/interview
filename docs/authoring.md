@@ -30,11 +30,17 @@ PE 使用一个 chapter、一个完整 HTML，按六个阅读层次组织。`rea
 | 新需求 | 建议位置 |
 | --- | --- |
 | 中端核心 Pass 逐个拆解 | `compiler` 下新增 `middle-end-passes` 专题；按分析前提、合法性、变换、失效、反例组织章节 |
-| GLM5Next KDA 真实部署 | `algorithms` 的算子数据流或新建模型部署专题；交叉链接硬件和编译映射，明确模型版本 |
+| GLM5Next KDA 真实部署 | `moe`（显示名 GLM5Next 300B 真实部署）的 Attention 部署专题；区分模型wrapper与kernel版本，交叉链接算法与硬件 |
 | 更多公司面经 | 先添加来源记录和公司映射，再根据内容量添加叙事章节 |
 | LLVM 后端专题 | `compiler` 下新建专题；不要把所有细节挤进一篇总览 |
 | 新 Coding 题型 | `coding` 下按通用算法、数据流、kernel、pass 分类扩章；代码和题源分开 |
 | 新硬件代际 | 新知识域或 `hardware` 下独立专题；不改写旧代际的来源范围 |
+
+## 算法与部署的内容边界
+
+`algorithms`从完整模型进入Attention和FFN两条演进线，讲数学、shape、状态和逻辑读写；实际rank、collectives、kernel ABI与性能证据放入`moe`部署域。保留`moe`路由ID以兼容既有链接。专题可继续增加新模型部署或kernel内部章节。
+
+主题可配置`learningPath`，每步包含`title`、`description`、`chapter`，页面自动生成有顺序的阅读入口。所有chapter引用由静态检查验证；它是推荐路线，不改变章节的唯一主目录位置。
 
 ## 公司与面经
 

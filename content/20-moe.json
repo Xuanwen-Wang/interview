@@ -1,87 +1,81 @@
 [
   {
     "id": "ffn-to-moe",
-    "part": "GLM5Next · FFN 实战",
+    "part": "算法演进",
     "order": 20,
-    "title": "从 Dense FFN 到 SwiGLU 与稀疏专家",
-    "subtitle": "先把数学、shape 和代价讲清楚，再谈 kernel 优化",
-    "minutes": 45,
+    "title": "Dense → SwiGLU → MoE：逐 token 变换如何变成条件计算",
+    "subtitle": "先理解函数、参数与路由，再进入真实部署",
+    "minutes": 28,
     "level": "基础",
     "tags": [
+      "Dense FFN",
       "SwiGLU",
       "MoE",
-      "Router",
-      "FLOPs",
-      "GLM5Next"
+      "条件计算"
     ],
-    "lead": "FFN 是模型的逐 token 非线性变换，也是你最有说服力的工作主线。面试时应从一个 token 的三个矩阵乘讲到专家选择、真实 TP 分片、数据移动和数值边界；这样后面的每个优化都有明确的计算对象。",
+    "lead": "FFN 处理每个 token 的特征，Attention 则让 token 交换信息。先把这条分工记牢，再理解门控为什么引入第三个矩阵、MoE 为什么保留更多参数却只执行少数专家，以及 Shared 与 Routed 分支各自在表达什么。这里采用通用算法与小规模教学例。",
     "sections": [
       {
         "id": "ffn-math",
-        "title": "1. 一行 hidden 究竟经历了什么",
-        "html": "<p>把 Attention 理解为跨 token 获取信息，FFN 理解为对每个 token 的通道特征做变换。输入 X 的形状为 [T,H]，T 是本次实际进入 kernel 的 token 行数，H 是 hidden width。传统两层 FFN 先从 H 扩展到 I，再投影回 H；忽略 bias，其表达式为 activation(XW₁)W₂。不同 token 共享同一组权重，但在这一步不互相混合。</p><div class=\"formula\">Dense FFN：Y = φ(XW₁)W₂<br>SwiGLU：G=XWg，U=XWu，A=SiLU(G)⊙U，Y=AWd<br>SiLU(z)=z·sigmoid(z)，Wg/Wu∈R^(H×I)，Wd∈R^(I×H)</div><p>G 是调节通道强弱的门，U 是被调节的信息；两者逐元素相乘。面试最容易混淆的是将 Gate projection 当成 MoE Router：前者决定一个专家内部每个中间通道的激活，后者决定 token 选择哪些专家。它们既不是同一矩阵，也不是同一层次的选择。</p><p>SwiGLU 有三份矩阵而传统 FFN 有两份，讨论参数预算必须同时说中间宽度。相同 H、I 下，三矩阵当然更贵；模型设计通常通过调整 I 比较相近参数/FLOP 预算。原始演进可查 <a href=\"https://arxiv.org/abs/2002.05202\">GLU Variants</a>；下面的 shape 与工程约束来自项目冻结源码。</p>"
+        "title": "01 / FFN 不混合 token，混合的是特征通道",
+        "html": "<p>设输入 X∈R^{T×H}，T 是 token 数，H 是每个 token 的特征宽度。普通两层 FFN 为 F(X)=φ(XW₁+b₁)W₂+b₂，其中 W₁∈R^{H×I}、W₂∈R^{I×H}。中间维 I 把特征展开，非线性 φ 让两次线性投影不能再合并成一个矩阵。</p><div class=\"formula\">对每行 t：yₜ = φ(xₜW₁+b₁)W₂+b₂<br>FFN(X)ₜ 只依赖 xₜ；Attention(X)ₜ 通常还依赖其他位置。</div><p>如果去掉 φ，两层矩阵只是 W₁W₂ 的重新参数化，不增加同样意义的非线性表达。FFN 的参数在不同 token 间共享，但输出不会因为把两行同时计算而相互混合。Transformer block 还包含 norm 与 residual，它们包围子层，不要把完整 block 的输出与这里的 F(X) 混为一谈。</p>"
       },
       {
         "id": "ffn-diagram",
-        "title": "2. 用数据流图读懂融合空间",
-        "html": "<svg viewBox=\"0 0 920 280\" role=\"img\" aria-label=\"SwiGLU 的 Gate、Up、SiLU 和 Down 数据流\"><defs><marker id=\"moe-arrow-a\" markerWidth=\"7\" markerHeight=\"7\" refX=\"6\" refY=\"3\" orient=\"auto\"><path d=\"M0 0L6 3L0 6\" fill=\"none\" stroke=\"#466c85\"/></marker></defs><g fill=\"#eef5f8\" stroke=\"#8aacc0\"><rect x=\"18\" y=\"105\" width=\"130\" height=\"64\" rx=\"12\"/><rect x=\"205\" y=\"35\" width=\"150\" height=\"60\" rx=\"12\"/><rect x=\"205\" y=\"185\" width=\"150\" height=\"60\" rx=\"12\"/><rect x=\"410\" y=\"35\" width=\"145\" height=\"60\" rx=\"12\"/><rect x=\"610\" y=\"105\" width=\"95\" height=\"64\" rx=\"12\"/><rect x=\"760\" y=\"105\" width=\"140\" height=\"64\" rx=\"12\"/></g><g fill=\"#203f52\" font-size=\"19\" font-family=\"sans-serif\" text-anchor=\"middle\"><text x=\"83\" y=\"132\">X [T,H]</text><text x=\"83\" y=\"154\">BF16</text><text x=\"280\" y=\"61\">Gate GEMM</text><text x=\"280\" y=\"83\">[T,I]</text><text x=\"280\" y=\"211\">Up GEMM</text><text x=\"280\" y=\"233\">[T,I]</text><text x=\"482\" y=\"71\">SiLU</text><text x=\"657\" y=\"144\">逐元素 ×</text><text x=\"830\" y=\"132\">Down GEMM</text><text x=\"830\" y=\"154\">Y [T,H]</text></g><g fill=\"none\" stroke=\"#466c85\" stroke-width=\"2\" marker-end=\"url(#moe-arrow-a)\"><path d=\"M148 120L180 120L180 65L205 65\"/><path d=\"M148 150L180 150L180 215L205 215\"/><path d=\"M355 65H410\"/><path d=\"M555 65H657V105\"/><path d=\"M355 215H657V169\"/><path d=\"M705 137H760\"/></g></svg><p>图中每条边既是数学依赖，也是可能落入片上 SRAM 或外部存储的中间张量。Gate 和 Up 共享输入，可以合并权重方向的投影，也可以分别发射来改善 PE/VP 重叠。哪个更快要看缩放、舍入、SRAM 生命周期和编译后的实际调度，不能只数 Python 里的 dot 数。</p><p>融合的直接收益通常是减少启动、中间值写回和重复读取。代价是同时存活的 buffer 增多、地址分配更难、依赖链更长，某些通路会被串行化。真实工作中曾保留单个连续 Shared parent，却放弃物理双 GDG 输出实验；原因是跨 kernel ABI 与 Graph 生命周期同样属于优化成本。<a href=\"https://github.com/DarronTam/torch_zeus/pull/570\">PR #570</a> 给出了最终采用的单入口与回归边界。</p>"
+        "title": "02 / SwiGLU：两个投影是独立支路",
+        "html": "<p>SwiGLU 将普通 FFN 的单个中间向量替换为门控乘积。Gate 与 Up 同时读取输入；Gate 经 SiLU 后与 Up 逐元素相乘，Down 将 I 维结果映射回 H 维。名称 Gate 不表示二值开关：SiLU(g)=g·sigmoid(g)，可以输出负数，也不限制在0到1。</p><svg viewBox=\"0 0 900 310\" role=\"img\" aria-label=\"SwiGLU 的独立 Gate 与 Up 支路\"><title>SwiGLU 的独立 Gate 与 Up 支路</title><g font-family=\"sans-serif\" font-size=\"15\" fill=\"#243c33\"><path d=\"M145 132 L225 62\" fill=\"none\" stroke=\"#739b89\" stroke-width=\"2\"/><circle cx=\"225\" cy=\"62\" r=\"3\" fill=\"#739b89\"/><path d=\"M145 132 L225 202\" fill=\"none\" stroke=\"#739b89\" stroke-width=\"2\"/><circle cx=\"225\" cy=\"202\" r=\"3\" fill=\"#739b89\"/><path d=\"M415 62 L470 62\" fill=\"none\" stroke=\"#739b89\" stroke-width=\"2\"/><circle cx=\"470\" cy=\"62\" r=\"3\" fill=\"#739b89\"/><path d=\"M620 62 L670 132\" fill=\"none\" stroke=\"#739b89\" stroke-width=\"2\"/><circle cx=\"670\" cy=\"132\" r=\"3\" fill=\"#739b89\"/><path d=\"M415 202 L670 132\" fill=\"none\" stroke=\"#739b89\" stroke-width=\"2\"/><circle cx=\"670\" cy=\"132\" r=\"3\" fill=\"#739b89\"/><path d=\"M760 165 L760 215\" fill=\"none\" stroke=\"#739b89\" stroke-width=\"2\"/><circle cx=\"760\" cy=\"215\" r=\"3\" fill=\"#739b89\"/><rect x=\"20\" y=\"100\" width=\"125\" height=\"65\" rx=\"9\" fill=\"#edf2e5\" stroke=\"#7b9a85\"/><text x=\"82.5\" y=\"137.5\" text-anchor=\"middle\">X [T,H]</text><rect x=\"225\" y=\"30\" width=\"190\" height=\"65\" rx=\"9\" fill=\"#edf2e5\" stroke=\"#7b9a85\"/><text x=\"320.0\" y=\"56.5\" text-anchor=\"middle\">Gate: XWg</text><text x=\"320.0\" y=\"78.5\" text-anchor=\"middle\">[T,I]</text><rect x=\"225\" y=\"170\" width=\"190\" height=\"65\" rx=\"9\" fill=\"#edf2e5\" stroke=\"#7b9a85\"/><text x=\"320.0\" y=\"196.5\" text-anchor=\"middle\">Up: XWu</text><text x=\"320.0\" y=\"218.5\" text-anchor=\"middle\">[T,I]</text><rect x=\"470\" y=\"30\" width=\"150\" height=\"65\" rx=\"9\" fill=\"#edf2e5\" stroke=\"#7b9a85\"/><text x=\"545.0\" y=\"67.5\" text-anchor=\"middle\">SiLU(G)</text><rect x=\"670\" y=\"100\" width=\"180\" height=\"65\" rx=\"9\" fill=\"#edf2e5\" stroke=\"#7b9a85\"/><text x=\"760.0\" y=\"126.5\" text-anchor=\"middle\">逐元素乘</text><text x=\"760.0\" y=\"148.5\" text-anchor=\"middle\">A [T,I]</text><rect x=\"670\" y=\"215\" width=\"180\" height=\"65\" rx=\"9\" fill=\"#edf2e5\" stroke=\"#7b9a85\"/><text x=\"760.0\" y=\"241.5\" text-anchor=\"middle\">Down: AWd</text><text x=\"760.0\" y=\"263.5\" text-anchor=\"middle\">Y [T,H]</text></g></svg><div class=\"formula\">G=XWg，U=XWu，A=SiLU(G)⊙U，Y=AWd</div><p>图中 Up 没有依赖 Gate 或 SiLU；两条线只在乘法相遇。读论文时要区分“GLU 系列函数形式”和某个模型选用的中间宽度，不能仅因都叫 FFN 就认定参数量相同。</p><p><a href=\"https://arxiv.org/abs/2002.05202\">GLU Variants Improve Transformer</a>比较了这类门控变体。</p>"
       },
       {
         "id": "ffn-cost",
-        "title": "3. 手算参数、FLOPs 与算术强度",
-        "html": "<p>把一次乘加记为 2 FLOPs，单个 SwiGLU 专家的三次 GEMM 约为 6THI FLOPs，参数是 3HI；SiLU 和逐元素乘法另计。GLM5Next 本地配置给出 H=4096、专家 I=2048，因此单专家有 25,165,824 个矩阵参数。只算矩阵权重，BF16 为 48 MiB，FP8 为 24 MiB；TP4 分片后分别是每 rank 12 MiB 与 6 MiB。这里没有把 scale、padding、pack 元数据、复制或 runtime workspace 算进去。</p><div class=\"formula\">理想权重受限算术强度 ≈ 6MHI / (3HI·b) = 2M/b FLOP/byte<br>b 是每个权重的字节数，M 是同一专家一次真正复用权重的 token 数。</div><p>这只是忽略 activation、输出、元数据和重复 weight traversal 的理想模型。FP8 下 M=1 约为 2 FLOP/byte，M=4 约为 8；因此低并发的单 route 常被权重供给限制，而同专家 token 合并可能提高利用率。但若逻辑 M4 被硬件拆成多轮装载，或者 Up/Down 的布局不同，实际复用低于上式。</p><p>面试时不要用全批 T 替代每个专家 M。T24、top8 表示 192 次 route 选择，分散到 288 个专家后，单专家命中可能很少，分布也不均匀。真正决定 kernel 行为的是每个 owner 的专家桶、尾组、重复 slot 与最慢核工作量。</p>"
+        "title": "03 / 用参数与乘法算清三矩阵的代价",
+        "html": "<p>忽略 bias、激活和 norm，普通 FFN 有2HI个参数、每token约4HI FLOPs；SwiGLU 有3HI个参数、每token约6HI FLOPs。这里一次乘加计2 FLOPs，参数量与每token运算量是不同单位。</p><div class=\"formula\">同参数预算：2H·I_dense = 3H·I_swiglu<br>所以 I_swiglu = (2/3)I_dense</div><p>教学例取 H=12，普通 FFN 的 I=48：1152个权重，每token2304 FLOPs。SwiGLU 改 I=32 后也是1152个权重、2304主矩阵 FLOPs，但函数形式不同，逐元素运算也不同。若都取 I=48，SwiGLU 的主矩阵参数和算术量就是普通 FFN 的1.5倍，不能说门控“免费”。真实模型还会按设计取整宽度；这里的相等是预算比较，不是质量相等的定理。</p>"
       },
       {
         "id": "moe-evolution",
-        "title": "4. 稀疏专家解决什么，又引入什么",
-        "html": "<p><a href=\"https://arxiv.org/abs/1701.06538\">早期稀疏 MoE</a> 用可学习门控为输入选择少量子网络，在不按比例增加每 token 计算的情况下扩展总参数。<a href=\"https://arxiv.org/abs/2101.03961\">Switch Transformer</a> 将路由简化，重点处理路由复杂度、通信与训练稳定性。<a href=\"https://arxiv.org/abs/2401.06066\">DeepSeekMoE</a> 进一步讨论细粒度专家和共享专家：共享部分学习通用能力，路由部分增加组合与专门化。</p><table><thead><tr><th>变化</th><th>算法目的</th><th>编译器与硬件的新增问题</th></tr></thead><tbody><tr><td>Dense → MoE</td><td>扩大总容量，控制激活计算</td><td>动态 IDs、不均匀小 GEMM、分发与归并</td></tr><tr><td>更细粒度专家</td><td>增加组合自由度</td><td>单专家中间维 I 更小；每专家 token 数 M 取决于路由，元数据与 dispatch 成本需重估</td></tr><tr><td>Shared + Routed</td><td>区分通用与选择性计算</td><td>两个分支资源竞争、ownership 与输出合并</td></tr><tr><td>低比特专家权重</td><td>减少权重容量和带宽</td><td>scale 粒度、解码路径、舍入与精度预算</td></tr></tbody></table><p>模型有 300B 参数不意味着每个 token 执行 300B 参数的 dense 计算；也不意味着所有未激活参数可以不占存储。部署问题同时包含总权重容量、每 token 活跃工作量、跨设备放置和最差路由延迟。优秀回答应把这四件事分开。</p><p>例如 DeepSeekMoE 的等激活计算拆分可写成 E→mE、K→mK、I→I/m。在均匀路由近似下，每专家 token 数 M≈TK/E 保持不变；真正变小的是专家宽度 I。如果只增加 E 而固定 K，M 才会按该近似下降。两类改动不能混为一谈。</p>"
+        "title": "04 / Dense 到 MoE：选择参数子集，而不是平均所有专家",
+        "html": "<p>Dense 层让每个 token 使用同一套 FFN 权重。稀疏 MoE 保留 E 套专家函数 fₑ，Router 为输入选择少量专家 Jₜ，再按权重合成输出。不同专家通常结构相同、参数不同；“混合”发生在输出空间，不是先把多个 token 相加。</p><div class=\"formula\">yₜ = Σe∈Jₜ αₜₑ fₑ(xₜ)，|Jₜ|=K≪E</div><p><a href=\"https://arxiv.org/abs/1701.06538\">2017 年稀疏门控 MoE</a>将条件计算规模化；<a href=\"https://arxiv.org/abs/2101.03961\">Switch Transformer</a>研究简化路由并处理训练稳定性。它们代表不同设计，不是所有新模型都遵循同一条线性替代路线。Top1、Top2、更多专家、不同归一化、是否共享专家，都需回到各自模型定义。</p><p>MoE 的吸引力是总参数与单token激活参数可以解耦；它不保证同质量下必然更快，也不保证任何输入都获得均衡分工。专家是否学到互补能力，还取决于训练数据、优化过程和路由约束。</p>"
       },
       {
         "id": "glm-router-math",
-        "title": "5. GLM 的真实 Router：选择分数与混合权重不同",
-        "html": "<p>项目配置是 288 个 Routed expert、top-k=8、1 个 Shared expert，scoring_func 为 sigmoid，routed_scaling_factor 为 2.5，norm_topk_prob 开启。源码先计算 logits，并保留生产 BF16 logit 舍入；sigmoid 后得到 scores。用于 TopK 选择的是 scores 加 correction bias，而最终混合权重从未加 bias 的 scores 中 gather，再归一化和乘 factor。</p><div class=\"formula\">sₑ = sigmoid(logitₑ)<br>S = TopK₈(sₑ+bₑ)<br>pₑ = 2.5 · sₑ / Σⱼ∈S sⱼ，e∈S<br>y = Shared(x) + Σₑ∈S pₑ·Expertₑ(x)</div><p>这个区别直接影响 kernel 正确性：如果把偏置也当作输出权重，改变的是模型语义；如果 Router 已乘 2.5，Reduce 再乘一次，则会重复缩放。当前 dev 链明确由 Router 应用该 factor 一次。不能看到别的模型使用 softmax、sqrtsoftplus 或 top6，就在这条链里套用。</p><p>为面试准备 Router 时，除了 TopK 算法复杂度，还要解释 tie-breaking、尾部 padding 的哨兵、IDs dtype、选择结果落 SRAM/DDR 的时点，以及归一化的精度。真实优化从“算一个 TopK”深入到“已确定的 winner 前缀能否提前发布，让 Gather 与剩余 VP 波次重叠”。<a href=\"https://github.com/DarronTam/torch_zeus/pull/570\">相关集成记录</a> 将算法不变与调度改变分开描述。</p>"
+        "title": "05 / Router 的分数、选择和混合权重是三步",
+        "html": "<p>通用路由先计算 z=xWr，随后用 softmax 或独立 sigmoid 等函数得到分数，再选择 TopK。softmax 在所有候选间归一化，独立 sigmoid 的所有分数不必和为1；选择以后是否重新归一化，以及是否乘额外系数，是模型定义的一部分。</p><div class=\"formula\">示例：s=[0.6,0.3,0.1]，Top2={0,1}<br>所选集合归一化后 α=[2/3,1/3,0]<br>若 f₀(x)=[3,0]，f₁(x)=[0,6]，y=[2,2]</div><p>如果保留未重新归一化的0.6和0.3，输出就是[1.8,1.8]，两者不是同一个函数。某些算法还引入负载平衡 bias 来影响选择，bias是否进入最终混合分数必须单独说明。TopK 是离散集合选择；它与对所选值做连续加权是两个不同步骤，接近边界的分数变化可能改变被执行的整个专家函数。</p>"
       },
       {
         "id": "glm-concrete-shapes",
-        "title": "6. 对照 45 层配置，避免模型名称代替事实",
-        "html": "<p>冻结的内部配置有 45 个 Transformer 层，前 3 层用 Dense FFN，其余 42 层进入 MoE。Dense intermediate_size=12288，MoE intermediate_size=2048，两者不能混用。Attention 的结构演进与 FFN 的专家配置是不同维度：一层可以换用不同 attention 机制而保留同一种 MoE FFN。</p><p>“GLM5Next 300B”在本教材中指 <a href=\"https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/configs/config_next.json\">该项目 config_next.json</a> 与配套 checkpoint/运行入口；公开模型名称、后续版本和相似命名不能自动继承这些内部参数。测量表中的 42 层是 42 个 MoE 层的实际聚合，不是完整 45 层模型的总时延。</p><table><thead><tr><th>层次</th><th>真实对象</th><th>常见误读</th></tr></thead><tbody><tr><td>模型</td><td>45 层；3 Dense + 42 MoE</td><td>42 层 MoE 表就是整模 TPOT</td></tr><tr><td>专家</td><td>H4096 / I2048</td><td>把 I512 当全专家宽度</td></tr><tr><td>rank</td><td>TP4 后 I512；EP4 后 E72</td><td>把本地权重大小当整板/整模</td></tr><tr><td>kernel</td><td>实际 T16/T24/T32</td><td>CLI tokens=6 就是 T6</td></tr></tbody></table><p>建议面试开场在纸上写 H、I、T、E、K、TP、EP 七个符号；后续所有字节量、FLOPs、通信和延迟都能回到这张纸验证。</p>"
+        "title": "06 / Shared 与细粒度专家：容量不能只看 E×K",
+        "html": "<p>Shared expert 对所有 token 执行，Routed expert 只对命中 token 执行。一种模型是 y=f_shared(x)+Σαₑfₑ(x)，Shared 没有自动乘路由概率，也不自动参与 Routed 的归一化。<a href=\"https://arxiv.org/abs/2401.06066\">DeepSeekMoE</a>讨论细粒度专家与隔离共享知识，以减轻路由专家重复表达公共模式。</p><p>用 H=12、每专家 I=8、E=8、K=2 的教学 SwiGLU-MoE：Routed 总参数8×3×12×8=2304，单token只激活其中576个参数；若再加一个同宽 Shared，则总专家参数2592、激活参数864。Router 自身还有12×8=96个权重，以上专家计数没有包含它。</p><p>把每个专家切得更细、增加 E 与 K，可以改变可选组合数量，但不等于无条件增加独立知识。比较模型时要同时给出每专家宽度、Shared 宽度、TopK、总参数和激活参数；只比较“专家数量”会漏掉最主要的预算变化。</p>"
       },
       {
         "id": "moe-algorithm-interview",
-        "title": "7. 把算法知识转成自己的工程叙述",
-        "html": "<p>一个有力度的叙述可以是：“我负责的是 FFN 从数学语义到芯片执行的完整链：先确定 Router 的选择和权重规则、Shared/Routed 的量化合同，再落实每个 rank 与 core 的 ownership，最后围绕真实路由分布优化计算、搬运和归约。”接着只选一个具体案例深入，不要把所有优化名词一次列完。</p><p>面试官若追问“为什么不用更大的 GEMM”，应回到实际专家桶：增加 M 需要同 expert 的多行真实输入，需要归组、gather、padding 与写回映射；batch 大了也未必均匀。若追问“MoE 为什么可能更慢”，要回答随机权重访问、路由开销、跨设备通信、尾部负载和低利用率可能抵消激活 FLOPs 的节省。</p><p>你不必把自己包装成训练算法作者。真正有深度的算法理解是：能够说明哪些改变严格等价，哪些改变动了量化路径或近似函数，哪些需要模型级验证。例如“保留原 token/slot 输出而内部按 expert 合并”是执行优化；“改变 top-k、删除 Shared、替换 SiLU LUT”则需要重新讨论算法与精度合同。</p><aside class=\"callout\">简历的“25% 以上 MR”目前是本人陈述，本教材不把它当已核验仓库统计。工程故事优先用可定位 PR、冻结 SHA、明确作者和可解释结果支撑。</aside>"
+        "title": "07 / 算法面试要能回答负载与精度的追问",
+        "html": "<p>假设有T个token、每个选择K个专家，路由分配总数为TK；均匀期望每专家TK/E条，但真实分布可以高度偏斜。训练时可以引入负载平衡损失、容量约束等手段；某些实现可能丢弃超容量分配，另一些采用不丢弃策略。推理时不能未经模型定义就用“忙了换一个专家”保持输出不变。</p><p>解释 MoE 时按四步展开：先写出单专家函数，再写 Router 选择规则，再写 Shared 与加权和，最后讨论分布偏斜与数值敏感性。若专家 A、B 的输出相差很大，即使路由分数只发生很小变化，TopK 边界翻转也能造成明显输出改变；只看 sigmoid 本身的平均误差是不够的。</p><p>练习：在上一节的 toy 模型中将K从2改成4，Routed 总参数不变、专家主矩阵算术翻倍；将E从8改成16而K不变，则总专家参数翻倍、单token专家算术不变，但Router候选投影变大。能够分别解释这两种变化，才算理解条件计算。</p>"
       }
     ],
     "questions": [
       {
-        "q": "SwiGLU 的 Gate 和 MoE Router 有什么区别？",
-        "a": "Gate 是专家内部的 H→I 投影，逐通道调节 Up 分支；Router 是 H→E 的专家打分，按 token 选 top-k 专家。二者的 shape、参数、输出语义和精度要求不同。",
-        "followup": "画出一个 token 从 Router 到两个专家内部 Gate/Up/Down 的数据流。"
+        "q": "FFN 为什么不直接把两个矩阵合起来？",
+        "a": "中间非线性使组合不再是单个线性映射；没有非线性时可将矩阵相乘合成。",
+        "followup": "SwiGLU 的逐元素乘为什么也不能被一个常数矩阵吸收？"
       },
       {
-        "q": "MoE 只激活 8/288 个专家，时延就等比下降吗？",
-        "a": "不会。总权重仍要存储，路由与通信增加；单专家小 M、随机访问和负载不均会降低利用率。应比较相同精度与质量目标下的实际计算、访存和通信关键路径。",
-        "followup": "T24/top8 时，为什么还需要统计每个 owner 的 M1/M2/M4 数量？"
+        "q": "SwiGLU 的 Gate 和 Up 是先后关系吗？",
+        "a": "它们独立读取X；Gate经过SiLU后与Up相乘。",
+        "followup": "SiLU 输出是否总在0和1之间？"
       },
       {
-        "q": "一个 H4096/I2048 的 SwiGLU 专家权重多大？",
-        "a": "三矩阵共3×4096×2048=25,165,824参数；纯矩阵BF16为48MiB，FP8为24MiB。TP4后每rank分别12MiB/6MiB，不含scale、padding或复制。",
-        "followup": "如果FP8路径额外复制权重到两个core，哪个统计层次要翻倍？"
+        "q": "MoE 参数变多，为什么每token运算不同比例增加？",
+        "a": "只激活K个专家，Routed总参数按E增长而专家计算按K增长。Router和Shared需单列。",
+        "followup": "把E和K分别翻倍，会改变哪些量？"
       },
       {
-        "q": "为什么 Router bias 只参与选人？",
-        "a": "本项目模型合同规定 correction bias 改变专家被选中的机会，最终混合系数仍来自原 sigmoid score。把带偏置分数直接归一化会改变数值语义。",
-        "followup": "如何用极端 bias 的小输入构造能检测这个错误的测试？"
+        "q": "TopK之后概率一定要和为1吗？",
+        "a": "取决于模型；可以重归一化、保留原分数或另乘系数，不能擅自替换。",
+        "followup": "给出归一化与不归一化输出不同的小例子。"
       },
       {
-        "q": "你如何解释从 Dense 到细粒度 MoE 对芯片设计的影响？",
-        "a": "工作负载从规则大矩阵转向大量动态小矩阵与元数据处理。除MAC外，动态寻址、低启动成本、向量和标量链延迟、SRAM、权重供给以及跨核同步变得更重要。",
-        "followup": "哪一项瓶颈可以通过编译器解决，哪一项需要硬件机制？"
-      },
-      {
-        "q": "融合 Gate/Up 一定比拆开好么？",
-        "a": "不一定。合并可共享输入和减少部分控制，但增加大临时值与缩放/切片压力；拆开可能改善PE/VP重叠。必须保留舍入边界并看实际指令和慢核测量。",
-        "followup": "你会记录哪些buffer生命周期来解释一次融合回退？"
+        "q": "Shared 与 Routed 有什么算法区别？",
+        "a": "Shared对每token执行，Routed由选择集合决定；两支如何相加由模型规定。",
+        "followup": "为什么增加Shared可能减少专家重复学习公共知识？"
       }
     ],
     "sources": [
@@ -112,32 +106,18 @@
         "url": "https://arxiv.org/abs/2401.06066",
         "note": "细粒度专家与 Shared expert。",
         "kind": "论文"
-      },
-      {
-        "id": "glm-config",
-        "label": "GLM5Next 内部配置（冻结 SHA）",
-        "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/configs/config_next.json",
-        "note": "需原仓库访问权限；内部配置不代表所有同名公开版本。",
-        "kind": "源码"
-      },
-      {
-        "id": "moe570",
-        "label": "PR #570 四算子优化",
-        "url": "https://github.com/DarronTam/torch_zeus/pull/570",
-        "note": "2026-10-23 API核验已合入；作者Xuanwen-Wang。",
-        "kind": "PR"
       }
     ],
     "takeaways": [
-      "先讲数学和实际 shape，再谈 tiling 或 fusion。",
-      "全批 token 数不等于每专家真正的 GEMM M。",
-      "Router correction bias、混合权重和 routed factor 必须逐一确认。",
-      "用可核验案例表达负责范围，贡献比例另做历史统计。"
+      "FFN逐token混合特征；Attention负责跨token交互。",
+      "SwiGLU的Gate和Up独立，三矩阵预算必须单算。",
+      "MoE将总参数与激活参数解耦，路由和Shared仍有代价。",
+      "选择集合、混合权重与负载约束是不同算法合同。"
     ]
   },
   {
     "id": "moe-topology",
-    "part": "GLM5Next · FFN 实战",
+    "part": "GLM5Next300B · 真实部署",
     "order": 21,
     "title": "TP4 × EP4：从权重归属到完整输出",
     "subtitle": "把 board、rank、core、Shared 和通信边界画在同一张图上",
@@ -156,7 +136,7 @@
       {
         "id": "topology-map",
         "title": "1. 十六个 rank 是怎样排列的",
-        "html": "<p>当前配置为 tp_size=4、ep_size=4、dp_size=4、world_size=16。rank 的映射是 tp_rank=rank%4，ep_rank=rank//4。这里 TP4×EP4 和 TP4×DP4 是同一个 world16 在不同算子阶段的组织方式，不能相乘得到 64 个 rank。board 是当前通信方案使用的逻辑分组，不能仅从这个名字推断封装或物理芯片个数。</p><svg viewBox=\"0 0 920 310\" role=\"img\" aria-label=\"四个EP board各含四个TP rank，Shared只归属EP0\"><g font-family=\"sans-serif\" text-anchor=\"middle\"><g fill=\"#e7f5ed\" stroke=\"#79a891\"><rect x=\"20\" y=\"30\" width=\"200\" height=\"220\" rx=\"14\"/></g><g fill=\"#edf3f9\" stroke=\"#94b0cc\"><rect x=\"245\" y=\"30\" width=\"200\" height=\"220\" rx=\"14\"/><rect x=\"470\" y=\"30\" width=\"200\" height=\"220\" rx=\"14\"/><rect x=\"695\" y=\"30\" width=\"200\" height=\"220\" rx=\"14\"/></g><g fill=\"#24465d\" font-size=\"19\"><text x=\"120\" y=\"65\">EP0 / E0…71</text><text x=\"345\" y=\"65\">EP1 / E72…143</text><text x=\"570\" y=\"65\">EP2 / E144…215</text><text x=\"795\" y=\"65\">EP3 / E216…287</text><text x=\"120\" y=\"110\">r0 r1 r2 r3</text><text x=\"345\" y=\"110\">r4 r5 r6 r7</text><text x=\"570\" y=\"110\">r8 r9 r10 r11</text><text x=\"795\" y=\"110\">r12 r13 r14 r15</text><text x=\"120\" y=\"154\">TP0 TP1 TP2 TP3</text><text x=\"345\" y=\"154\">TP0 TP1 TP2 TP3</text><text x=\"570\" y=\"154\">TP0 TP1 TP2 TP3</text><text x=\"795\" y=\"154\">TP0 TP1 TP2 TP3</text><text x=\"120\" y=\"200\">Shared 真权重</text><text x=\"345\" y=\"200\">Shared 无贡献</text><text x=\"570\" y=\"200\">Shared 无贡献</text><text x=\"795\" y=\"200\">Shared 无贡献</text><text x=\"460\" y=\"285\">跨 board 同 TP lane：例如 [r0,r4,r8,r12]</text></g></g></svg><p>默认连续 expert 区间如图；显式静态映射或重排实验要以自己的 logical→physical map 为准。图示的是默认布局，不声称任何后续重排仍按同一编号物理存放。<a href=\"https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/full_model_test/config/test_300b_fp8_in_h20.py\">配置</a>和<a href=\"https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/_support/_comm.py\">通信 helper</a>是核验入口。</p>"
+        "html": "<aside class=\"callout\"><strong>版本边界：</strong>本章中的 PR #429/#570/#588、Issue #592 与性能表是各自冻结版本的历史案例。2026-10-25 已复核 torch_zeus 默认分支 3656952b 与 zeus_dev 05ee10f9；最新 Shared/Routed/Reduce 与 PR #588 head 逐字节相同，Router 新增可选物理 ID 映射。当前 caller 默认未启用该映射；未在本轮重跑旧性能或完整模型。<a href=\"evidence/moe-deployment-current.md#heads\">查看当前源码与历史实测的边界</a>。</aside><p>当前配置为 tp_size=4、ep_size=4、dp_size=4、world_size=16。rank 的映射是 tp_rank=rank%4，ep_rank=rank//4。这里 TP4×EP4 和 TP4×DP4 是同一个 world16 在不同算子阶段的组织方式，不能相乘得到 64 个 rank。board 是当前通信方案使用的逻辑分组，不能仅从这个名字推断封装或物理芯片个数。</p><svg viewBox=\"0 0 920 310\" role=\"img\" aria-label=\"四个EP board各含四个TP rank，Shared只归属EP0\"><g font-family=\"sans-serif\" text-anchor=\"middle\"><g fill=\"#e7f5ed\" stroke=\"#79a891\"><rect x=\"20\" y=\"30\" width=\"200\" height=\"220\" rx=\"14\"/></g><g fill=\"#edf3f9\" stroke=\"#94b0cc\"><rect x=\"245\" y=\"30\" width=\"200\" height=\"220\" rx=\"14\"/><rect x=\"470\" y=\"30\" width=\"200\" height=\"220\" rx=\"14\"/><rect x=\"695\" y=\"30\" width=\"200\" height=\"220\" rx=\"14\"/></g><g fill=\"#24465d\" font-size=\"19\"><text x=\"120\" y=\"65\">EP0 / E0…71</text><text x=\"345\" y=\"65\">EP1 / E72…143</text><text x=\"570\" y=\"65\">EP2 / E144…215</text><text x=\"795\" y=\"65\">EP3 / E216…287</text><text x=\"120\" y=\"110\">r0 r1 r2 r3</text><text x=\"345\" y=\"110\">r4 r5 r6 r7</text><text x=\"570\" y=\"110\">r8 r9 r10 r11</text><text x=\"795\" y=\"110\">r12 r13 r14 r15</text><text x=\"120\" y=\"154\">TP0 TP1 TP2 TP3</text><text x=\"345\" y=\"154\">TP0 TP1 TP2 TP3</text><text x=\"570\" y=\"154\">TP0 TP1 TP2 TP3</text><text x=\"795\" y=\"154\">TP0 TP1 TP2 TP3</text><text x=\"120\" y=\"200\">Shared 真权重</text><text x=\"345\" y=\"200\">Shared 无贡献</text><text x=\"570\" y=\"200\">Shared 无贡献</text><text x=\"795\" y=\"200\">Shared 无贡献</text><text x=\"460\" y=\"285\">跨 board 同 TP lane：例如 [r0,r4,r8,r12]</text></g></g></svg><p>默认连续 expert 区间如图；显式静态映射或重排实验要以自己的 logical→physical map 为准。图示的是默认布局，不声称任何后续重排仍按同一编号物理存放。<a href=\"https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/full_model_test/config/test_300b_fp8_in_h20.py\">配置</a>和<a href=\"https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/_support/_comm.py\">通信 helper</a>是核验入口。</p>"
       },
       {
         "id": "tp-math",
@@ -256,6 +236,13 @@
         "url": "https://github.com/DarronTam/torch_zeus/pull/588",
         "note": "42层非通信组件预算；不等于TPOT。",
         "kind": "PR"
+      },
+      {
+        "id": "moe-current-moe-topology",
+        "label": "2026-10-25 当前源码与历史版本对照",
+        "url": "evidence/moe-deployment-current.md#heads",
+        "note": "默认分支复核，不是本轮设备或E2E测试。",
+        "kind": "源码"
       }
     ],
     "takeaways": [
@@ -267,7 +254,7 @@
   },
   {
     "id": "moe-four-kernel-contract",
-    "part": "GLM5Next · FFN 实战",
+    "part": "GLM5Next300B · 真实部署",
     "order": 22,
     "title": "四算子链与有效行 ABI：一次真正的跨层优化",
     "subtitle": "Router、Shared、Routed、Reduce 如何在 Graph 中组成可靠系统",
@@ -286,7 +273,7 @@
       {
         "id": "chain-launch",
         "title": "1. 四类逻辑算子与四次实际 launch",
-        "html": "<p>GLM5Next 这条本地路径依次调用 Router、BF16 Shared、FP8 per-tensor Routed、Reduce。Shared 与 Routed 在数学上是并行分支，但当前 stream 上的发射次序和硬件实际重叠要由 trace 决定。所有 collective 都在链外，pack、scratch 分配和 warmup 在计时/Graph capture 外。</p><table><thead><tr><th>阶段</th><th>主要输入</th><th>输出合同</th></tr></thead><tbody><tr><td>Router</td><td>hidden、router weight、bias</td><td>当前 [T,8] IDs 与已归一化/缩放 weights</td></tr><tr><td>Shared BF16</td><td>hidden、TP-local shared weight</td><td>连续 [2,T,H] parent，两个core partial</td></tr><tr><td>Routed FP8</td><td>hidden、IDs、local expert weights</td><td>[T,8,H]，仅本地专家行有定义，未加 route weight</td></tr><tr><td>Reduce</td><td>partials、当前 IDs/weights、expert interval</td><td>完全有定义的 rank-local [T,H]</td></tr></tbody></table><p>这里“4”既可以指四类逻辑算子，也恰好是默认本地路径的四次 host launch；但这个等号是查源码得出的，不是通用事实。一个 <code>@triton.jit</code> helper 被内联调用不会单独产生 host launch；分阶段量化的另一模型 FFN 则可能有多次 launch。比较方案前先统一计数对象。</p>"
+        "html": "<aside class=\"callout\"><strong>版本边界：</strong>本章中的 PR #429/#570/#588、Issue #592 与性能表是各自冻结版本的历史案例。2026-10-25 已复核 torch_zeus 默认分支 3656952b 与 zeus_dev 05ee10f9；最新 Shared/Routed/Reduce 与 PR #588 head 逐字节相同，Router 新增可选物理 ID 映射。当前 caller 默认未启用该映射；未在本轮重跑旧性能或完整模型。<a href=\"evidence/moe-deployment-current.md#heads\">查看当前源码与历史实测的边界</a>。</aside><p>GLM5Next 这条本地路径依次调用 Router、BF16 Shared、FP8 per-tensor Routed、Reduce。Shared 与 Routed 在数学上是并行分支，但当前 stream 上的发射次序和硬件实际重叠要由 trace 决定。所有 collective 都在链外，pack、scratch 分配和 warmup 在计时/Graph capture 外。</p><table><thead><tr><th>阶段</th><th>主要输入</th><th>输出合同</th></tr></thead><tbody><tr><td>Router</td><td>hidden、router weight、bias</td><td>当前 [T,8] IDs 与已归一化/缩放 weights</td></tr><tr><td>Shared BF16</td><td>hidden、TP-local shared weight</td><td>连续 [2,T,H] parent，两个core partial</td></tr><tr><td>Routed FP8</td><td>hidden、IDs、local expert weights</td><td>[T,8,H]，仅本地专家行有定义，未加 route weight</td></tr><tr><td>Reduce</td><td>partials、当前 IDs/weights、expert interval</td><td>完全有定义的 rank-local [T,H]</td></tr></tbody></table><p>这里“4”既可以指四类逻辑算子，也恰好是默认本地路径的四次 host launch；但这个等号是查源码得出的，不是通用事实。一个 <code>@triton.jit</code> helper 被内联调用不会单独产生 host launch；分阶段量化的另一模型 FFN 则可能有多次 launch。比较方案前先统一计数对象。</p>"
       },
       {
         "id": "sparse-abi",
@@ -379,6 +366,13 @@
         "url": "https://github.com/DarronTam/torch_zeus/blob/882bdf9be61303f826cc3eb3338c2c716f898909/sgl-kernel-zeus-triton/python/glm53_flash/moe/sgl_moe_reduce_sparse_fast.py",
         "note": "valid-row筛选、slot顺序、FP32累加与流水。",
         "kind": "源码"
+      },
+      {
+        "id": "moe-current-moe-four-kernel-contract",
+        "label": "2026-10-25 当前源码与历史版本对照",
+        "url": "evidence/moe-deployment-current.md#heads",
+        "note": "默认分支复核，不是本轮设备或E2E测试。",
+        "kind": "源码"
       }
     ],
     "takeaways": [
@@ -390,7 +384,7 @@
   },
   {
     "id": "moe-token-merge",
-    "part": "GLM5Next · FFN 实战",
+    "part": "GLM5Next300B · 真实部署",
     "order": 23,
     "title": "从 M1 到 M4：真实路由驱动的 token 合并",
     "subtitle": "PR #570 → #588：权重复用、归组代价、流水与可解释回退",
@@ -409,7 +403,7 @@
       {
         "id": "merge-meaning",
         "title": "1. “合并 token”没有把两个请求变成一个语义 token",
-        "html": "<p>这里的 merge 是执行层批处理。若 token 2、7、10、15 都命中同一专家，就把四行 hidden 组成 [4,H]，共同乘该专家权重；输出再按原 token 与 slot 写回。不同 token 的隐藏状态仍独立，不做求和、平均、丢弃或近似融合。</p><svg viewBox=\"0 0 920 250\" role=\"img\" aria-label=\"四个token命中相同专家，组成M4矩阵后写回原slot\"><g font-family=\"sans-serif\" text-anchor=\"middle\" font-size=\"18\"><g fill=\"#edf3f9\" stroke=\"#8faec5\"><rect x=\"15\" y=\"30\" width=\"180\" height=\"45\" rx=\"9\"/><rect x=\"15\" y=\"85\" width=\"180\" height=\"45\" rx=\"9\"/><rect x=\"15\" y=\"140\" width=\"180\" height=\"45\" rx=\"9\"/><rect x=\"15\" y=\"195\" width=\"180\" height=\"45\" rx=\"9\"/><rect x=\"305\" y=\"68\" width=\"260\" height=\"130\" rx=\"12\"/><rect x=\"665\" y=\"68\" width=\"235\" height=\"130\" rx=\"12\"/></g><g fill=\"#24465d\"><text x=\"105\" y=\"59\">token2 / slot0</text><text x=\"105\" y=\"114\">token7 / slot5</text><text x=\"105\" y=\"169\">token10 / slot2</text><text x=\"105\" y=\"224\">token15 / slot6</text><text x=\"435\" y=\"105\">同一 expert / 同一 owner</text><text x=\"435\" y=\"142\">M4 Gate / Up / Down</text><text x=\"435\" y=\"178\">共享权重访问</text><text x=\"782\" y=\"111\">恢复原 token/slot</text><text x=\"782\" y=\"149\">route weight 仍独立</text><text x=\"782\" y=\"180\">Reduce 顺序不变</text></g><g stroke=\"#6a8ca2\" stroke-width=\"2\" fill=\"none\"><path d=\"M195 53L305 100M195 108L305 120M195 163L305 140M195 218L305 160M565 133H665\"/></g></g></svg><p>同一个 token 若存在重复 expert slot，可以共用专家投影结果，再分别写回两个 slot；Reduce 仍按各自 route weight 加权。这要求保留 slot mask，不能简单去重 IDs 后丢掉其中一次贡献。正常模型 TopK 往往唯一，但接口鲁棒性与回归仍要测试重复 slot。</p>"
+        "html": "<aside class=\"callout\"><strong>版本边界：</strong>本章中的 PR #429/#570/#588、Issue #592 与性能表是各自冻结版本的历史案例。2026-10-25 已复核 torch_zeus 默认分支 3656952b 与 zeus_dev 05ee10f9；最新 Shared/Routed/Reduce 与 PR #588 head 逐字节相同，Router 新增可选物理 ID 映射。当前 caller 默认未启用该映射；未在本轮重跑旧性能或完整模型。<a href=\"evidence/moe-deployment-current.md#heads\">查看当前源码与历史实测的边界</a>。</aside><p>这里的 merge 是执行层批处理。若 token 2、7、10、15 都命中同一专家，就把四行 hidden 组成 [4,H]，共同乘该专家权重；输出再按原 token 与 slot 写回。不同 token 的隐藏状态仍独立，不做求和、平均、丢弃或近似融合。</p><svg viewBox=\"0 0 920 250\" role=\"img\" aria-label=\"四个token命中相同专家，组成M4矩阵后写回原slot\"><g font-family=\"sans-serif\" text-anchor=\"middle\" font-size=\"18\"><g fill=\"#edf3f9\" stroke=\"#8faec5\"><rect x=\"15\" y=\"30\" width=\"180\" height=\"45\" rx=\"9\"/><rect x=\"15\" y=\"85\" width=\"180\" height=\"45\" rx=\"9\"/><rect x=\"15\" y=\"140\" width=\"180\" height=\"45\" rx=\"9\"/><rect x=\"15\" y=\"195\" width=\"180\" height=\"45\" rx=\"9\"/><rect x=\"305\" y=\"68\" width=\"260\" height=\"130\" rx=\"12\"/><rect x=\"665\" y=\"68\" width=\"235\" height=\"130\" rx=\"12\"/></g><g fill=\"#24465d\"><text x=\"105\" y=\"59\">token2 / slot0</text><text x=\"105\" y=\"114\">token7 / slot5</text><text x=\"105\" y=\"169\">token10 / slot2</text><text x=\"105\" y=\"224\">token15 / slot6</text><text x=\"435\" y=\"105\">同一 expert / 同一 owner</text><text x=\"435\" y=\"142\">M4 Gate / Up / Down</text><text x=\"435\" y=\"178\">共享权重访问</text><text x=\"782\" y=\"111\">恢复原 token/slot</text><text x=\"782\" y=\"149\">route weight 仍独立</text><text x=\"782\" y=\"180\">Reduce 顺序不变</text></g><g stroke=\"#6a8ca2\" stroke-width=\"2\" fill=\"none\"><path d=\"M195 53L305 100M195 108L305 120M195 163L305 140M195 218L305 160M565 133H665\"/></g></g></svg><p>同一个 token 若存在重复 expert slot，可以共用专家投影结果，再分别写回两个 slot；Reduce 仍按各自 route weight 加权。这要求保留 slot mask，不能简单去重 IDs 后丢掉其中一次贡献。正常模型 TopK 往往唯一，但接口鲁棒性与回归仍要测试重复 slot。</p>"
       },
       {
         "id": "merge-model",
@@ -509,6 +503,13 @@
         "url": "https://github.com/DarronTam/torch_zeus/blob/882bdf9be61303f826cc3eb3338c2c716f898909/dev_docs/evaluations/moe_pr588_compiler_refresh_20261022/RETRY.md",
         "note": "程序等价和代表入口验证支持复用历史性能，不冒充全量重测。",
         "kind": "历史记录"
+      },
+      {
+        "id": "moe-current-moe-token-merge",
+        "label": "2026-10-25 当前源码与历史版本对照",
+        "url": "evidence/moe-deployment-current.md#heads",
+        "note": "默认分支复核，不是本轮设备或E2E测试。",
+        "kind": "源码"
       }
     ],
     "takeaways": [
@@ -520,7 +521,7 @@
   },
   {
     "id": "moe-quantization-and-592",
-    "part": "GLM5Next · FFN 实战",
+    "part": "GLM5Next300B · 真实部署",
     "order": 24,
     "title": "FP8、INT4 与一次 2.209% 误差定位",
     "subtitle": "数值面试的核心：找首次分歧，而不是先改阈值",
@@ -539,7 +540,7 @@
       {
         "id": "quantization-types",
         "title": "1. “用了 FP8”远远不够描述数值合同",
-        "html": "<p>量化至少要回答：编码格式是什么，scale 是 per-tensor、per-channel、per-group 还是 per-token，scale 自身用什么dtype，在哪里计算amax，零张量怎么处理，clamp在哪里，以及乘加累加与输出用何种精度。FP8 E4M3FN 是一种具体编码；一个“FP8 kernel”仍可能包含大量FP32累加、BF16中间值和额外scale处理。</p><div class=\"formula\">典型对称量化：q = cast_Q(clamp(x/s, qmin, qmax))；x̂ = s·q<br>per-tensor：整个矩阵一个s；per-channel：每个输出通道一个s<br>per-group：沿K分组；per-token：每行activation一个动态s</div><p>scale更细通常能适应局部动态范围，但需要更多scale存储、读取和算术。若scale来自完整行amax，融合/切片时必须保留完整量化域；不能把一个全行量化拆成每tile独立量化，却仍声称数值合同相同。</p><p>INT4与FP8也不能只按“4比8小一半”决定快慢。INT4权重还需分组scale、解码、对应硬件模式和布局；如果这些额外工作落在瓶颈VP或数据路径上，容量优势未必转换成时延优势。工程评估应分别报告权重体积、有效带宽、MAC模式、前后处理与模型误差。</p>"
+        "html": "<aside class=\"callout\"><strong>版本边界：</strong>本章中的 PR #429/#570/#588、Issue #592 与性能表是各自冻结版本的历史案例。2026-10-25 已复核 torch_zeus 默认分支 3656952b 与 zeus_dev 05ee10f9；最新 Shared/Routed/Reduce 与 PR #588 head 逐字节相同，Router 新增可选物理 ID 映射。当前 caller 默认未启用该映射；未在本轮重跑旧性能或完整模型。<a href=\"evidence/moe-deployment-current.md#heads\">查看当前源码与历史实测的边界</a>。</aside><p>量化至少要回答：编码格式是什么，scale 是 per-tensor、per-channel、per-group 还是 per-token，scale 自身用什么dtype，在哪里计算amax，零张量怎么处理，clamp在哪里，以及乘加累加与输出用何种精度。FP8 E4M3FN 是一种具体编码；一个“FP8 kernel”仍可能包含大量FP32累加、BF16中间值和额外scale处理。</p><div class=\"formula\">典型对称量化：q = cast_Q(clamp(x/s, qmin, qmax))；x̂ = s·q<br>per-tensor：整个矩阵一个s；per-channel：每个输出通道一个s<br>per-group：沿K分组；per-token：每行activation一个动态s</div><p>scale更细通常能适应局部动态范围，但需要更多scale存储、读取和算术。若scale来自完整行amax，融合/切片时必须保留完整量化域；不能把一个全行量化拆成每tile独立量化，却仍声称数值合同相同。</p><p>INT4与FP8也不能只按“4比8小一半”决定快慢。INT4权重还需分组scale、解码、对应硬件模式和布局；如果这些额外工作落在瓶颈VP或数据路径上，容量优势未必转换成时延优势。工程评估应分别报告权重体积、有效带宽、MAC模式、前后处理与模型误差。</p>"
       },
       {
         "id": "glm-quant-path",
@@ -639,6 +640,13 @@
         "url": "https://github.com/DarronTam/torch_zeus/pull/528",
         "note": "团队同事siahuat0727的已合入工作；不计入本人贡献。",
         "kind": "PR"
+      },
+      {
+        "id": "moe-current-moe-quantization-and-592",
+        "label": "2026-10-25 当前源码与历史版本对照",
+        "url": "evidence/moe-deployment-current.md#heads",
+        "note": "默认分支复核，不是本轮设备或E2E测试。",
+        "kind": "源码"
       }
     ],
     "takeaways": [
@@ -650,7 +658,7 @@
   },
   {
     "id": "moe-evidence-and-interview",
-    "part": "GLM5Next · FFN 实战",
+    "part": "GLM5Next300B · 真实部署",
     "order": 25,
     "title": "把优化结果组织成资深工程师的面试证据",
     "subtitle": "真实输入、冻结版本、聚合公式、CUDA对齐与可追问的项目叙述",
@@ -669,7 +677,7 @@
       {
         "id": "input-admission",
         "title": "1. 真实业务输入怎样成为可信 benchmark",
-        "html": "<p>PR #572 补齐T24/4K、layer3..44的真实hidden捕获，源端是CUDA TP4/EP1/world4，目标回放是Zeus TP4/EP4/world16。源有6个batch，每个batch42层，每层4个TP文件，因此1008个源文件；目标是6×42×16=4032个待回放case。这不是4032个独立请求，更不是4032次独立业务实验。</p><p>该PR作者是QiyiJiang，负责benchmark入口与数据准备；本人优化使用这些输入作为配套证据，应明确团队贡献。PR本身只做语法、diff和无设备plan检查，不能把“支持4032”写成“已完成4032性能与Graph”。后续PR588自己的4032验收记录要按自己的矩阵身份读取。</p><p>admission应核对冻结请求、真实tensor shape/dtype、源TP一致性、请求行序、层号、首个采样token、权重revision及选中专家原张量哈希。若只有hidden而没有捕获到完整目标MoE输出，必须用独立CPU reference并明确缺少原框架golden的范围。</p><p>CLI <code>--tokens 6</code> 在该benchmark表示6 req/card，对应实际 [24,4096]。文档和图表优先写T24，再附业务标签。文本训练/验证分区相关时，也不能仅凭batch编号不同就称独立holdout。<a href=\"https://github.com/DarronTam/torch_zeus/pull/572\">PR #572</a> 明确保留了这些边界。</p>"
+        "html": "<aside class=\"callout\"><strong>版本边界：</strong>本章中的 PR #429/#570/#588、Issue #592 与性能表是各自冻结版本的历史案例。2026-10-25 已复核 torch_zeus 默认分支 3656952b 与 zeus_dev 05ee10f9；最新 Shared/Routed/Reduce 与 PR #588 head 逐字节相同，Router 新增可选物理 ID 映射。当前 caller 默认未启用该映射；未在本轮重跑旧性能或完整模型。<a href=\"evidence/moe-deployment-current.md#heads\">查看当前源码与历史实测的边界</a>。</aside><p>PR #572 补齐T24/4K、layer3..44的真实hidden捕获，源端是CUDA TP4/EP1/world4，目标回放是Zeus TP4/EP4/world16。源有6个batch，每个batch42层，每层4个TP文件，因此1008个源文件；目标是6×42×16=4032个待回放case。这不是4032个独立请求，更不是4032次独立业务实验。</p><p>该PR作者是QiyiJiang，负责benchmark入口与数据准备；本人优化使用这些输入作为配套证据，应明确团队贡献。PR本身只做语法、diff和无设备plan检查，不能把“支持4032”写成“已完成4032性能与Graph”。后续PR588自己的4032验收记录要按自己的矩阵身份读取。</p><p>admission应核对冻结请求、真实tensor shape/dtype、源TP一致性、请求行序、层号、首个采样token、权重revision及选中专家原张量哈希。若只有hidden而没有捕获到完整目标MoE输出，必须用独立CPU reference并明确缺少原框架golden的范围。</p><p>CLI <code>--tokens 6</code> 在该benchmark表示6 req/card，对应实际 [24,4096]。文档和图表优先写T24，再附业务标签。文本训练/验证分区相关时，也不能仅凭batch编号不同就称独立holdout。<a href=\"https://github.com/DarronTam/torch_zeus/pull/572\">PR #572</a> 明确保留了这些边界。</p>"
       },
       {
         "id": "aggregation-math",
@@ -769,6 +777,13 @@
         "url": "https://github.com/DarronTam/torch_zeus/blob/882bdf9be61303f826cc3eb3338c2c716f898909/dev_docs/evaluations/moe_pr588_compiler_refresh_20261022/RETRY.md",
         "note": "16规格、15 JIT程序、6入口与1380 MLIR的证据分工。",
         "kind": "历史记录"
+      },
+      {
+        "id": "moe-current-moe-evidence-and-interview",
+        "label": "2026-10-25 当前源码与历史版本对照",
+        "url": "evidence/moe-deployment-current.md#heads",
+        "note": "默认分支复核，不是本轮设备或E2E测试。",
+        "kind": "源码"
       }
     ],
     "takeaways": [

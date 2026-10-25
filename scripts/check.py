@@ -50,6 +50,9 @@ for m in modules.values():
     assert len({g['id'] for g in m['groups']}) == len(m['groups']), m['id']
     for g in m['groups']:
         assert g['chapters'] and re.fullmatch(r'[a-z0-9-]+', g['id']), g
+for m in modules.values():
+    for step in m.get('learningPath', []):
+        assert step['chapter'] in chapters and step['title'] and step['description'], step
 for c in companies:
     assert set(c['reports']) <= report_ids and set(c['chapters']) <= set(chapters), c
 for r in reports:

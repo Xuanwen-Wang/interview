@@ -8,28 +8,35 @@
 
 ## 内容与导航
 
-当前使用 **8 个知识域 → 16 个专题 → 53 章** 的目录结构。侧边栏只展开当前专题；全站目录支持主题、标题/标签与阅读状态筛选。已有章节链接、笔记和学习记录保留。
+当前使用 **8 个知识域 → 19 个专题 → 63 章** 的目录结构。侧边栏只展开当前专题；全站目录支持主题、标题/标签与阅读状态筛选。已有章节链接、笔记和学习记录保留。
 
 | 知识域 | 内容 |
 | --- | --- |
 | 开始与路线 | 岗位能力、项目叙述、工程证据 |
-| 算法与数据流 | Transformer、GQA/KV、FlashAttention、MLA/DSA、KDA，以及真实算子形状/字节/状态推导 |
-| MoE全栈实战 | EP4×TP4部署、Router/Shared/Routed/Reduce、Sigmoid/TopK/GEMM、token merge、通信、overlap、NVIDIA对照范围 |
+| 算法与数据流 | Qwen3-8B基线 → 内部GLM5Next全貌；Attention与FFN两条演进线，数学、shape、状态与算子数据流 |
+| GLM5Next 300B真实部署 | 完整模型与16rank → baseline/FLAT16通信 → KDA/DSA/MoE → sigmoid/TopK/GEMM/加权；版本兼容、overlap与性能证据 |
 | Triton · MLIR · LLVM | AST/TTIR/布局、Op/Region/Dialect、PassManager与分析失效、Rewrite/Conversion、LLVM中后端 |
 | 518硬件与后端 | 真实pass、PE/MAC、minitile、AL1/WL1、hub/credit、资源事件、InjectSync阶梯/循环/验证边界 |
 | 性能与推理系统 | Roofline、并发与容量、服务与运行时 |
 | 公司与面经 | 12个公司或公司组、28条来源，区分官方JD、个人面经、官方作业与第三方材料 |
 | Coding实作 | 算法、图/数据流、kernel、玩具pass；原创Python/C++参考与测试 |
 
-当前 **384 小节、306 道追问、72 张正文 SVG**。附全文搜索、图示放大、3个通用交互实验和2个PE交互演示、术语表、阅读进度及本地笔记导入导出。SVG、样式和内容均内嵌；网页不依赖CDN、外部字体或第三方脚本。
+当前 **457 小节、348 道追问、106 张正文 SVG**。附全文搜索、图示放大、3个通用交互实验和2个PE交互演示、术语表、阅读进度及本地笔记导入导出。SVG、样式和内容均内嵌；网页不依赖CDN、外部字体或第三方脚本。
 
 - [PE 完整长文](https://xuanwen-wang.github.io/interview/pe.html)：一个 HTML，沿整体边界与接口 → 8×8 阵列 → ALU/MAC → 累加与写回 → minitile 连续展开；20节、18张图、2个交互。
+- [模型到部署重构审查](evidence/review-model-deployment.md)：算法与部署分层、固定版本、交叉审查和网页验收。
 - [PE 单篇重构审查](evidence/review-pe-continuous.md)：旧链接、笔记迁移、连续阅读与离线验收。
 - [此前 PE 微架构审查](evidence/review-pe-v3.md)：原六章的数据路径与 RTL 证据。
 - [第二版审查与验收](evidence/review-v2.md)
 - [第一版审查与验收](evidence/review-and-validation.md)
 - [扩展指南](docs/authoring.md)：未来添加中端Pass、模型部署、新公司或Coding专题的方法。
 - [Coding参考实现](practice/README.md)：CPU测试范围及未运行CUDA的明确边界。
+
+## 模型到部署的阅读顺序
+
+先读[算法与数据流](https://xuanwen-wang.github.io/interview/#module/algorithms)：Qwen3-8B → 内部GLM5Next结构 → Attention/FFN演进与算子。再读[GLM5Next 300B真实部署](https://xuanwen-wang.github.io/interview/#module/moe)：完整部署地图 → token/partial所有权与通信 → Attention阶段及MoE四kernel → 内部数值与优化。
+
+2026-10-25复核发现：模型开发wrapper仍请求KDA v3.1，而最新torch_zeus默认分支只接受v4家族。页面明确保留这个集成断点；没有将两仓各自最新代码包装成已联调通过的部署。
 
 ## 本地使用
 

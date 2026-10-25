@@ -1,0 +1,417 @@
+[
+  {
+    "id": "dsa-kernel-walkthrough",
+    "title": "DSA 内部实现：CP owner、三条 wire 与 P1/P2/P3",
+    "part": "GLM5Next 300B 真实部署",
+    "order": 18.2,
+    "subtitle": "把真实分布式调用拆到内核的数学、布局和完成边界",
+    "minutes": 48,
+    "level": "深入",
+    "tags": [
+      "GLM5Next300B",
+      "DSA",
+      "CP4",
+      "wire ABI",
+      "TopK",
+      "GDG"
+    ],
+    "lead": "以 2026-10-25 核对的两个默认分支为坐标：模型开发 runner 提供 CP4×DP4 的调用与通信，算子库提供当前 GDG 三阶段实现。以下是固定源码审读和独立字节推导；没有运行本轮 kernel，也不把开发回归等同于生产整模型接通。",
+    "sections": [
+      {
+        "id": "snapshot-path",
+        "title": "01 / 先画真实入口：当前默认 GDG，实验 LDG 另有入口",
+        "html": "<p>冻结 torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7 与 zeus_dev@05ee10f9cc25d19fca0a144ae095c79b3a888976。前者默认命名空间导出 dsa_p01_topk1、dsa_topk2_p2、dsa_p3；后者 RankLocalDSA.forward_zeus 把它们串成三次计算与三次 collective。prepare 负责 pack、page table、工作区、wire 和 collective 签名预热；forward 使用已准备的固定地址。</p><pre><code>RankLocalDSA.forward_zeus     # 调用顺序的教学摘述，非运行日志\n  P1(hidden, schedule, KV/index state)\n  CP4 all_gather(query + candidates/raw scores)\n  P2(gathered wire, local latent pool)\n  CP4 all_gather(partial O + LSE)\n  P3(gathered partials, V/O weights)\n  world16 all_gather(flat output slice)</code></pre><p>同目录虽出现 cp8_ldg、request_ldg、dual_ldg 和 shared normalization 等文件，默认 __init__ 不自动选择这些实现。“CP8”文件名不能被拿来把当前 CP4×DP4 拓扑改成 CP8。当前模型侧证据是 model_state_dev 下的模块回归，使用随机权重、状态和 CPU 参考；算子库还保留框架使用的增量接口。它们不是同一条已经验证过的生产路径。</p><p><a href=\"https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/__init__.py#L1-L33\">默认 GDG 三阶段导出，LDG 独立显式导入 ↗</a></p><p><a href=\"https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_dsa_deepfused_cp4_dp4.py#L250-L336\">三计算/三通信，wire 与最终输出视图 ↗</a></p>"
+      },
+      {
+        "id": "owners",
+        "title": "02 / 两种 owner 同时存在：查询按 head，历史按四 token pool",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 920 370\" role=\"img\" aria-label=\"同一份 X，不同的 query head 与历史 owner\"><rect width=\"920\" height=\"370\" rx=\"16\" fill=\"#edf2e8\"/><text x=\"24\" y=\"33\" font-size=\"20\" fill=\"#203f35\" text-anchor=\"start\" font-family=\"sans-serif\">同一份 X，不同的 query head 与历史 owner</text><rect x=\"24\" y=\"68\" width=\"204\" height=\"110\" rx=\"10\" fill=\"#315b4b\"/><text x=\"126\" y=\"93\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">CP0 / rank 4</text><text x=\"126\" y=\"116\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">Q heads 0–15</text><text x=\"126\" y=\"139\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">pool ID % 4 = 0</text><text x=\"126\" y=\"162\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">token 0–3,16–19…</text><rect x=\"248\" y=\"68\" width=\"204\" height=\"110\" rx=\"10\" fill=\"#315b4b\"/><text x=\"350\" y=\"93\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">CP1 / rank 5</text><text x=\"350\" y=\"116\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">Q heads 16–31</text><text x=\"350\" y=\"139\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">pool ID % 4 = 1</text><text x=\"350\" y=\"162\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">每 16 token 取 4 个</text><rect x=\"472\" y=\"68\" width=\"204\" height=\"110\" rx=\"10\" fill=\"#315b4b\"/><text x=\"574\" y=\"93\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">CP2 / rank 6</text><text x=\"574\" y=\"116\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">Q heads 32–47</text><text x=\"574\" y=\"139\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">pool ID % 4 = 2</text><text x=\"574\" y=\"162\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">每 16 token 取 4 个</text><rect x=\"696\" y=\"68\" width=\"204\" height=\"110\" rx=\"10\" fill=\"#315b4b\"/><text x=\"798\" y=\"93\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">CP3 / rank 7</text><text x=\"798\" y=\"116\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">Q heads 48–63</text><text x=\"798\" y=\"139\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">pool ID % 4 = 3</text><text x=\"798\" y=\"162\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">每 16 token 取 4 个</text><text x=\"24\" y=\"215\" font-size=\"17\" fill=\"#203f35\" text-anchor=\"start\" font-family=\"sans-serif\">例：DP1 = ranks [4,5,6,7]，四者共同处理同一批 C 个请求；其他 DP 处理其他请求。</text><rect x=\"24\" y=\"244\" width=\"872\" height=\"80\" rx=\"10\" fill=\"#526d7a\"/><text x=\"460\" y=\"269\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">P1: head 分片 → AG4 聚齐查询；P2: 历史分片 → AG4 聚齐 O/LSE</text><text x=\"460\" y=\"292\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">P3: CP-owned flat output → AG16 收集 4 个 DP 的全部 hidden</text></svg><figcaption>原创逻辑拓扑；rank/CP/DP 来自开发 runner，未推断物理封装或生产调度。</figcaption></figure><p>设全局 rank r=4d+c，d∈[0,3] 是 DP，c∈[0,3] 是 CP。DP 之间是不同请求集合；同一 DP 的四个 rank 具有相同 hidden 输入。每个 CP 的历史归属按长度4的 pool 轮转：pool ID j 的 owner 为 j mod 4，pool 内 token 4j…4j+3 留在同一个 CP。单 token轮转 t mod 4 会破坏连续四行读取，是不同布局。</p><div class=\"formula\">owner(t)=⌊t/4⌋ mod 4<br>local_token_count(L,c)=4⌊L/16⌋+min(4,max(0,L mod 16−4c))</div><p>例如 L=19，四个 CP 分别持有7、4、4、4个token；新增 token16、17、18属于 CP0 的未满pool。P1 query 投影另按 head 分片：每个 CP 16个主 attention heads，其两个 core 各算8个；indexer的32-head投影权重在CP之间复制。这里不能用“CP不切头”这一抽象定义否认工程上附带的 query 投影切分，也不能误称主attention变成16 heads。AG4之后 P2仍处理64 heads。</p><p>每个 DP 预留共享的1,048,576-token预算，四CP平分主latent容量；不是每个请求各有一份1M池。每CP可用2048个128-token页，另有guard页。请求的page-rounded预留和活跃历史必须同时满足池容量；页面物理顺序可打乱，request ID和当前batch lane不是同一身份。</p><p><a href=\"https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_dsa_deepfused_cp4_dp4.py#L145-L244\">四 token pool 的 CP 轮转与物理页 ↗</a></p><p><a href=\"https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_proj_indexer_topk1.py#L5272-L5323\">每 CP 16 个 query heads、每 core 8 heads 与复制 indexer 权重 ↗</a></p>"
+      },
+      {
+        "id": "p1-projection",
+        "title": "03 / P1：大投影、两个 cache 与小 TopK，不能统称一次 GEMM",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 920 464\" role=\"img\" aria-label=\"P1 内部两条语义支路，最终共用一次 launch\"><rect width=\"920\" height=\"464\" rx=\"16\" fill=\"#edf2e8\"/><text x=\"24\" y=\"33\" font-size=\"20\" fill=\"#203f35\" text-anchor=\"start\" font-family=\"sans-serif\">P1 内部两条语义支路，最终共用一次 launch</text><rect x=\"150\" y=\"58\" width=\"620\" height=\"68\" rx=\"10\" fill=\"#315b4b\"/><text x=\"460\" y=\"83\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">X[C,4096] → pack 合并投影</text><text x=\"460\" y=\"106\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">qA1536 / latent512 / index gate32 / key128+gate128</text><rect x=\"150\" y=\"149\" width=\"620\" height=\"68\" rx=\"10\" fill=\"#315b4b\"/><text x=\"460\" y=\"174\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">qA RMSNorm → 本地16×256 query → absorb到16×512</text><text x=\"460\" y=\"197\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">并行语义支路：latent RMSNorm → FP8[512]+FP32 scales[4]</text><rect x=\"150\" y=\"240\" width=\"620\" height=\"68\" rx=\"10\" fill=\"#315b4b\"/><text x=\"460\" y=\"265\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">index query32×128 + pooled index key128</text><text x=\"460\" y=\"288\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">维护4-token tail，完整pool发布index；扫描本CP历史池</text><rect x=\"150\" y=\"331\" width=\"620\" height=\"68\" rx=\"10\" fill=\"#315b4b\"/><text x=\"460\" y=\"356\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">候选协议 / raw-score协议 → 固定 wire</text><text x=\"460\" y=\"379\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">本地 query BF16 + 固定宽度 score/ID 区；随后 CP AG4</text><path d=\"M460 126L460 149\" stroke=\"#628274\" stroke-width=\"2.5\" fill=\"none\"/><circle cx=\"460\" cy=\"149\" r=\"3.4\" fill=\"#628274\"/><path d=\"M460 217L460 240\" stroke=\"#628274\" stroke-width=\"2.5\" fill=\"none\"/><circle cx=\"460\" cy=\"240\" r=\"3.4\" fill=\"#628274\"/><path d=\"M460 308L460 331\" stroke=\"#628274\" stroke-width=\"2.5\" fill=\"none\"/><circle cx=\"460\" cy=\"331\" r=\"3.4\" fill=\"#628274\"/></svg><figcaption>原创依赖概览；分支只是语义并列，不承诺具体指令并行或本轮 trace。</figcaption></figure><p>主查询链是 X→qA[1536]→RMSNorm→q[16,256]→q̃[16,512]。对应全局64 heads中的本CP分片；q̃的512维来自把每head的 Wk 吸收到query侧。注意主attention的缩放仍按原256维语义取1/16，不改成1/√512。投影输出及RMSNorm后有显式BF16端点；kernel合并这些算子并不授权删除中间舍入。</p><p>同一次合并输入投影还得到 latent[512]、32维 index gate、128维新index key以及128维pool gate。latent归一化后按4组×128取绝对值最大值，形成FP8 body和4个FP32 scale，并写到当前物理slot。主latent的528-byte行与index key的128维表示不是同一个cache。indexer对池化key做廉价打分，维护未满4-token组的tail，完整组才发布到index池。</p><p>源码中的 index scale 还存在幂次/UE8M0约束；不能把主latent的任意FP32 scale布局照搬过去。缓存更新不是一个可随意删除的副作用：当前token可能立刻成为P2的live tail，完整组的key也可能参加本步候选。追性能应分别看 PE投影、VP归一化/量化、index读取、TopK计数/收集和cache发布，而不是仅计算一个矩阵的FLOPs。</p><p><a href=\"https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_proj_indexer_topk1.py#L735-L928\">P1 RMSNorm、BF16 查询、latent 量化及 query absorb ↗</a></p><p><a href=\"https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_proj_indexer_topk1.py#L5272-L5323\">每 CP 16 个 query heads、每 core 8 heads 与复制 indexer 权重 ↗</a></p>"
+      },
+      {
+        "id": "wire-selection",
+        "title": "04 / 第一条 wire：candidate 与 raw 两种协议，容量不等于有效数",
+        "html": "<p>固定缓冲由 query 区和score区组成。记 I 为 runner 的 input_rows，P 为 P1内部容量，R为raw_score_capacity；legacy B1是I=1但P=2，其余固定bucket通常P=I。query区 P×16×512 个BF16；score区 P×R 个FP32。candidate模式仅需前512个score及随后512个ID，剩余位置仍占wire容量；raw模式将一段有效score前缀直接交给P2，候选收集工作后移。</p><div class=\"formula\">W₁ = P·(16·512·2 + R·4) bytes<br>R=4096 → 32 KiB/P；R=8192 → 48 KiB/P</div><p>R不是仅由调用参数决定：kc≤8192的legacy准备路径保持4096 pitch；large-KC路径才采用传入的8192。bucket模式固定KC65536。prepare/state.update结合history、dense-prefix reservation与所有CP的extents决定raw模式；短历史、长历史、混合请求可能走不同分支，但capture后的wire地址与长度不变。候选计数、runtime lengths和request映射不能由wire总字节数推断。</p><table><thead><tr><th>准备形态</th><th>I / P / R</th><th>W₁ 单rank输入</th><th>AG4输出缓冲</th></tr></thead><tbody><tr><td>legacy B1</td><td>1 / 2 / 4096</td><td>64 KiB</td><td>256 KiB</td></tr><tr><td>legacy B4，KC6272</td><td>4 / 4 / 4096</td><td>128 KiB</td><td>512 KiB</td></tr><tr><td>legacy B6，KC6272</td><td>6 / 6 / 4096</td><td>192 KiB</td><td>768 KiB</td></tr><tr><td>bucket B6，KC65536</td><td>6 / 6 / 8192</td><td>288 KiB</td><td>1152 KiB</td></tr><tr><td>bucket B8，KC65536</td><td>8 / 8 / 8192</td><td>384 KiB</td><td>1536 KiB</td></tr></tbody></table><p>这些是源码分配和传入collective的payload，包含本rank自己的份额；AG4输出4W₁不等于链路发送4W₁。链路量还依赖具体collective算法、转发与协议。uint8原始wire被view成BF16仅作传输载体，FP32 score与ID的位模式不发生cast。</p><p><a href=\"https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_proj_indexer_topk1.py#L6039-L6102\">metadata 更新、有效前缀、raw 模式判定 ↗</a></p><p><a href=\"https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_proj_indexer_topk1.py#L6123-L6311\">legacy B1、large KC 与普通 bucket 的 P1 wire 几何 ↗</a></p>"
+      },
+      {
+        "id": "p2-selection",
+        "title": "05 / P2前半：全局选择证明与本地slot，不靠“分数大概为正”",
+        "html": "<p>TopK2面对四份wire，目标是至多512个完整pool，按全局score与确定性tie-break选集合，再按pool ID mod 4过滤本CP owner。完整pool展开后至多2048个token；全局历史最后1–3个未满组token另走live tail。n是某CP实际获得的pool数，不固定为128；极端分布可能把几乎所有赢家放在一个CP，负载自然不均衡。</p><p>candidate模式的覆盖证明要求每个局部候选集足够覆盖全局目标：若某元素在本片排第513或更后，单是本片就有512个不劣元素，它不可能是全局Top512的必须项。raw模式则直接比较完整有效score前缀。两者的正确性前提不同，不能只看最终输出长度相同。</p><p>当前P2的正分支有明确充分性检查：在适用的B6/B8、RAW8192分支，先统计CP0非负score；若这一子集已≥512，能证明全局Top512无需落入负分区，才进入positive selector。失败则回退完整有符号路径。窄搜索和bitmap cache是显式opt-in，默认runner没有启用它们；不能把实验report里的优化名直接说成默认行为。</p><p>选择结果不是可直接当地址的全局token ID。完整pool的selected_slots给出同一packed latent pool内四行的物理起点；tail使用显式cp_local_pages表。重映射页时，TopK slot元数据与主cache页面必须一起更新。否则ID集合完全正确，也能读错token；CPU oracle因此单独检查集合与ID→slot映射。</p><p><a href=\"https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_topk2_gather_attn.py#L1584-L1714\">TopK2 raw/candidate 分支、非负充分性证明、B1 双核分工 ↗</a></p><p><a href=\"https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_topk2_gather_attn.py#L2292-L2556\">direct wire strides、528-byte pool、compact banks 与 opt-in 门禁 ↗</a></p><p><a href=\"https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_dsa_deepfused_cp4_dp4.py#L413-L476\">独立 CP 候选集合、slot、P2 O/LSE 与最终拼接参考 ↗</a></p>"
+      },
+      {
+        "id": "p2-attention",
+        "title": "06 / P2后半：把随机访问变成 QK/PV tile，再携带归一化质量",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 920 464\" role=\"img\" aria-label=\"P2 的不规则读取与规则 PE 计算\"><rect width=\"920\" height=\"464\" rx=\"16\" fill=\"#edf2e8\"/><text x=\"24\" y=\"33\" font-size=\"20\" fill=\"#203f35\" text-anchor=\"start\" font-family=\"sans-serif\">P2 的不规则读取与规则 PE 计算</text><rect x=\"150\" y=\"58\" width=\"620\" height=\"68\" rx=\"10\" fill=\"#315b4b\"/><text x=\"460\" y=\"83\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">TopK2 → 本 CP 的 n 个完整 pool + live tail</text><text x=\"460\" y=\"106\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">1 pool = 连续4 token；物理slot元数据必须匹配主latent池</text><rect x=\"150\" y=\"149\" width=\"620\" height=\"68\" rx=\"10\" fill=\"#315b4b\"/><text x=\"460\" y=\"174\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">按128 token一组搬运：32个pool起点</text><text x=\"460\" y=\"197\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">packed row528B → FP8 body / 4个FP32 scales → K与V工作bank</text><rect x=\"150\" y=\"240\" width=\"620\" height=\"68\" rx=\"10\" fill=\"#315b4b\"/><text x=\"460\" y=\"265\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">Q[64,512] × Kᵀ → 局部稳定softmax → P × V</text><text x=\"460\" y=\"288\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">B1时两core各32heads；一般多请求路径按token分工</text><rect x=\"150\" y=\"331\" width=\"620\" height=\"68\" rx=\"10\" fill=\"#315b4b\"/><text x=\"460\" y=\"356\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">O[C,64,512] BF16 + LSE[C,64] FP32</text><text x=\"460\" y=\"379\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">O区后4096B承载LSE，CP AG4之后才能全局归一化</text><path d=\"M460 126L460 149\" stroke=\"#628274\" stroke-width=\"2.5\" fill=\"none\"/><circle cx=\"460\" cy=\"149\" r=\"3.4\" fill=\"#628274\"/><path d=\"M460 217L460 240\" stroke=\"#628274\" stroke-width=\"2.5\" fill=\"none\"/><circle cx=\"460\" cy=\"240\" r=\"3.4\" fill=\"#628274\"/><path d=\"M460 308L460 331\" stroke=\"#628274\" stroke-width=\"2.5\" fill=\"none\"/><circle cx=\"460\" cy=\"331\" r=\"3.4\" fill=\"#628274\"/></svg><figcaption>原创机制图；640-row resident helper与256-row streaming路径按guard选择，图不意味着所有输入使用同一tile。</figcaption></figure><p>packed row中的512个FP8数要配四个FP32 scale恢复latent。当前compact workspace只分配两套复用bank，而不是按batch给每请求分配一套K/V；适用的短路径可驻留≤640行，长路径使用256行streaming tile。128行gather对应32个四token起点，减少索引数量，但仍需处理页表、guard与无效槽。</p><p>调度需要区分token与head：B1或明确single-active specialization让两个core各处理32 heads，selection发布后有严格barrier；一般多请求路径按token分给core，各自处理64 heads。P2 query是第一条wire的直接strided视图，跨CP的head片段之间隔着wire的score区，因此不能把底层buffer直接当一个密集[C,64,512]数组。</p><div class=\"formula\">Oᶜₕ = Σⱼ∈local_selected softmax(sₕⱼ)·cⱼ<br>LSEᶜₕ = log Σⱼ∈local_selected exp(sₕⱼ)，sₕⱼ=q̃ₕ·cⱼ/16</div><p>空分片必须贡献O=0、LSE=−∞。源码对无效batch lane清理O、LSE和计数，保证“满batch→部分→空”的Graph replay不复用旧有效数据。第二条wire W₂=I×64×512×2+4096 bytes；其中I×64×4字节LSE位于O后，余量是固定页对齐。I=6时W₂=397312 bytes=388KiB，AG4输出1552KiB。把LSE数值转BF16会破坏语义；实现只对原始字节作BF16 view。</p><p><a href=\"https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_topk2_gather_attn.py#L13-L449\">640-row helper、128-row gather、QK/PV、online softmax ↗</a></p><p><a href=\"https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_topk2_gather_attn.py#L2292-L2556\">direct wire strides、528-byte pool、compact banks 与 opt-in 门禁 ↗</a></p><p><a href=\"https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_dsa_deepfused_cp4_dp4.py#L250-L336\">三计算/三通信，wire 与最终输出视图 ↗</a></p>"
+      },
+      {
+        "id": "p3-ownership",
+        "title": "07 / P3：先合并 softmax，再投影；最后发送的是 flat 区间",
+        "html": "<div class=\"formula\">mₕ=max_c LSEᶜₕ；wᶜₕ=exp(LSEᶜₕ−mₕ)/Σᵣexp(LSEʳₕ−mₕ)<br>Oₕ=Σ_c wᶜₕOᶜₕ；Vₕ=OₕWv,ₕᵀ；Y=concat(Vₕ)Woᵀ</div><p>不能直接平均四份O：不同CP的分母质量不同。P3先使用LSE恢复权重，再做每head512→256的V投影；两个core分担64个head，并把互不重叠的结果写入共享MID。最终O投影需要完整16384维head拼接，因此存在核间发布barrier。把它删掉会让某core提前消费另一半旧MID；“两个core写不同位置”只能证明无WAW，不能证明消费安全。</p><figure class=\"diagram\"><svg viewBox=\"0 0 920 330\" role=\"img\" aria-label=\"C=6：P3 每个 CP 拥有 6144 个连续元素\"><rect width=\"920\" height=\"330\" rx=\"16\" fill=\"#edf2e8\"/><text x=\"24\" y=\"33\" font-size=\"20\" fill=\"#203f35\" text-anchor=\"start\" font-family=\"sans-serif\">C=6：P3 每个 CP 拥有 6144 个连续元素</text><rect x=\"70\" y=\"76\" width=\"130\" height=\"55\" fill=\"#e0e6d2\" stroke=\"#839a87\"/><text x=\"135\" y=\"110\" font-size=\"18\" fill=\"#203f35\" text-anchor=\"middle\" font-family=\"sans-serif\">token 0</text><rect x=\"206\" y=\"76\" width=\"130\" height=\"55\" fill=\"#e0e6d2\" stroke=\"#839a87\"/><text x=\"271\" y=\"110\" font-size=\"18\" fill=\"#203f35\" text-anchor=\"middle\" font-family=\"sans-serif\">token 1</text><rect x=\"342\" y=\"76\" width=\"130\" height=\"55\" fill=\"#e0e6d2\" stroke=\"#839a87\"/><text x=\"407\" y=\"110\" font-size=\"18\" fill=\"#203f35\" text-anchor=\"middle\" font-family=\"sans-serif\">token 2</text><rect x=\"478\" y=\"76\" width=\"130\" height=\"55\" fill=\"#e0e6d2\" stroke=\"#839a87\"/><text x=\"543\" y=\"110\" font-size=\"18\" fill=\"#203f35\" text-anchor=\"middle\" font-family=\"sans-serif\">token 3</text><rect x=\"614\" y=\"76\" width=\"130\" height=\"55\" fill=\"#e0e6d2\" stroke=\"#839a87\"/><text x=\"679\" y=\"110\" font-size=\"18\" fill=\"#203f35\" text-anchor=\"middle\" font-family=\"sans-serif\">token 4</text><rect x=\"750\" y=\"76\" width=\"130\" height=\"55\" fill=\"#e0e6d2\" stroke=\"#839a87\"/><text x=\"815\" y=\"110\" font-size=\"18\" fill=\"#203f35\" text-anchor=\"middle\" font-family=\"sans-serif\">token 5</text><rect x=\"70\" y=\"150\" width=\"198\" height=\"55\" rx=\"7\" fill=\"#315b4b\"/><text x=\"169\" y=\"184\" font-size=\"16\" fill=\"#fff\" text-anchor=\"middle\" font-family=\"sans-serif\">CP0：1.5 token</text><rect x=\"274\" y=\"150\" width=\"198\" height=\"55\" rx=\"7\" fill=\"#526d7a\"/><text x=\"373\" y=\"184\" font-size=\"16\" fill=\"#fff\" text-anchor=\"middle\" font-family=\"sans-serif\">CP1：1.5 token</text><rect x=\"478\" y=\"150\" width=\"198\" height=\"55\" rx=\"7\" fill=\"#80674a\"/><text x=\"577\" y=\"184\" font-size=\"16\" fill=\"#fff\" text-anchor=\"middle\" font-family=\"sans-serif\">CP2：1.5 token</text><rect x=\"682\" y=\"150\" width=\"198\" height=\"55\" rx=\"7\" fill=\"#675e7e\"/><text x=\"781\" y=\"184\" font-size=\"16\" fill=\"#fff\" text-anchor=\"middle\" font-family=\"sans-serif\">CP3：1.5 token</text><text x=\"70\" y=\"242\" font-size=\"18\" fill=\"#203f35\" text-anchor=\"start\" font-family=\"sans-serif\">CP0 → t0 + t1前半；CP1 → t1后半 + t2；CP2/3 同理。</text><text x=\"70\" y=\"277\" font-size=\"17\" fill=\"#203f35\" text-anchor=\"start\" font-family=\"sans-serif\">本地 [6,1024] 是发送缓冲的形状，不是每个 token 固定取 1024 列。</text></svg><figcaption>原创按 flatten 索引画的所有权示意，横向不是时间轴；每个 token 4096 个 BF16 元素。</figcaption></figure><p>每rank发送2I KiB的BF16片段，world16收集后总形状[4,I,4096]。I=6时本rank12KiB，最终192KiB；I=4时一个CP恰好对应一个完整token；I=1时才对应单token的1024维slice。实现按CP与I打包所需O行，处理边界token的部分列；无效请求仍必须把自己拥有的发送区间清零。</p><p>这个末尾collective是实际代码中的world all_gather，不是对四个partial hidden求和。其输入是已经完成全局attention归一化及输出投影的互补区间，SUM反而会改变数据组织。读取shape必须连同flatten区间公式和rank-major拼接一起解释。</p><p><a href=\"https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_absorb_proj.py#L23-L406\">LSE 合并、V 投影、共享 MID、输出 flat ownership ↗</a></p><p><a href=\"https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_absorb_proj.py#L707-L807\">输出 pack/shape 和 CP-owned flat gather 入口 ↗</a></p>"
+      },
+      {
+        "id": "review-boundary",
+        "title": "08 / 面试复盘：优化目标必须带入口、分支与计时范围",
+        "html": "<table><thead><tr><th>可能的瓶颈</th><th>应固定的变量</th><th>不能偷换的结论</th></tr></thead><tbody><tr><td>P1 index扫描/TopK</td><td>I、KC、真实history、raw/candidate、score分布</td><td>TopK名字相同≠执行同一选择路径</td></tr><tr><td>P2 gather / DT / QK-PV</td><td>每CP选中pool数、tail、物理页、resident/streaming guard</td><td>均匀随机winner不能代表集中热点</td></tr><tr><td>P3输出投影</td><td>I及对应flat ownership、V/O pack、有效前缀</td><td>本地[C,1024]不能当所有token同一列切片</td></tr><tr><td>三次通信</td><td>wire实际字节、参与组、算法、capture/eager</td><td>只加三kernel周期不是DSA子层时延</td></tr></tbody></table><p>当前README和源码可证明默认导出、数据合同与分支机制；历史报告最多证明其记录的工具链、形状和执行环境。本文没有重新生成binary、运行CycleSim/VCS或读取生产请求，因此没有本轮速度结论。可评审的后续验证应同时包含：候选集合与tie-break、页面重排、live tail、空分片、Graph满→空→满、P3全局拼接，以及记录三个compute和三个collective的完整边界。</p><aside class=\"callout\">表达个人经历时，可以说明自己解决的真实接口、调度或数值问题，但本章不根据文件存在推断个人作者，也不把“源码上能串起来”写成“部署已验收”。</aside><p><a href=\"https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_dsa_deepfused_cp4_dp4.py#L413-L476\">独立 CP 候选集合、slot、P2 O/LSE 与最终拼接参考 ↗</a></p><p><a href=\"https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_dsa_deepfused_cp4_dp4.py#L250-L336\">三计算/三通信，wire 与最终输出视图 ↗</a></p>"
+      }
+    ],
+    "questions": [
+      {
+        "id": "three-collectives",
+        "q": "为什么 DSA 不能只画三次 GEMM？",
+        "a": "P1内部含投影、归一化、量化、索引与筛选；随后依次有query/候选AG4、O/LSE AG4及输出flat区间AG16。每一步传输对象和所有权不同。",
+        "followup": "把C6的每rank输入wire字节分别算出来，并说明为什么不是链路流量。"
+      },
+      {
+        "id": "owner-change",
+        "q": "为什么 query 只算16heads，P2却算64heads？",
+        "a": "query投影按CP分片，第一次AG4聚齐四份16head结果；P2历史按pool归属分片，各CP需要所有64个query来计算本地历史的贡献。",
+        "followup": "P2的query为何必须使用strides而不能直接把wire reshape成密集tensor？"
+      },
+      {
+        "id": "raw-proof",
+        "q": "正score快速选择为什么能保持正确？",
+        "a": "适用分支先证明CP0这一子集已有至少512个非负score，从而全局Top512不需要负分区。没有这个充分性条件则回退；不是用分布统计猜正数足够。",
+        "followup": "全相等分数、所有负分和热点集中CP时分别测什么？"
+      },
+      {
+        "id": "flat-owner",
+        "q": "C6的P3输出[6,1024]是否表示每token取1024列？",
+        "a": "不是。它表示flatten([6,4096])中本CP拥有6144个连续元素。CP0拥有一个半token，随后AG16按rank顺序还原完整输出。",
+        "followup": "C1、C4时这个区间公式分别退化成什么？"
+      },
+      {
+        "id": "scope",
+        "q": "能否把当前三kernel的历史cycle之和叫生产DSA延迟？",
+        "a": "不能。还缺三次collective及上下游边界，而且当前证据入口是开发harness；必须匹配SHA、编译参数、状态、shape和计时范围。",
+        "followup": "如果只优化P2，Amdahl占比应从哪里获得？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "ad-config",
+        "label": "内部 next 模型维度及 34 KDA/11 DSA 层号",
+        "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/configs/config_next.json#L1-L150",
+        "note": "zeus_dev@05ee10f9cc25d19fca0a144ae095c79b3a888976；2026-10-25只读源码核验，model_state_dev/glm5next_modules/configs/config_next.json:1–150。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-dsa-export",
+        "label": "默认 GDG 三阶段导出，LDG 独立显式导入",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/__init__.py#L1-L33",
+        "note": "torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7；2026-10-25只读源码核验，sgl-kernel-zeus-triton/python/glm53_flash/dsa/__init__.py:1–33。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-dsa-runner",
+        "label": "三计算/三通信，wire 与最终输出视图",
+        "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_dsa_deepfused_cp4_dp4.py#L250-L336",
+        "note": "zeus_dev@05ee10f9cc25d19fca0a144ae095c79b3a888976；2026-10-25只读源码核验，model_state_dev/glm5next_modules/dev_dsa_deepfused_cp4_dp4.py:250–336。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-dsa-topology",
+        "label": "四 token pool 的 CP 轮转与物理页",
+        "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_dsa_deepfused_cp4_dp4.py#L145-L244",
+        "note": "zeus_dev@05ee10f9cc25d19fca0a144ae095c79b3a888976；2026-10-25只读源码核验，model_state_dev/glm5next_modules/dev_dsa_deepfused_cp4_dp4.py:145–244。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-dsa-p1-math",
+        "label": "P1 RMSNorm、BF16 查询、latent 量化及 query absorb",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_proj_indexer_topk1.py#L735-L928",
+        "note": "torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7；2026-10-25只读源码核验，sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_proj_indexer_topk1.py:735–928。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-dsa-p1-owner",
+        "label": "每 CP 16 个 query heads、每 core 8 heads 与复制 indexer 权重",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_proj_indexer_topk1.py#L5272-L5323",
+        "note": "torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7；2026-10-25只读源码核验，sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_proj_indexer_topk1.py:5272–5323。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-dsa-p1-wire",
+        "label": "metadata 更新、有效前缀、raw 模式判定",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_proj_indexer_topk1.py#L6039-L6102",
+        "note": "torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7；2026-10-25只读源码核验，sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_proj_indexer_topk1.py:6039–6102。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-dsa-p1-prepare",
+        "label": "legacy B1、large KC 与普通 bucket 的 P1 wire 几何",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_proj_indexer_topk1.py#L6123-L6311",
+        "note": "torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7；2026-10-25只读源码核验，sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_proj_indexer_topk1.py:6123–6311。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-dsa-p2-select",
+        "label": "TopK2 raw/candidate 分支、非负充分性证明、B1 双核分工",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_topk2_gather_attn.py#L1584-L1714",
+        "note": "torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7；2026-10-25只读源码核验，sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_topk2_gather_attn.py:1584–1714。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-dsa-p2-attn",
+        "label": "640-row helper、128-row gather、QK/PV、online softmax",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_topk2_gather_attn.py#L13-L449",
+        "note": "torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7；2026-10-25只读源码核验，sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_topk2_gather_attn.py:13–449。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-dsa-p2-prepare",
+        "label": "direct wire strides、528-byte pool、compact banks 与 opt-in 门禁",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_topk2_gather_attn.py#L2292-L2556",
+        "note": "torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7；2026-10-25只读源码核验，sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_topk2_gather_attn.py:2292–2556。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-dsa-p3",
+        "label": "LSE 合并、V 投影、共享 MID、输出 flat ownership",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_absorb_proj.py#L23-L406",
+        "note": "torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7；2026-10-25只读源码核验，sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_absorb_proj.py:23–406。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-dsa-p3-host",
+        "label": "输出 pack/shape 和 CP-owned flat gather 入口",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_absorb_proj.py#L707-L807",
+        "note": "torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7；2026-10-25只读源码核验，sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_absorb_proj.py:707–807。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-dsa-oracle",
+        "label": "独立 CP 候选集合、slot、P2 O/LSE 与最终拼接参考",
+        "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_dsa_deepfused_cp4_dp4.py#L413-L476",
+        "note": "zeus_dev@05ee10f9cc25d19fca0a144ae095c79b3a888976；2026-10-25只读源码核验，model_state_dev/glm5next_modules/dev_dsa_deepfused_cp4_dp4.py:413–476。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      }
+    ],
+    "takeaways": [
+      "同时区分 DP 请求 owner、CP 历史 owner、query head owner 和 P3 flat 输出 owner。",
+      "通信计数以真实 wire 几何为准，payload与链路总量分开。",
+      "默认 GDG 与显式 LDG/CP8 实验入口分开；Graph 固定地址不意味着有效数据固定。",
+      "当前源码审读、历史设备测量和生产整模型验收是三种不同证据。"
+    ]
+  },
+  {
+    "id": "kda-kernel-walkthrough",
+    "title": "KDA 内部实现：v4 双核、状态布局与 TP/DP 边界",
+    "part": "GLM5Next 300B 真实部署",
+    "order": 18.4,
+    "subtitle": "从请求与 head 的归属，走到卷积、decay-last 和输出发布",
+    "minutes": 52,
+    "level": "深入",
+    "tags": [
+      "GLM5Next300B",
+      "KDA",
+      "TP4",
+      "DP4",
+      "BF16 state",
+      "v4 GDG/LDG"
+    ],
+    "lead": "同一时点的两个默认分支并不自动组成一个可用系统。这里先暴露模型runner仍调用v3.1、算子库已只允许v4的真实断点，再分别审读已存在的TP4/DP4组织与最新双核kernel，避免把来源拼成不存在的部署成功记录。",
+    "sections": [
+      {
+        "id": "version-contract",
+        "title": "01 / 当前最重要的集成事实：runner 的 v3.1 与 kernel 的 v4 不兼容",
+        "html": "<aside class=\"callout\">2026-10-25源码结论：zeus_dev@05ee10f… 的 forward_partial_zeus 仍传 version=\"v3.1\"；torch_zeus@3656952… 的 _require_fused_kda_version 只接受 v4_gdg/v4_ldg（v4别名映射v4_gdg）。因此这两个最新主分支按现有调用组合，会在版本门禁处被拒绝。这个判断来自代码，不是本轮运行报错。</aside><pre><code># 两处短摘录，来自不同仓库的固定版本\n# zeus_dev runner\nversion=&quot;v3.1&quot;\n\n# torch_zeus current gate\nif version not in (&quot;v4_gdg&quot;, &quot;v4_ldg&quot;):\n    raise ValueError(&quot;only fused KDA v4_gdg/v4_ldg are supported; older versions are retired&quot;)</code></pre><p>以下“TP4/DP4 runner”说明开发框架已有的分片与通信合同；“v4 kernel”说明当前算子库实现。不能把它们连成一条已通过设备验证的箭头。旧性能记录还要绑定当时v3.1或其他版本的源、binary及compiler；即使Python公共函数名未变，状态ABI、参数表和舍入端点也可能变。</p><p>恢复集成不能只改一个字符串就宣布完成：需选择GDG还是LDG状态所有权、核对prepare/pack、编译recipe、workspace、Graph生命周期以及数值参考；然后分别验证输出、rec、conv和TP SUM后的结果。本文只给出可审查的缺口和验证目标，不修改业务代码，也不新增设备测试。</p><p><a href=\"https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_linear_attn_fused_tp4_dp4.py#L484-L583\">旧 runner 硬传 v3.1 以及唯一 TP SUM ↗</a></p><p><a href=\"https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py#L49-L68\">只允许 v4_gdg/v4_ldg，v4 别名映射 ↗</a></p>"
+      },
+      {
+        "id": "tp-dp",
+        "title": "02 / 大到小：DP token → TP head → 两核 head owner",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 920 402\" role=\"img\" aria-label=\"KDA：DP 切请求，TP 切 heads，core 再切本地 heads\"><rect width=\"920\" height=\"402\" rx=\"16\" fill=\"#edf2e8\"/><text x=\"24\" y=\"33\" font-size=\"20\" fill=\"#203f35\" text-anchor=\"start\" font-family=\"sans-serif\">KDA：DP 切请求，TP 切 heads，core 再切本地 heads</text><rect x=\"24\" y=\"68\" width=\"204\" height=\"105\" rx=\"10\" fill=\"#315b4b\"/><text x=\"126\" y=\"93\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">TP0 / rank 8</text><text x=\"126\" y=\"116\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">global heads 0–15</text><text x=\"126\" y=\"139\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">同一 X[B,4096]</text><rect x=\"248\" y=\"68\" width=\"204\" height=\"105\" rx=\"10\" fill=\"#315b4b\"/><text x=\"350\" y=\"93\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">TP1 / rank 9</text><text x=\"350\" y=\"116\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">global heads 16–31</text><text x=\"350\" y=\"139\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">同一 X[B,4096]</text><rect x=\"472\" y=\"68\" width=\"204\" height=\"105\" rx=\"10\" fill=\"#315b4b\"/><text x=\"574\" y=\"93\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">TP2 / rank 10</text><text x=\"574\" y=\"116\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">global heads 32–47</text><text x=\"574\" y=\"139\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">同一 X[B,4096]</text><rect x=\"696\" y=\"68\" width=\"204\" height=\"105\" rx=\"10\" fill=\"#315b4b\"/><text x=\"798\" y=\"93\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">TP3 / rank 11</text><text x=\"798\" y=\"116\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">global heads 48–63</text><text x=\"798\" y=\"139\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">同一 X[B,4096]</text><rect x=\"100\" y=\"211\" width=\"330\" height=\"77\" rx=\"10\" fill=\"#315b4b\"/><text x=\"265\" y=\"236\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">本rank core0</text><text x=\"265\" y=\"259\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">local heads 0–7；8×128×128 state</text><rect x=\"490\" y=\"211\" width=\"330\" height=\"77\" rx=\"10\" fill=\"#526d7a\"/><text x=\"655\" y=\"236\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">本rank core1</text><text x=\"655\" y=\"259\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">local heads 8–15；8×128×128 state</text><text x=\"24\" y=\"334\" font-size=\"17\" fill=\"#203f35\" text-anchor=\"start\" font-family=\"sans-serif\">例：DP2处理自己的B个请求。rank [8,9,10,11] 的partial hidden需要TP SUM。</text><text x=\"24\" y=\"368\" font-size=\"17\" fill=\"#203f35\" text-anchor=\"start\" font-family=\"sans-serif\">DP lane [2,6,10,14] 等在SUM后收集不同DP请求；它不合并递归state。</text></svg><figcaption>原创逻辑所有权图；最新模型runner的v3.1调用与v4算子之间仍有版本缺口。</figcaption></figure><p>next配置全局64 heads、Dk=Dv=128、H4096。DP4把T个请求token分为四份，本DP有B=T/4个；同一DP的TP4 rank看到同一[B,4096]输入，但各自拥有16个heads和P=2048的局部投影宽。QKV权重必须分别对Q、K、V三个stream的head范围切片，再拼成[6144,4096]；直接把全[24576,4096]矩阵连续切四块会把stream与head切错。</p><p>本rank两个core继续分为8+8个local heads。rec state沿head切分，conv state沿每个Q/K/V stream的channel切分，cache_indices沿DP请求切分。TP分片改变head范围，不能改变同一请求的slot身份；slot只是状态池位置，不必等于batch row。有效indices必须唯一，否则同一次launch的两个请求会竞争同一state。</p><table><thead><tr><th>对象</th><th>本rank逻辑形状</th><th>跨rank含义</th></tr></thead><tbody><tr><td>hidden</td><td>BF16[B,4096]</td><td>同DP的4个TP rank复制输入</td></tr><tr><td>QKV / β</td><td>[B,6144] / [B,16]</td><td>本TP的16 heads</td></tr><tr><td>decay / output gate</td><td>各[B,2048]</td><td>按key/value通道使用，非全局hidden</td></tr><tr><td>conv / rec</td><td>[pool,3,6144] / [pool,16,128,128]</td><td>DP选slot，TP切head，两个core再分头</td></tr><tr><td>partial hidden</td><td>BF16[B,4096]</td><td>对本TP的2048输入通道求和，仍缺其余TP贡献</td></tr></tbody></table><p><a href=\"https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_linear_attn_fused_tp4_dp4.py#L340-L458\">DP token 分片、TP head/weight/state 分片 ↗</a></p><p><a href=\"https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/configs/config_next.json#L1-L150\">内部 next 模型维度及 34 KDA/11 DSA 层号 ↗</a></p>"
+      },
+      {
+        "id": "input-pack",
+        "title": "03 / S1输入投影：PE分工、权重padding与 core0 的额外职责",
+        "html": "<p>当前dense_weight_slabs将每core输入矩阵打包成[3456,4096]：本地Q/K/V各1024行，f_a128行，8个β行放在128行对齐区里，g_a128行。低秩第二级是本core的f_b[1024,128]加完整g_b[2048,128]；O矩阵每core保留输出hidden的2048行，每行覆盖全部本rank P=2048。</p><table><thead><tr><th>逻辑权重 / 结果</th><th>本rank尺寸</th><th>运算归属</th></tr></thead><tbody><tr><td>qkv_proj</td><td>[6144,4096] BF16</td><td>两个core分别处理各stream的1024输出</td></tr><tr><td>f_a、g_a</td><td>各[128,4096] BF16</td><td>先压到128，再展开低秩gate</td></tr><tr><td>f_b、g_b</td><td>各[2048,128] BF16</td><td>f_b按head分；当前全部gproj由core0算</td></tr><tr><td>b_proj</td><td>[16,4096] BF16</td><td>每head一个FP32 sigmoid β</td></tr><tr><td>o_proj</td><td>[4096,2048] BF16</td><td>core0/1各写2048个hidden列</td></tr></tbody></table><p>全gproj改由core0发布是源码中的明确if core==0，不应照抄顶层附近仍写core1的旧注释。core1的recurrence early tail会读取自己head对应的gproj，因此S1后仍需要核间barrier。QKV按owner分好只能减少部分通信，不能删除这个真正的跨核消费者。</p><p>常量BLOCK_M_IN=4、BLOCK_K=4096、QKV_BLOCK_N=1024使单个输入PE tile保留完整H归约；短batch用边界mask，不代表物理PE只执行有效行数。仅QKV和O的逻辑权重为48+16=64MiB/rank，每有效token的乘加按2 FLOP计为67,108,864；加上低秩门、padding和实际读重用后是另一份账。不能用这64MiB直接断言每token的外部读量。</p><p><a href=\"https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py#L101-L236\">本地权重形状、core slab、workspace 与 pack ↗</a></p><p><a href=\"https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py#L435-L532\">本核 QKV/decay/beta，core0 发布全部 output gate ↗</a></p><p><a href=\"https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py#L1399-L1512\">单 launch、全局 barrier、request tile 与编译 constants ↗</a></p>"
+      },
+      {
+        "id": "conv-history",
+        "title": "04 / S2短卷积：K-major权重与只读 tap 快照，让写回能前移",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 920 378\" role=\"img\" aria-label=\"提前写 history 为何不破坏正在计算的卷积\"><rect width=\"920\" height=\"378\" rx=\"16\" fill=\"#edf2e8\"/><text x=\"24\" y=\"33\" font-size=\"20\" fill=\"#203f35\" text-anchor=\"start\" font-family=\"sans-serif\">提前写 history 为何不破坏正在计算的卷积</text><rect x=\"30\" y=\"68\" width=\"370\" height=\"74\" rx=\"10\" fill=\"#315b4b\"/><text x=\"215\" y=\"93\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">GDG history[slot,3,6144]</text><text x=\"215\" y=\"116\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">先读进只读 SRAM taps</text><rect x=\"520\" y=\"68\" width=\"370\" height=\"74\" rx=\"10\" fill=\"#526d7a\"/><text x=\"705\" y=\"93\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">本步 QKV[6144]</text><text x=\"705\" y=\"116\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">先读进只读 SRAM group_x</text><path d=\"M215 143L215 190\" stroke=\"#628274\" stroke-width=\"2.5\" fill=\"none\"/><circle cx=\"215\" cy=\"190\" r=\"3.4\" fill=\"#628274\"/><path d=\"M705 143L705 190\" stroke=\"#628274\" stroke-width=\"2.5\" fill=\"none\"/><circle cx=\"705\" cy=\"190\" r=\"3.4\" fill=\"#628274\"/><rect x=\"30\" y=\"204\" width=\"370\" height=\"85\" rx=\"10\" fill=\"#315b4b\"/><text x=\"215\" y=\"229\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">消费者A：卷积 / SiLU</text><text x=\"215\" y=\"252\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">只读 SRAM taps 与 group_x</text><text x=\"215\" y=\"275\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">写回后的GDG旧字节不再被它读取</text><rect x=\"520\" y=\"204\" width=\"370\" height=\"85\" rx=\"10\" fill=\"#80674a\"/><text x=\"705\" y=\"229\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">消费者B：提前 history 写回</text><text x=\"705\" y=\"252\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">旧tap1,2 → 新tap0,1</text><text x=\"705\" y=\"275\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">本步原始QKV → 新tap2</text><path d=\"M400 104L477 178\" stroke=\"#628274\" stroke-width=\"2.5\" fill=\"none\"/><circle cx=\"477\" cy=\"178\" r=\"3.4\" fill=\"#628274\"/><path d=\"M477 178L520 224\" stroke=\"#628274\" stroke-width=\"2.5\" fill=\"none\"/><circle cx=\"520\" cy=\"224\" r=\"3.4\" fill=\"#628274\"/><path d=\"M520 104L443 178\" stroke=\"#628274\" stroke-width=\"2.5\" fill=\"none\"/><circle cx=\"443\" cy=\"178\" r=\"3.4\" fill=\"#628274\"/><path d=\"M443 178L400 224\" stroke=\"#628274\" stroke-width=\"2.5\" fill=\"none\"/><circle cx=\"400\" cy=\"224\" r=\"3.4\" fill=\"#628274\"/><text x=\"30\" y=\"338\" font-size=\"16\" fill=\"#203f35\" text-anchor=\"start\" font-family=\"sans-serif\">先完成采集再允许覆盖；SRAM旧值仍有消费者时不得被地址复用。下一decode仍需完成顺序。</text></svg><figcaption>原创依赖示意；两条箭头表示两个共同输入，不表示生产者之间的依赖，也不声称硬件时间重叠已测量。</figcaption></figure><p>卷积是6144个独立channel各自做宽4的因果卷积，当前HAS_BIAS=0。准备阶段把[6144,4]转成K-major[4,6144]；persistent history为tap-major[pool,3,6144]。每core一次加载自己8heads×3stream×128channel的3个旧tap，共18KiB。两个core合计36KiB旧history；写回同样36KiB。这不含本步QKV、权重与临时工作区。</p><p>每core的8heads组成4个head-pair，pair内同时处理两个head。Q/K/V三个stream的逐元素乘加按tap顺序执行，之后SiLU并落到BF16，再进入Q/K各128维L2 normalization。head-pair只是把独立元素放入较宽VP命令；归约仍不得跨head。当前实现使用硬件fast sigmoid形成SiLU，但这不是所有模型或Router的激活约定。</p><p>真正的调度技巧是先将旧history和本步QKV读入独立只读SRAM，再提前写回新history。卷积后续只消费这些快照，不重读被覆盖的GDG字节。要证明的是“旧数据所有读取已转移到快照且快照活跃期被保护”；不能仅凭Python顺序就认为异步DMA安全。下一步同slot的读取还必须等到本步写回可见。</p><p><a href=\"https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py#L599-L734\">readonly taps、提早 history 写回、两 head 卷积 ↗</a></p><p><a href=\"https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py#L1124-L1248\">四个 head-pair lane、state 预取和 early tail ↗</a></p>"
+      },
+      {
+        "id": "state-numerics",
+        "title": "05 / Recurrence：decay-last 的代数等价与当前 BF16 实现不是一回事",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 920 351\" role=\"img\" aria-label=\"递归 state：数学轴与物理轴不能因方阵而混同\"><rect width=\"920\" height=\"351\" rx=\"16\" fill=\"#edf2e8\"/><text x=\"24\" y=\"33\" font-size=\"20\" fill=\"#203f35\" text-anchor=\"start\" font-family=\"sans-serif\">递归 state：数学轴与物理轴不能因方阵而混同</text><rect x=\"35\" y=\"75\" width=\"385\" height=\"98\" rx=\"10\" fill=\"#315b4b\"/><text x=\"227.5\" y=\"100\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">数学 S[Dk,Dv]</text><text x=\"227.5\" y=\"123\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">每行是 key 通道</text><text x=\"227.5\" y=\"146\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">衰减乘行；Sᵀk → value prediction</text><rect x=\"500\" y=\"75\" width=\"385\" height=\"98\" rx=\"10\" fill=\"#526d7a\"/><text x=\"692.5\" y=\"100\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">物理 A[Dv,Dk] = Sᵀ</text><text x=\"692.5\" y=\"123\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">最后一维连续 Dk=128</text><text x=\"692.5\" y=\"146\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">每个value slab独立归约完整key维</text><path d=\"M425 124L495 124\" stroke=\"#628274\" stroke-width=\"2.5\" fill=\"none\"/><circle cx=\"495\" cy=\"124\" r=\"3.4\" fill=\"#628274\"/><rect x=\"35\" y=\"211\" width=\"385\" height=\"80\" rx=\"10\" fill=\"#315b4b\"/><text x=\"227.5\" y=\"236\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">slab0 = value0–63 × key0–127</text><text x=\"227.5\" y=\"259\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">64×128×2B = 16KiB BF16</text><rect x=\"500\" y=\"211\" width=\"385\" height=\"80\" rx=\"10\" fill=\"#80674a\"/><text x=\"692.5\" y=\"236\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">slab1 = value64–127 × key0–127</text><text x=\"692.5\" y=\"259\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">每head两块；每rank16heads</text><text x=\"35\" y=\"328\" font-size=\"17\" fill=\"#203f35\" text-anchor=\"start\" font-family=\"sans-serif\">跨Dk先完成预测，再更新本slab；state写回值与output读值有明确BF16端点。</text></svg><figcaption>原创布局示意；每块字节由当前STATE_V_TILE=64独立计算，不是缓存占用trace。</figcaption></figure><div class=\"formula\">数学物理布局 A=Sᵀ∈Rᴰᵛˣᴰᵏ；α=exp(g)<br>v̂=A(α⊙k)，δ=β(v−v̂)<br>T=A+δ(k/α)ᵀ；Anew=T·diag(α)；o=Anew·q</div><p>这是实数算术的decay-last改写：将对整块state的衰减放到最后，避免先物化一个完整decayed-state临时量。safe gate将g限制在约[−5,0]，因此α严格为正的理想公式成立，逆衰减有界约≤e⁵。但当前机器实现含多处BF16端点，不能据这个代数式声称与decay-first逐位相等。</p><pre><code># 当前 helper 的步骤摘述；round_bf16 表示显式窄化\n# A 是物理 [Dv,Dk]，每次处理 [64,128] slab\nvhat = reduce_k(A_bf16 * round_bf16(alpha * k))\ndelta = beta * (v - vhat)\nupd_bf16 = round_bf16(delta[:, None] * (k / alpha)[None, :])\nt = float32(A_bf16) + float32(upd_bf16)\nnext_bf16 = round_bf16(t * alpha[None, :])\nstore(state_slab, next_bf16)\no = reduce_k(next_bf16 * round_bf16(q))</code></pre><p>实际相乘/归约的融合还受固定compiler recipe影响；代码要求aggressive-vp-chaining及明确ParallelExecutor宽度。因此上面是源级数值端点说明，不能凭Python表达式推断RTL每一步的舍入。容易漏掉的是outer update也先窄成BF16，而且输出归约读已经舍入的next_bf16；当前输出与“FP32新state读出后仅写回BF16”的参考不会天然逐位一致。</p><p>STATE_V_TILE=64意味着一个head分两块value slab，每块完整覆盖128个key channel，BF16块16KiB。每块预测误差彼此独立；key维切片则需先跨块完成vhat归约。代码在形成当前块t之后预取下一块，当前块新state仍要被写DMA与output读取，因此这段活跃期是地址分配、VP链与同步共同负责的真实约束。</p><p><a href=\"https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py#L757-L956\">decay-last、BF16 中间端点和 64×128 state slab ↗</a></p>"
+      },
+      {
+        "id": "tail-barriers",
+        "title": "06 / Early tail与S3：局部完成可以提前消费，全P投影必须等发布",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 920 454\" role=\"img\" aria-label=\"单 launch 的真实发布关系：S1 → S2/tail → S3\"><rect width=\"920\" height=\"454\" rx=\"16\" fill=\"#edf2e8\"/><text x=\"24\" y=\"33\" font-size=\"20\" fill=\"#203f35\" text-anchor=\"start\" font-family=\"sans-serif\">单 launch 的真实发布关系：S1 → S2/tail → S3</text><rect x=\"24\" y=\"67\" width=\"408\" height=\"80\" rx=\"10\" fill=\"#315b4b\"/><text x=\"228\" y=\"92\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">core0：自己的QKV / β / decay</text><text x=\"228\" y=\"115\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">另计算并发布全16heads output-gate gproj</text><rect x=\"488\" y=\"67\" width=\"408\" height=\"80\" rx=\"10\" fill=\"#526d7a\"/><text x=\"692\" y=\"92\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">core1：自己的QKV / β / decay</text><text x=\"692\" y=\"115\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">不独立重新计算全部gproj</text><path d=\"M230 148L230 184\" stroke=\"#628274\" stroke-width=\"2.5\" fill=\"none\"/><circle cx=\"230\" cy=\"184\" r=\"3.4\" fill=\"#628274\"/><path d=\"M692 148L692 184\" stroke=\"#628274\" stroke-width=\"2.5\" fill=\"none\"/><circle cx=\"692\" cy=\"184\" r=\"3.4\" fill=\"#628274\"/><rect x=\"24\" y=\"185\" width=\"872\" height=\"36\" rx=\"7\" fill=\"#b59b65\"/><text x=\"460\" y=\"209\" font-size=\"16\" fill=\"#fff\" text-anchor=\"middle\" font-family=\"sans-serif\">barrier 1：core1 读取 core0 的 gproj 前必须发布完成</text><rect x=\"24\" y=\"247\" width=\"408\" height=\"80\" rx=\"10\" fill=\"#315b4b\"/><text x=\"228\" y=\"272\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">core0：4个head-pair lanes</text><text x=\"228\" y=\"295\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">卷积 → recurrence → gated RMSNorm</text><rect x=\"488\" y=\"247\" width=\"408\" height=\"80\" rx=\"10\" fill=\"#526d7a\"/><text x=\"692\" y=\"272\" font-size=\"17\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">core1：4个head-pair lanes</text><text x=\"692\" y=\"295\" font-size=\"15\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\">卷积 → recurrence → gated RMSNorm</text><path d=\"M230 328L230 353\" stroke=\"#628274\" stroke-width=\"2.5\" fill=\"none\"/><circle cx=\"230\" cy=\"353\" r=\"3.4\" fill=\"#628274\"/><path d=\"M692 328L692 353\" stroke=\"#628274\" stroke-width=\"2.5\" fill=\"none\"/><circle cx=\"692\" cy=\"353\" r=\"3.4\" fill=\"#628274\"/><rect x=\"24\" y=\"354\" width=\"872\" height=\"36\" rx=\"7\" fill=\"#b59b65\"/><text x=\"460\" y=\"378\" font-size=\"16\" fill=\"#fff\" text-anchor=\"middle\" font-family=\"sans-serif\">每个 request tile 的 barrier：发布完整 normed[Btile,2048]</text><text x=\"24\" y=\"424\" font-size=\"17\" fill=\"#203f35\" text-anchor=\"start\" font-family=\"sans-serif\">S3：两个core各算2048个hidden列；都需要全2048维normed。图不是耗时比例。</text></svg><figcaption>原创依赖图；core0归属由实际 if core==0 代码确认，未沿用附近“core1发布”的过时注释。</figcaption></figure><p>每对head完成recurrence后，立刻在小的BF16输出root上做逐head RMSNorm、乘gamma和sigmoid(gproj)，再写normed[B,2048]。这不必等待本core所有其他head都完成，也省去单独外存recurrent-output tensor：当前主路径STORE_RECURRENT_OUT=False，tail直接吃缓存值。它仍存在qkv、ggate、gproj、beta、normed五份workspace，并非“全程没有中间内存”。</p><p>ParallelExecutor需要看见可证明互不重叠的head-pair迭代：每core4个pair，pair内两个head按原递推执行；它不是把同一请求相邻时间步并行。REQ_TILE=4把请求循环缩成有界窗口，每个tile两核发布完整normed之后才做O投影。S3每core写不同hidden列，却都读取完整P=2048的输入，这就是第二个barrier的RAW来源。</p><p>源码不在每次S3后另加一个对称barrier，下一request tile的VP工作可与之前PE完成重叠；这里还要依赖目标编译器对读写与工作区复用的同步证明。图仅表达必须存在的生产消费关系，不声称所有命令实际同时运行或已测出收益。</p><p><a href=\"https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py#L958-L1000\">pair 输出的 gated RMSNorm ↗</a></p><p><a href=\"https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py#L1124-L1248\">四个 head-pair lane、state 预取和 early tail ↗</a></p><p><a href=\"https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py#L1399-L1512\">单 launch、全局 barrier、request tile 与编译 constants ↗</a></p>"
+      },
+      {
+        "id": "gdg-ldg",
+        "title": "07 / v4 GDG与LDG：状态的持久owner改变，不是每步拷贝到“更快内存”",
+        "html": "<table><thead><tr><th>项目</th><th>v4_gdg 默认</th><th>v4_ldg 显式</th></tr></thead><tbody><tr><td>rec持久存储</td><td>GDG [pool,16,128,128] BF16</td><td>LDG0和LDG1各[pool,8,128,128] BF16</td></tr><tr><td>core访问</td><td>各core操作完整池中的自己8heads</td><td>各core固定指向对应owner bank的紧凑8heads</td></tr><tr><td>第二个state参数</td><td>默认别名主state；device body不使用该额外根</td><td>必须是另一个已初始化且不重叠owner</td></tr><tr><td>conv history</td><td>共享GDG [pool,3,6144]</td><td>同一共享GDG布局</td></tr><tr><td>初始化/导出</td><td>调用者管理完整GDG池</td><td>显式pack owner pools，非每decode隐式copyback</td></tr></tbody></table><p>LDG owner wrapper持有raw BF16 backing与capsule lease，不能把它当PE weight descriptor传入。准备函数把已经是[Dv,Dk]的完整state按heads拆两份，保留每bank自己的后续更新；原完整state不会因为只是初始来源而自动持续同步。要导出或换方案必须显式处理，不能让模型继续读取过期的完整池。</p><p>两种recipe使用同一逻辑30参数ABI与相应独立source/编译身份。GDG额外state指针完全别名允许，部分重叠拒绝；LDG两owner必须不重叠。当前LDG另需shared PRG descriptor reuse支持。读取“默认GDG第二参数没用”不等于可任意改变调用ABI；AOT包、metadata和编译输出必须一起更新验证。</p><p>state每请求每rank512KiB，逻辑读一遍写一遍为1MiB；LDG分成两个256KiB owner并不把数学数据减半。收益若存在，来自访问拓扑、排程和带宽，而非少维护8个heads。本轮没有测出GDG/LDG相对速度。</p><p><a href=\"https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py#L240-L321\">显式两-bank owner state、K-major conv pack ↗</a></p><p><a href=\"https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py#L1515-L1623\">v4 ABI、完整 shape/alias 验证、zero batch 与调用 ↗</a></p><p><a href=\"https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_ldg_triton.py#L1021-L1132\">两 core 静态分支指向不同持久 owner bank ↗</a></p>"
+      },
+      {
+        "id": "collectives",
+        "title": "08 / kernel之后：TP SUM是求和，DP gather是拼请求",
+        "html": "<p>最新模型runner的既有设计中，forward_partial_zeus只产生本TP的partial hidden；forward_zeus对同DP的四rank做一次SUM。每rank已经计算自己的全部16heads，但输出投影只覆盖全局64heads中的这16个输入贡献；不能少SUM，也不能在调用端再额外SUM一次。两core写出的2048+2048列则已拼成同一个rank的完整4096列，不需要对这两份列做求和。</p><div class=\"formula\">Y_d = Σₜ₌₀³ Ypartial_(d,t)，每项[B,4096] BF16<br>之后沿DP lane gather：concat(Y₀,Y₁,Y₂,Y₃)→[4B,4096]</div><p>回归run_rank接着调用board_replicated_all_gather，lane顺序是[t,t+4,t+8,t+12]；helper使用world16的BoardReplicatedAllgather定制算法并返回4份board输出。它没有通信rec或conv state，也不把TP部分和再求和。这个gather属于当前回归的输出组织，是否生产边界必需应由上下游token layout证明；不能仅据helper存在给每个生产层都加一个gather。</p><table><thead><tr><th>B=6 的独立字节核算</th><th>逻辑元素/输入量</th><th>含义</th></tr></thead><tbody><tr><td>本rank TP SUM输入</td><td>6×4096 BF16 = 48KiB</td><td>四rank贡献同一组6请求的不同head部分和</td></tr><tr><td>TP SUM后本rank输出</td><td>48KiB</td><td>同DP四rank拥有相同完整hidden</td></tr><tr><td>board gather本rank输入</td><td>48KiB</td><td>已经归约完成的本DP请求块</td></tr><tr><td>board gather返回</td><td>4×48KiB=192KiB</td><td>24请求的hidden；不是链路总发送量</td></tr></tbody></table><p>以上拓扑/字节合同独立于kernel版本，但将它用于v4后的真实测量前必须先补齐第1节的版本接入。网络总流量和延迟不能由输入/输出buffer大小直接推出，更不能把1MiB state流量算成跨TP传输。</p><p><a href=\"https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_linear_attn_fused_tp4_dp4.py#L484-L583\">旧 runner 硬传 v3.1 以及唯一 TP SUM ↗</a></p><p><a href=\"https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_linear_attn_fused_tp4_dp4.py#L782-L812\">开发回归 TP SUM 之后的 board-replicated gather ↗</a></p><p><a href=\"https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/_support/_comm.py#L13-L114\">跨板 lane 和 BoardReplicatedAllgather 的输入/输出形状 ↗</a></p>"
+      },
+      {
+        "id": "validation",
+        "title": "09 / 一个资深工程师应怎样验收这条有状态链",
+        "html": "<p>至少区分四类检查。ABI检查覆盖shape、dtype、地址空间、indices、alias、workspace和版本；数学检查分别比较当前output、新rec与新conv；时序检查覆盖异步读取/覆盖、两核发布与跨decode顺序；模型检查覆盖连续token、真实输入分布与生成质量。Graph/eager逐位一致只是同一实现两条调度路径一致，不能证明其数学正确。</p><p>公共validate_cache_indices会读回host检查唯一性和值域，适合prepare或capture前；当前fused_kda_decode主要检查tensor元数据、shape与alias，并未每launch调用它扫描indices值。因此“接口里有验证函数”不能写成“每次replay自动拒绝重复slot”。调用者更新indices时仍负责维持有效且唯一，禁止两次并发调用碰同一state slot。</p><p>负例应包含非对称state的转置错误、同slot两个请求、conv旧tap尚未读取就覆盖、两个call_slot共用workspace、core1漏等gproj、S3消费半份normed、只验证输出不验证状态，以及旧v3.1 runner对v4 wrapper的版本拒绝。长链误差比较还必须绑定BF16端点和compiler recipe；不能把本章的数学改写当一个无需误差验收的优化证明。</p><p><a href=\"https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py#L1515-L1623\">v4 ABI、完整 shape/alias 验证、zero batch 与调用 ↗</a></p><p><a href=\"https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py#L101-L236\">本地权重形状、core slab、workspace 与 pack ↗</a></p><p><a href=\"https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_linear_attn_fused_tp4_dp4.py#L484-L583\">旧 runner 硬传 v3.1 以及唯一 TP SUM ↗</a></p>"
+      }
+    ],
+    "questions": [
+      {
+        "id": "compat",
+        "q": "为什么当前两个最新主分支不能直接声称已完成KDA部署？",
+        "a": "模型runner仍硬传v3.1，而最新算子wrapper只接收v4_gdg/v4_ldg。接口在launch前拒绝；拓扑源码和kernel源码必须分别陈述，直到有匹配集成验证。",
+        "followup": "只把version字符串改掉还欠哪些状态、编译和数值检查？"
+      },
+      {
+        "id": "snapshot",
+        "q": "history写回为何能提前到卷积之前？",
+        "a": "只有旧tap与本步QKV已经进入只读SRAM、后续卷积不再读取被覆盖的GDG旧位置时才成立。地址复用还要保护这些快照，下一decode需看到完成的写回。",
+        "followup": "为什么“两个DMA按源码先后出现”不足以独立证明安全？"
+      },
+      {
+        "id": "rec-round",
+        "q": "decay-last实数等价，为什么仍需数值回归？",
+        "a": "当前实现对alpha*k、outer update、next state及output输入有BF16端点，并受VP链融合影响。等价代数并不保留浮点舍入顺序或长期状态误差。",
+        "followup": "为什么只比较本token的output会漏掉错误？"
+      },
+      {
+        "id": "barrier",
+        "q": "本核QKV只给自己的heads，为何S1后仍有barrier？",
+        "a": "完整output-gate gproj由core0发布，core1的early tail会读它；另一个barrier保证S3读取两个core发布的完整normed。不同写区间不能消除跨核RAW。",
+        "followup": "哪条源码注释与实际core0分支已不一致，审读时如何处理？"
+      },
+      {
+        "id": "communication",
+        "q": "1MiB的rec读写是否需要跨TP传输？",
+        "a": "不需要按本实现逐步归约state。各TP持有自己的head state；跨TP传输的是[B,4096]输出部分和，之后DP gather拼的是不同请求块。",
+        "followup": "B6时TP SUM输入与DP gather输出各是多少字节？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "ad-config",
+        "label": "内部 next 模型维度及 34 KDA/11 DSA 层号",
+        "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/configs/config_next.json#L1-L150",
+        "note": "zeus_dev@05ee10f9cc25d19fca0a144ae095c79b3a888976；2026-10-25只读源码核验，model_state_dev/glm5next_modules/configs/config_next.json:1–150。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-kda-runner",
+        "label": "DP token 分片、TP head/weight/state 分片",
+        "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_linear_attn_fused_tp4_dp4.py#L340-L458",
+        "note": "zeus_dev@05ee10f9cc25d19fca0a144ae095c79b3a888976；2026-10-25只读源码核验，model_state_dev/glm5next_modules/dev_linear_attn_fused_tp4_dp4.py:340–458。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-kda-gap",
+        "label": "旧 runner 硬传 v3.1 以及唯一 TP SUM",
+        "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_linear_attn_fused_tp4_dp4.py#L484-L583",
+        "note": "zeus_dev@05ee10f9cc25d19fca0a144ae095c79b3a888976；2026-10-25只读源码核验，model_state_dev/glm5next_modules/dev_linear_attn_fused_tp4_dp4.py:484–583。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-kda-gather",
+        "label": "开发回归 TP SUM 之后的 board-replicated gather",
+        "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_linear_attn_fused_tp4_dp4.py#L782-L812",
+        "note": "zeus_dev@05ee10f9cc25d19fca0a144ae095c79b3a888976；2026-10-25只读源码核验，model_state_dev/glm5next_modules/dev_linear_attn_fused_tp4_dp4.py:782–812。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-comm",
+        "label": "跨板 lane 和 BoardReplicatedAllgather 的输入/输出形状",
+        "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/_support/_comm.py#L13-L114",
+        "note": "zeus_dev@05ee10f9cc25d19fca0a144ae095c79b3a888976；2026-10-25只读源码核验，model_state_dev/glm5next_modules/_support/_comm.py:13–114。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-kda-v4",
+        "label": "只允许 v4_gdg/v4_ldg，v4 别名映射",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py#L49-L68",
+        "note": "torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7；2026-10-25只读源码核验，sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py:49–68。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-kda-pack",
+        "label": "本地权重形状、core slab、workspace 与 pack",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py#L101-L236",
+        "note": "torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7；2026-10-25只读源码核验，sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py:101–236。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-kda-state",
+        "label": "显式两-bank owner state、K-major conv pack",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py#L240-L321",
+        "note": "torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7；2026-10-25只读源码核验，sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py:240–321。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-kda-input",
+        "label": "本核 QKV/decay/beta，core0 发布全部 output gate",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py#L435-L532",
+        "note": "torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7；2026-10-25只读源码核验，sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py:435–532。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-kda-conv",
+        "label": "readonly taps、提早 history 写回、两 head 卷积",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py#L599-L734",
+        "note": "torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7；2026-10-25只读源码核验，sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py:599–734。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-kda-recur",
+        "label": "decay-last、BF16 中间端点和 64×128 state slab",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py#L757-L956",
+        "note": "torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7；2026-10-25只读源码核验，sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py:757–956。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-kda-tail",
+        "label": "pair 输出的 gated RMSNorm",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py#L958-L1000",
+        "note": "torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7；2026-10-25只读源码核验，sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py:958–1000。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-kda-pairs",
+        "label": "四个 head-pair lane、state 预取和 early tail",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py#L1124-L1248",
+        "note": "torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7；2026-10-25只读源码核验，sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py:1124–1248。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-kda-kernel",
+        "label": "单 launch、全局 barrier、request tile 与编译 constants",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py#L1399-L1512",
+        "note": "torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7；2026-10-25只读源码核验，sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py:1399–1512。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-kda-api",
+        "label": "v4 ABI、完整 shape/alias 验证、zero batch 与调用",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py#L1515-L1623",
+        "note": "torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7；2026-10-25只读源码核验，sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py:1515–1623。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-kda-ldg",
+        "label": "两 core 静态分支指向不同持久 owner bank",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_ldg_triton.py#L1021-L1132",
+        "note": "torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7；2026-10-25只读源码核验，sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_ldg_triton.py:1021–1132。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      }
+    ],
+    "takeaways": [
+      "最新默认分支存在v3.1/v4接口断点，不能用两份各自真实的源码拼成已验证生产链。",
+      "DP拥有请求、TP拥有heads、core拥有local heads；state与collective按这三层分别解释。",
+      "矩阵方阵不消除轴语义；decay-last等价不消除BF16舍入差异。",
+      "提前history写回和early tail依赖真正的数据生命周期证明；两核barrier对应具体跨核RAW。"
+    ]
+  }
+]

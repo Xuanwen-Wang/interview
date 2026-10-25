@@ -4,7 +4,7 @@
     "order": 16,
     "title": "把 GQA 与 FlashAttention 拆成可执行的数据流",
     "subtitle": "shape · stride · IO · tile",
-    "lead": "不再停在 QKᵀ 和 softmax。固定一组 decode 维度，把每个张量的生产者、消费者、地址和字节写出来，再改变 tile 与并行策略。所有数字都是可复算教学模型，不是 518 或 GPU 实测。",
+    "lead": "不再停在 QKᵀ 和 softmax。固定一组 decode 维度，把每个张量的生产者、消费者、地址和字节写出来，再改变 tile 与并行策略。所有数字都是可复算教学模型，不是具体设备实测。",
     "sections": [
       {
         "id": "contract",
@@ -19,7 +19,7 @@
       {
         "id": "tile-ledger",
         "title": "03 / 一个 tile 的片上账本：共享 KV 的代价是什么",
-        "html": "<p>取一个请求、一个 KV group，打包4个 query heads，历史块R=128，d=128。Q为[4,128]，K/V各[128,128]；score是[4,128]，输出累加器是[4,128]。假设输入BF16、score/累加FP32，在线状态每query只需一个max和一个sum。</p><table><thead><tr><th>片上对象</th><th>单份大小</th><th>生命周期</th></tr></thead><tbody><tr><td>Q</td><td>1 KiB</td><td>覆盖整个历史循环</td></tr><tr><td>K与V tile</td><td>共64 KiB</td><td>当前tile的QK/PV完成前</td></tr><tr><td>score tile</td><td>2 KiB</td><td>当前块softmax/PV完成前</td></tr><tr><td>输出累加</td><td>2 KiB</td><td>覆盖整个历史循环</td></tr><tr><td>m、l</td><td>32 bytes</td><td>覆盖整个历史循环</td></tr></tbody></table><p>若K/V双缓冲，同时保留两组共128 KiB，再加Q、score、累加和统计，教学净数据约133.03125 KiB；尚未计bank padding、描述符、其他临时量。把query group改成8会增加Q/score/output，不能说共享更多KV只有好处。计算每块4·4·128·128=262,144 FLOPs，唯一KV64 KiB，忽略其他流量的AI=4 FLOPs/byte；这与BF16、4:1 GQA的理论式一致。</p><aside class=\"callout\">这个账本不是目标芯片“允许此tile”的证明。CUDA寄存器/共享内存预算、518 L2/执行单元限制、编译后spill和布局padding都要另验。</aside>"
+        "html": "<p>取一个请求、一个 KV group，打包4个 query heads，历史块R=128，d=128。Q为[4,128]，K/V各[128,128]；score是[4,128]，输出累加器是[4,128]。假设输入BF16、score/累加FP32，在线状态每query只需一个max和一个sum。</p><table><thead><tr><th>片上对象</th><th>单份大小</th><th>生命周期</th></tr></thead><tbody><tr><td>Q</td><td>1 KiB</td><td>覆盖整个历史循环</td></tr><tr><td>K与V tile</td><td>共64 KiB</td><td>当前tile的QK/PV完成前</td></tr><tr><td>score tile</td><td>2 KiB</td><td>当前块softmax/PV完成前</td></tr><tr><td>输出累加</td><td>2 KiB</td><td>覆盖整个历史循环</td></tr><tr><td>m、l</td><td>32 bytes</td><td>覆盖整个历史循环</td></tr></tbody></table><p>若K/V双缓冲，同时保留两组共128 KiB，再加Q、score、累加和统计，教学净数据约133.03125 KiB；尚未计bank padding、描述符、其他临时量。把query group改成8会增加Q/score/output，不能说共享更多KV只有好处。计算每块4·4·128·128=262,144 FLOPs，唯一KV64 KiB，忽略其他流量的AI=4 FLOPs/byte；这与BF16、4:1 GQA的理论式一致。</p><aside class=\"callout\">这个账本不是目标芯片“允许此tile”的证明。CUDA寄存器/共享内存预算、目标加速器片上存储/执行单元限制、编译后spill和布局padding都要另验。</aside>"
       },
       {
         "id": "online-schedule",
@@ -34,7 +34,7 @@
       {
         "id": "split-history",
         "title": "06 / Split-history：以归约代价换更多可运行任务",
-        "html": "<p>把4096个历史位置分成R=4份，每个分片产生O_r[32,128]和LSE_r[32]。若O用FP32，单请求临时O占4×32×128×4=64 KiB，LSE再加512 bytes；这还没算最终合并的读与写。选择R=32会增加8倍临时输出，不是免费增加32倍吞吐。</p><div class=\"formula\">zmax = maxᵣ LSEᵣ<br>wᵣ = exp(LSEᵣ − zmax)<br>O = (Σᵣ wᵣ Oᵣ) / (Σᵣ wᵣ)</div><p>在CUDA上，一份请求可以拆成更多CTA，缓解可运行任务不足；如果主kernel已经带宽饱和，增加分片可能只多出合并成本。在518上，分片还可能改变双核输出所有权、片上中间buffer与同步边。需要比较完整“局部attention+归约”的计时，不能只报告局部扫描缩短。</p><p>当某分片没有合法token时，其LSE应表示零softmax质量，通常为−∞；合并时不能让−∞−−∞或0×NaN污染有效输出。边界测试应有短历史、小于分片数、末页部分有效和全mask分片。</p>"
+        "html": "<p>把4096个历史位置分成R=4份，每个分片产生O_r[32,128]和LSE_r[32]。若O用FP32，单请求临时O占4×32×128×4=64 KiB，LSE再加512 bytes；这还没算最终合并的读与写。选择R=32会增加8倍临时输出，不是免费增加32倍吞吐。</p><div class=\"formula\">zmax = maxᵣ LSEᵣ<br>wᵣ = exp(LSEᵣ − zmax)<br>O = (Σᵣ wᵣ Oᵣ) / (Σᵣ wᵣ)</div><p>在CUDA上，一份请求可以拆成更多CTA，缓解可运行任务不足；如果主kernel已经带宽饱和，增加分片可能只多出合并成本。在多核加速器上，分片还可能改变核间输出所有权、片上中间buffer与同步边。需要比较完整“局部attention+归约”的计时，不能只报告局部扫描缩短。</p><p>当某分片没有合法token时，其LSE应表示零softmax质量，通常为−∞；合并时不能让−∞−−∞或0×NaN污染有效输出。边界测试应有短历史、小于分片数、末页部分有效和全mask分片。</p>"
       },
       {
         "id": "operator-review",
@@ -86,7 +86,7 @@
         "id": "fa-tutorial",
         "label": "Triton 官方 Fused Attention 教程",
         "url": "https://triton-lang.org/main/getting-started/tutorials/06-fused-attention.html",
-        "note": "上游main文档，访问2026-10-24；不是518实现。",
+        "note": "上游main文档，访问2026-10-24；用于通用算子学习。",
         "kind": "官方文档"
       },
       {
@@ -117,13 +117,13 @@
     "id": "dsa-dataflow",
     "order": 17,
     "title": "真实 DSA：从压缩查询到候选、分页与 CP 合并",
-    "subtitle": "P1/P2/P3 · TopK · packed KV · collective",
-    "lead": "按固定版本的 GLM5Next runner 拆开三次计算和三次通信，解释每条中间边装的是什么。算子盒子、张量ABI、物理页和模型选择语义逐层对应，避免把“稀疏”讲成只跑一个小GEMM。",
+    "subtitle": "真实开发拓扑和算法流；下钻P1/P2/P3的入口",
+    "lead": "在GLM5Next 300B真实部署知识域中，从CP4×DP4的owner与collective开始理解DSA；本章讲模型层的数据流，下一章逐步走进当前P1/P2/P3。2026-10-25固定默认分支源码核验，证据来自开发harness，不等同于生产整模型已验收。",
     "sections": [
       {
         "id": "graph",
         "title": "01 / 先定运行路径：三个 kernel 之间还有三个 collective",
-        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 720 240\" role=\"img\" aria-label=\"当前 DSA runner 的调用顺序\"><rect width=\"720\" height=\"240\" rx=\"15\" fill=\"#eef2e7\"/><text x=\"24\" y=\"31\" fill=\"#274c3b\" font-size=\"18\" font-family=\"sans-serif\">当前 DSA runner 的调用顺序</text><rect x=\"20.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#315c4c\"/><text x=\"97.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">P1</text><text x=\"97.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">投影 / index / TopK1</text><path d=\"M177.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"195.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#506c79\"/><text x=\"272.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">CP gather</text><text x=\"272.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">查询与本地候选</text><path d=\"M352.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"370.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#796447\"/><text x=\"447.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">P2</text><text x=\"447.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">TopK2 / gather / attention</text><path d=\"M527.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"545.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#5d5777\"/><text x=\"622.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">CP gather → P3</text><text x=\"622.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">O/LSE合并与投影</text><text x=\"24\" y=\"179\" fill=\"#405b49\" font-size=\"14\" font-family=\"sans-serif\">P1 的候选是历史组ID；P2 的数据读是物理KV slots。</text><text x=\"24\" y=\"203\" fill=\"#405b49\" font-size=\"14\" font-family=\"sans-serif\">顺序来自runner，盒子不是纯数学算子的一一对应。</text></svg><figcaption>末尾还有world gather形成完整输出；依据固定源码重绘，没有运行时间比例。</figcaption></figure><p>已核验的forward_zeus按 P1→CP all_gather→P2→CP all_gather→P3→world all_gather 执行。prepare先创建固定容量工作区和通信wire，capture前以相同collective签名预热。实际batch可少于capacity；因此有效token数和每次传输的固定容量字节要分别统计。</p><p>P1名称是sgl_dsa_proj_indexer_topk1；P2是sgl_dsa_topk2_gather_attn；P3是sgl_dsa_absorb_proj。这些融合边界在当前版本成立，不能据此说任何DSA模型都恰好三kernel。它们也不是三次普通矩阵乘：里面包含量化、归一化、索引、候选筛选、状态追加与归约。</p>"
+        "html": "<p><strong>版本与范围：</strong>当前torch_zeus为3656952bfee88b1d5f7b68d0e724e54a7a5353d7，zeus_dev为05ee10f9cc25d19fca0a144ae095c79b3a888976。rank=4·dp+cp；连续四rank组成一个CP组，四DP处理不同请求。默认GDG三阶段与显式LDG/CP8实验入口分开。</p><figure class=\"diagram\"><svg viewBox=\"0 0 720 240\" role=\"img\" aria-label=\"当前 DSA runner 的调用顺序\"><rect width=\"720\" height=\"240\" rx=\"15\" fill=\"#eef2e7\"/><text x=\"24\" y=\"31\" fill=\"#274c3b\" font-size=\"18\" font-family=\"sans-serif\">当前 DSA runner 的调用顺序</text><rect x=\"20.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#315c4c\"/><text x=\"97.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">P1</text><text x=\"97.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">投影 / index / TopK1</text><path d=\"M177.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"195.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#506c79\"/><text x=\"272.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">CP gather</text><text x=\"272.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">查询与本地候选</text><path d=\"M352.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"370.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#796447\"/><text x=\"447.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">P2</text><text x=\"447.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">TopK2 / gather / attention</text><path d=\"M527.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"545.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#5d5777\"/><text x=\"622.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">CP gather → P3</text><text x=\"622.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">O/LSE合并与投影</text><text x=\"24\" y=\"179\" fill=\"#405b49\" font-size=\"14\" font-family=\"sans-serif\">P1 的候选是历史组ID；P2 的数据读是物理KV slots。</text><text x=\"24\" y=\"203\" fill=\"#405b49\" font-size=\"14\" font-family=\"sans-serif\">顺序来自runner，盒子不是纯数学算子的一一对应。</text></svg><figcaption>末尾还有world gather形成完整输出；依据固定源码重绘，没有运行时间比例。</figcaption></figure><p>已核验的forward_zeus按 P1→CP all_gather→P2→CP all_gather→P3→world all_gather 执行。prepare先创建固定容量工作区和通信wire，capture前以相同collective签名预热。实际batch可少于capacity；因此有效token数和每次传输的固定容量字节要分别统计。</p><p>P1名称是sgl_dsa_proj_indexer_topk1；P2是sgl_dsa_topk2_gather_attn；P3是sgl_dsa_absorb_proj。这些融合边界在当前版本成立，不能据此说任何DSA模型都恰好三kernel。它们也不是三次普通矩阵乘：里面包含量化、归一化、索引、候选筛选、状态追加与归约。</p><p>完整调用与每条wire的字节见<a href=\"#chapter/dsa-kernel-walkthrough\">DSA kernel逐步走读</a>；当前主证据入口是model_state_dev/RankLocalDSA，不推断外部SGLang整模型必然采用同一融合链。</p>"
       },
       {
         "id": "projections",
@@ -133,12 +133,12 @@
       {
         "id": "topk",
         "title": "03 / TopK1/TopK2：先证明候选覆盖，再优化阈值搜索",
-        "html": "<p>公开DSA的lightning indexer以较便宜的查询/键及head聚合给历史打分，主attention只精算选中的条目。内部next实现还有kpool=4的组级候选、尾部保留和CP分片；公开论文解释设计方向，当前runner的独立CPU检查才说明本版本的具体集合规则。</p><p>每个rank先提供自己的候选；若每片保留至少全局所需的k个、使用一致的全序比较，则全局top-k必包含于各片local top-k的并集。证明：某元素在本片已排k名之外，单是本片就有k个更优元素，它不可能进入全局前k。若local保留数小于全局k，此证明就失效。ties必须有一致的第二排序键，否则“值相同”不保证ID集合稳定。</p><p>当前CPU参考选择至多512个完整pool组，每组展开4个token，再追加未满组的1–3个live tail；短历史可能不足512组。topk2048是配置目标，不是每次恰好2048次读取的无条件保证。候选ID还必须与CP归属、request索引和当前有效长度联合解释。</p><table><thead><tr><th>反例</th><th>错误做法</th><th>应该检查</th></tr></thead><tbody><tr><td>两片分数[9,8]与[7,6]，全局k=2</td><td>每片只给top1，丢失8</td><td>local候选预算是否足够</td></tr><tr><td>分数相等但ID不同</td><td>各rank任意排序</td><td>统一score与ID的tie-break</td></tr><tr><td>长度2049</td><td>忽略最后1个tail</td><td>完整组与尾部各自语义</td></tr><tr><td>padding行</td><td>把无效score当0</td><td>有效mask、sentinel与count</td></tr></tbody></table>"
+        "html": "<p>公开DSA的lightning indexer以较便宜的查询/键及head聚合给历史打分，主attention只精算选中的条目。内部next实现还有kpool=4的组级候选、尾部保留和CP分片；公开论文解释设计方向，当前runner的独立CPU检查才说明本版本的具体集合规则。</p><p>每个rank先提供自己的候选；若每片保留至少全局所需的k个、使用一致的全序比较，则全局top-k必包含于各片local top-k的并集。证明：某元素在本片已排k名之外，单是本片就有k个更优元素，它不可能进入全局前k。若local保留数小于全局k，此证明就失效。ties必须有一致的第二排序键，否则“值相同”不保证ID集合稳定。</p><p>当前CPU参考选择至多512个完整pool组，每组展开4个token，再追加未满组的1–3个live tail；短历史可能不足512组。topk2048是配置目标，不是每次恰好2048次读取的无条件保证。候选ID还必须与CP归属、request索引和当前有效长度联合解释。</p><table><thead><tr><th>反例</th><th>错误做法</th><th>应该检查</th></tr></thead><tbody><tr><td>两片分数[9,8]与[7,6]，全局k=2</td><td>每片只给top1，丢失8</td><td>local候选预算是否足够</td></tr><tr><td>分数相等但ID不同</td><td>各rank任意排序</td><td>统一score与ID的tie-break</td></tr><tr><td>长度2049</td><td>忽略最后1个tail</td><td>完整组与尾部各自语义</td></tr><tr><td>padding行</td><td>把无效score当0</td><td>有效mask、sentinel与count</td></tr></tbody></table><p>当前默认源码还允许受严格history/extents条件约束的raw-score wire：某些输入跳过本地Top512收集，让P2直接选择完整有效score前缀。因此“P1叫TopK1”不等于每个请求必然执行同一筛选路径。数值、通信与性能讨论都应标candidate或raw协议。</p>"
       },
       {
         "id": "packed-cache",
         "title": "04 / 528-byte行：从token ID到真实读地址",
-        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 720 240\" role=\"img\" aria-label=\"主 latent 的物理访问\"><rect width=\"720\" height=\"240\" rx=\"15\" fill=\"#eef2e7\"/><text x=\"24\" y=\"31\" fill=\"#274c3b\" font-size=\"18\" font-family=\"sans-serif\">主 latent 的物理访问</text><rect x=\"20.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#315c4c\"/><text x=\"97.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">逻辑token ID</text><text x=\"97.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">请求 / CP归属</text><path d=\"M177.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"195.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#506c79\"/><text x=\"272.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">页表查找</text><text x=\"272.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">物理page + row</text><path d=\"M352.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"370.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#796447\"/><text x=\"447.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">packed row</text><text x=\"447.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">512 FP8 + 16B scale</text><path d=\"M527.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"545.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#5d5777\"/><text x=\"622.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">解量化</text><text x=\"622.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">4组×128 → c[512]</text><text x=\"24\" y=\"179\" fill=\"#405b49\" font-size=\"14\" font-family=\"sans-serif\">payload reinterpret为BF16用于通信不等于把原数据转换为BF16。</text><text x=\"24\" y=\"203\" fill=\"#405b49\" font-size=\"14\" font-family=\"sans-serif\">score正确、ID正确、slot映射正确、解码正确是四个独立验收点。</text></svg><figcaption>原创ABI图；实际索引路径以当前token pool为准。</figcaption></figure><p>一个row的前512 bytes是E4M3值，后16 bytes是四个FP32 scale，每组128个值共享一个scale。解码是 c[g·128+k]=fp8[g,k]·scale[g]。以一个量化值2.0、scale0.25为例，恢复值0.5；scale并非另一个参与softmax的score。</p><p>假设本步选2048个有效token且每个latent只逻辑加载一次，总主cache读取2048×528=1,081,344 bytes=1.03125 MiB/请求/层。全部65536历史为33 MiB。两者是主latent的选择前后逻辑账本，不含indexer扫描、页表、重复访问、通信或多head重载。实际随机地址可能使事务放大，不能把32倍字节比例直接写成32倍加速。</p><p>页表正确性不能靠连续随机tensor替代。应包含跨页、不同请求页面不相邻、slot回收、尾部未满组、CP归属变化。若大量token值恰好相同，错误slot可能不影响最终allclose，因此要单独核对ID→slot。</p>"
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 720 240\" role=\"img\" aria-label=\"主 latent 的物理访问\"><rect width=\"720\" height=\"240\" rx=\"15\" fill=\"#eef2e7\"/><text x=\"24\" y=\"31\" fill=\"#274c3b\" font-size=\"18\" font-family=\"sans-serif\">主 latent 的物理访问</text><rect x=\"20.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#315c4c\"/><text x=\"97.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">逻辑token ID</text><text x=\"97.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">请求 / CP归属</text><path d=\"M177.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"195.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#506c79\"/><text x=\"272.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">页表查找</text><text x=\"272.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">物理page + row</text><path d=\"M352.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"370.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#796447\"/><text x=\"447.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">packed row</text><text x=\"447.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">512 FP8 + 16B scale</text><path d=\"M527.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"545.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#5d5777\"/><text x=\"622.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">解量化</text><text x=\"622.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">4组×128 → c[512]</text><text x=\"24\" y=\"179\" fill=\"#405b49\" font-size=\"14\" font-family=\"sans-serif\">payload reinterpret为BF16用于通信不等于把原数据转换为BF16。</text><text x=\"24\" y=\"203\" fill=\"#405b49\" font-size=\"14\" font-family=\"sans-serif\">score正确、ID正确、slot映射正确、解码正确是四个独立验收点。</text></svg><figcaption>原创ABI图；实际索引路径以当前token pool为准。</figcaption></figure><p>一个row的前512 bytes是E4M3值，后16 bytes是四个FP32 scale，每组128个值共享一个scale。解码是 c[g·128+k]=fp8[g,k]·scale[g]。以一个量化值2.0、scale0.25为例，恢复值0.5；scale并非另一个参与softmax的score。</p><p>假设本步选2048个有效token且每个latent只逻辑加载一次，总主cache读取2048×528=1,081,344 bytes=1.03125 MiB/请求/层。全部65536历史为33 MiB。两者是主latent的选择前后逻辑账本，不含indexer扫描、页表、重复访问、通信或多head重载。实际随机地址可能使事务放大，不能把32倍字节比例直接写成32倍加速。</p><p>页表正确性不能靠连续随机tensor替代。应包含跨页、不同请求页面不相邻、slot回收、尾部未满组、CP归属变化。若大量token值恰好相同，错误slot可能不影响最终allclose，因此要单独核对ID→slot。</p><p>历史所有权按四token组轮转：owner(t)=floor(t/4) mod 4；每CP的128-token页保存CP-local顺序，不是全局token连续页。完整pool由selected_slots给四行起点，未满tail才查询cp_local_pages表。主latent池为每DP共享1M-token预算，不能按每请求各分1M计算。</p>"
       },
       {
         "id": "partial-attention",
@@ -148,7 +148,7 @@
       {
         "id": "merge-project",
         "title": "06 / P3与最后gather：归一化先合并，再应用线性投影",
-        "html": "<p>P3拿到各CP分片的O/LSE，以exp(LSE−maxLSE)加权，恢复全局归一化latent输出。然后以每head的Wv将512维latent变为256维value结果，合并heads并作Wo得到hidden。数学上可做线性权重吸收；具体pack与输出ownership由P3实现决定。这里不把它擅自替换成“普通TP all_reduce”。</p><p>P3之后runner还有world all_gather，最终视图为[4,Bcapacity,4096]。这反映当前DP/CP组织与输出片段收集方式，不表示每rank都独立算了完整模型四遍。部署图应在每一条通信边写清参与组、逻辑payload和最终复制/切分状态。</p><p>如果只测P2，测到的是局部重attention；即使它加速一倍，P1的projection/index/TopK、两个CP gather、P3和最后gather仍然存在。完整DSA优化必须先给组件占比与同输入A/B。通用Amdahl式为speedup=1/[(1−f)+f/s]；f只能来自同一端到端计时范围。</p>"
+        "html": "<p>P3拿到各CP分片的O/LSE，以exp(LSE−maxLSE)加权，恢复全局归一化latent输出。然后以每head的Wv将512维latent变为256维value结果，合并heads并作Wo得到hidden。数学上可做线性权重吸收；具体pack与输出ownership由P3实现决定。这里不把它擅自替换成“普通TP all_reduce”。</p><p>P3之后runner还有world all_gather，最终视图为[4,Bcapacity,4096]。P3的本地输出虽形状为[C,1024]，实际表示flatten(Y[C,4096])中[cp·C·1024,(cp+1)·C·1024)的连续区间。C4时每CP一个完整token，C6时每CP一个半token，只有C1才是每token的1024列分片。AG16按rank-major拼成[4,C,4096]；这不是TP求和。部署图应在每一条通信边写清参与组、逻辑payload和最终复制/切分状态。</p><p>如果只测P2，测到的是局部重attention；即使它加速一倍，P1的projection/index/TopK、两个CP gather、P3和最后gather仍然存在。完整DSA优化必须先给组件占比与同输入A/B。通用Amdahl式为speedup=1/[(1−f)+f/s]；f只能来自同一端到端计时范围。</p>"
       },
       {
         "id": "dependency-test",
@@ -193,28 +193,28 @@
         "id": "dsa-runner",
         "label": "GLM5Next DSA runner",
         "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_dsa_deepfused_cp4_dp4.py",
-        "note": "固定源码 05ee10f9cc25；2026-10-24只读核验，不是本轮设备运行；原权限独立。",
+        "note": "固定源码 05ee10f9cc25；2026-10-25只读核验，不是本轮设备运行；原权限独立。",
         "kind": "源码"
       },
       {
         "id": "dsa-p1",
         "label": "DSA P1与packed payload",
-        "url": "https://github.com/DarronTam/torch_zeus/blob/68f19fa0a159b8ff861dc9cf736d9c0ae64906ba/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_proj_indexer_topk1.py",
-        "note": "固定源码 68f19fa0a159；只读核验，原来源权限独立。",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_proj_indexer_topk1.py",
+        "note": "固定源码 3656952bfee88b1d5f7b68d0e724e54a7a5353d7；只读核验，原来源权限独立。",
         "kind": "源码"
       },
       {
         "id": "dsa-p2",
         "label": "DSA P2",
-        "url": "https://github.com/DarronTam/torch_zeus/blob/68f19fa0a159b8ff861dc9cf736d9c0ae64906ba/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_topk2_gather_attn.py",
-        "note": "固定源码 68f19fa0a159；只读核验，原来源权限独立。",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_topk2_gather_attn.py",
+        "note": "固定源码 3656952bfee88b1d5f7b68d0e724e54a7a5353d7；只读核验，原来源权限独立。",
         "kind": "源码"
       },
       {
         "id": "dsa-p3",
         "label": "DSA P3",
-        "url": "https://github.com/DarronTam/torch_zeus/blob/68f19fa0a159b8ff861dc9cf736d9c0ae64906ba/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_absorb_proj.py",
-        "note": "固定源码 68f19fa0a159；只读核验，原来源权限独立。",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_absorb_proj.py",
+        "note": "固定源码 3656952bfee88b1d5f7b68d0e724e54a7a5353d7；只读核验，原来源权限独立。",
         "kind": "源码"
       },
       {
@@ -223,6 +223,27 @@
         "url": "https://arxiv.org/abs/2512.02556",
         "note": "公开DSA算法背景；不替代内部kpool/tail/CP实现。",
         "kind": "论文"
+      },
+      {
+        "id": "ad-dsa-p1-wire",
+        "label": "metadata 更新、有效前缀、raw 模式判定",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_proj_indexer_topk1.py#L6039-L6102",
+        "note": "torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7；2026-10-25只读源码核验，sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_proj_indexer_topk1.py:6039–6102。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-dsa-p3-host",
+        "label": "输出 pack/shape 和 CP-owned flat gather 入口",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_absorb_proj.py#L707-L807",
+        "note": "torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7；2026-10-25只读源码核验，sgl-kernel-zeus-triton/python/glm53_flash/dsa/sgl_dsa_absorb_proj.py:707–807。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-dsa-export",
+        "label": "默认 GDG 三阶段导出，LDG 独立显式导入",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/dsa/__init__.py#L1-L40",
+        "note": "torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7；2026-10-25只读源码核验，sgl-kernel-zeus-triton/python/glm53_flash/dsa/__init__.py:1–40。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
       }
     ],
     "takeaways": [
@@ -231,7 +252,7 @@
       "通信wire的view与数值cast不同。",
       "稀疏主attention之外仍有随长度增长的工作。"
     ],
-    "part": "算子数据流",
+    "part": "GLM5Next 300B 真实部署",
     "minutes": 45,
     "level": "深入",
     "tags": [
@@ -245,28 +266,28 @@
     "id": "kda-dataflow",
     "order": 18,
     "title": "真实 KDA：一拍状态更新里的全部算子",
-    "subtitle": "depthwise conv · gate · state · TP",
-    "lead": "固定状态的递推只是KDA子层的中间一段。沿TP-local的实际shape追踪投影、短卷积、归一化、门控、矩阵记忆、输出投影与通信，理解哪些内存能复用、哪些误差会跨token累积。",
+    "subtitle": "TP4/DP4开发框架与当前v4算子的分层合同",
+    "lead": "从请求、head和core的归属追踪KDA的投影、卷积、递归状态与输出。当前开发runner仍传v3.1，最新算子库只接受v4；本章明确这处断点，数学示例与当前机器舍入细节分别讲解。",
     "sections": [
       {
         "id": "inventory",
         "title": "01 / 先列tensor：TP4后并不只剩一个128×128矩阵",
-        "html": "<p>当前next配置H4096、全局64heads、dk=dv=128、卷积长度4。TP4后每rank16heads，局部投影宽P=2048。对本rank的B个decode tokens，hidden[B,4096]被复制或按上层输入合同提供，QKV合并投影输出[B,6144]，不是[B,4096]。</p><table><thead><tr><th>阶段</th><th>逻辑局部shape</th><th>主要操作/状态</th></tr></thead><tbody><tr><td>QKV投影</td><td>[B,4096]→[B,6144]</td><td>三组2048宽输出</td></tr><tr><td>β投影</td><td>[B,4096]→[B,16]</td><td>sigmoid后每head一个步长</td></tr><tr><td>decay与output gate</td><td>各[B,2048]</td><td>低秩两级投影</td></tr><tr><td>短卷积</td><td>[B,6144]</td><td>旧3tap + 新1tap</td></tr><tr><td>递归state</td><td>[B,16,128,128]</td><td>decay、matvec、outer update</td></tr><tr><td>输出投影</td><td>[B,2048]→[B,4096]</td><td>TP partial hidden，随后SUM</td></tr></tbody></table><p>仅QKV权重6144×4096个BF16元素就有48 MiB/rank，输出投影4096×2048再有16 MiB；两项每请求FLOPs约67,108,864，尚未计gate支路。因此把KDA称作“只更新512 KiB state的小向量算子”会漏掉大量投影。实际权重可能pack、量化或驻留，以上是逻辑BF16形状账本。</p>"
+        "html": "<aside class=\"callout\">当前快照存在接口缺口：zeus_dev开发runner仍指定v3.1，torch_zeus最新默认分支已只接受v4_gdg/v4_ldg。以下TP分片是既有harness合同，不能当作这两个版本组合已执行成功。详见<a href=\"#chapter/kda-kernel-walkthrough\">KDA v4 kernel逐步走读</a>。</aside><p>当前next配置H4096、全局64heads、dk=dv=128、卷积长度4。TP4后每rank16heads，局部投影宽P=2048。对本rank的B个decode tokens，hidden[B,4096]被复制或按上层输入合同提供，QKV合并投影输出[B,6144]，不是[B,4096]。</p><table><thead><tr><th>阶段</th><th>逻辑局部shape</th><th>主要操作/状态</th></tr></thead><tbody><tr><td>QKV投影</td><td>[B,4096]→[B,6144]</td><td>三组2048宽输出</td></tr><tr><td>β投影</td><td>[B,4096]→[B,16]</td><td>sigmoid后每head一个步长</td></tr><tr><td>decay与output gate</td><td>各[B,2048]</td><td>低秩两级投影</td></tr><tr><td>短卷积</td><td>[B,6144]</td><td>旧3tap + 新1tap</td></tr><tr><td>递归state</td><td>[B,16,128,128]</td><td>decay、matvec、outer update</td></tr><tr><td>输出投影</td><td>[B,2048]→[B,4096]</td><td>TP partial hidden，随后SUM</td></tr></tbody></table><p>仅QKV权重6144×4096个BF16元素就有48 MiB/rank，输出投影4096×2048再有16 MiB；两项每请求FLOPs约67,108,864，尚未计gate支路。因此把KDA称作“只更新512 KiB state的小向量算子”会漏掉大量投影。实际权重可能pack、量化或驻留，以上是逻辑BF16形状账本。</p>"
       },
       {
         "id": "conv",
         "title": "02 / 短卷积不是沿hidden混通道：手算一个channel",
-        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 760 300\" role=\"img\" aria-label=\"KDA 短卷积：两路输入与两路消费者\"><rect width=\"760\" height=\"300\" rx=\"15\" fill=\"#eef2e7\"/><text x=\"24\" y=\"31\" fill=\"#405b49\" font-size=\"18\" font-family=\"sans-serif\">KDA 短卷积：两路输入与两路消费者</text><rect x=\"20\" y=\"55\" width=\"195\" height=\"65\" rx=\"8\" fill=\"#315c4c\"/><text x=\"117.5\" y=\"80\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"14\" font-family=\"sans-serif\">旧卷积状态：3 tap</text><text x=\"117.5\" y=\"103\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"12\" font-family=\"sans-serif\">[B,3,6144]</text><rect x=\"20\" y=\"175\" width=\"195\" height=\"65\" rx=\"8\" fill=\"#506c79\"/><text x=\"117.5\" y=\"200\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"14\" font-family=\"sans-serif\">当前 QKV：新 1 tap</text><text x=\"117.5\" y=\"223\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"12\" font-family=\"sans-serif\">由当前 hidden 投影得到</text><rect x=\"265\" y=\"110\" width=\"195\" height=\"70\" rx=\"8\" fill=\"#796447\"/><text x=\"362.5\" y=\"135\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"14\" font-family=\"sans-serif\">取得四个原始输入</text><text x=\"362.5\" y=\"158\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"12\" font-family=\"sans-serif\">先保留仍需使用的旧值</text><rect x=\"515\" y=\"55\" width=\"225\" height=\"65\" rx=\"8\" fill=\"#5d5777\"/><text x=\"627.5\" y=\"80\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"14\" font-family=\"sans-serif\">逐 channel 四项点积</text><text x=\"627.5\" y=\"103\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"12\" font-family=\"sans-serif\">加 bias → SiLU → BF16</text><rect x=\"515\" y=\"175\" width=\"225\" height=\"65\" rx=\"8\" fill=\"#315c4c\"/><text x=\"627.5\" y=\"200\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"14\" font-family=\"sans-serif\">移位后取最后 3 tap</text><text x=\"627.5\" y=\"223\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"12\" font-family=\"sans-serif\">写回 conv state 供下一拍</text><path d=\"M215 87H240V137H262m-6 -5l6 5l-6 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><path d=\"M215 207H240V153H262m-6 -5l6 5l-6 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><path d=\"M460 137H487V87H512m-6 -5l6 5l-6 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><path d=\"M460 153H487V207H512m-6 -5l6 5l-6 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><text x=\"24\" y=\"274\" fill=\"#405b49\" font-size=\"13\" font-family=\"sans-serif\">两路输入互不产生对方；卷积计算与状态更新共同消费这些输入。</text></svg><figcaption>原创数据流图；“取得输入”是概念上的安全读取边界，不要求额外物化一份 tensor。卷积权重按 channel 独立。</figcaption></figure><p>对某channel，旧tap=[1,2,3]、新输入4、卷积权重[0.1,0.2,0.3,0.4]，卷积输出0.1+0.4+0.9+1.6=3.0，再经SiLU得到约2.8577；新tap应为[2,3,4]。这是独立算例，假设该实现的tap从旧到新排序，实际kernel需对照权重与state布局。</p><p>当前原生conv池为tap-major [pool,3,6144]，CPU参考取出后转置为channel-major计算，再转回写入。每请求读旧state36 KiB并写新state36 KiB是持久conv的逻辑最低量；新QKV、卷积权重与临时值另计。若原地先移动覆盖最旧tap，随后还要读它，便会产生错误；优化可用寄存器保留旧值，但必须证明读写次序。</p><p>conv输出做BF16舍入后才拆成q/k/v，是当前参考的数值边界。融合不能把所有中间舍入无限延后又声称逐位等价；需要明确验证合同允许的误差。</p>"
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 760 300\" role=\"img\" aria-label=\"KDA 短卷积：两路输入与两路消费者\"><rect width=\"760\" height=\"300\" rx=\"15\" fill=\"#eef2e7\"/><text x=\"24\" y=\"31\" fill=\"#405b49\" font-size=\"18\" font-family=\"sans-serif\">KDA 短卷积：两路输入与两路消费者</text><rect x=\"20\" y=\"55\" width=\"195\" height=\"65\" rx=\"8\" fill=\"#315c4c\"/><text x=\"117.5\" y=\"80\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"14\" font-family=\"sans-serif\">旧卷积状态：3 tap</text><text x=\"117.5\" y=\"103\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"12\" font-family=\"sans-serif\">[B,3,6144]</text><rect x=\"20\" y=\"175\" width=\"195\" height=\"65\" rx=\"8\" fill=\"#506c79\"/><text x=\"117.5\" y=\"200\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"14\" font-family=\"sans-serif\">当前 QKV：新 1 tap</text><text x=\"117.5\" y=\"223\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"12\" font-family=\"sans-serif\">由当前 hidden 投影得到</text><rect x=\"265\" y=\"110\" width=\"195\" height=\"70\" rx=\"8\" fill=\"#796447\"/><text x=\"362.5\" y=\"135\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"14\" font-family=\"sans-serif\">取得四个原始输入</text><text x=\"362.5\" y=\"158\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"12\" font-family=\"sans-serif\">先保留仍需使用的旧值</text><rect x=\"515\" y=\"55\" width=\"225\" height=\"65\" rx=\"8\" fill=\"#5d5777\"/><text x=\"627.5\" y=\"80\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"14\" font-family=\"sans-serif\">逐 channel 四项点积</text><text x=\"627.5\" y=\"103\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"12\" font-family=\"sans-serif\">无 bias → SiLU → BF16</text><rect x=\"515\" y=\"175\" width=\"225\" height=\"65\" rx=\"8\" fill=\"#315c4c\"/><text x=\"627.5\" y=\"200\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"14\" font-family=\"sans-serif\">移位后取最后 3 tap</text><text x=\"627.5\" y=\"223\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"12\" font-family=\"sans-serif\">写回 conv state 供下一拍</text><path d=\"M215 87H240V137H262m-6 -5l6 5l-6 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><path d=\"M215 207H240V153H262m-6 -5l6 5l-6 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><path d=\"M460 137H487V87H512m-6 -5l6 5l-6 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><path d=\"M460 153H487V207H512m-6 -5l6 5l-6 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><text x=\"24\" y=\"274\" fill=\"#405b49\" font-size=\"13\" font-family=\"sans-serif\">两路输入互不产生对方；卷积计算与状态更新共同消费这些输入。</text></svg><figcaption>原创数据流图；“取得输入”是概念上的安全读取边界，不要求额外物化一份 tensor。卷积权重按 channel 独立。</figcaption></figure><p>对某channel，旧tap=[1,2,3]、新输入4、卷积权重[0.1,0.2,0.3,0.4]，卷积输出0.1+0.4+0.9+1.6=3.0，再经SiLU得到约2.8577；新tap应为[2,3,4]。这是独立算例，假设该实现的tap从旧到新排序，实际kernel需对照权重与state布局。</p><p>当前原生conv池为tap-major [pool,3,6144]，CPU参考取出后转置为channel-major计算，再转回写入。每请求读旧state36 KiB并写新state36 KiB是持久conv的逻辑最低量；新QKV、卷积权重与临时值另计。若原地先移动覆盖最旧tap，随后还要读它，便会产生错误；优化可用寄存器保留旧值，但必须证明读写次序。</p><p>conv输出做BF16舍入后才拆成q/k/v，是当前参考的数值边界。融合不能把所有中间舍入无限延后又声称逐位等价；需要明确验证合同允许的误差。</p>"
       },
       {
         "id": "gates",
         "title": "03 / 三种门不能混：β、decay、output gate",
-        "html": "<p>β是每head标量，经过sigmoid后控制delta写入强度。decay gate是每key channel的向量，控制旧矩阵记忆每一行的保留程度。output gate作用于递推读出的输出，不能拿它代替状态遗忘。三者的shape、作用时刻和持久影响都不同。</p><div class=\"formula\">当前safe_gate路径：g = −5 · sigmoid(exp(A_log) · (f + dt_bias))<br>α = exp(g)，β = sigmoid(b)<br>理论上 g∈(−5,0)，α∈(e⁻⁵,1)；有限精度可能到端点。</div><p>例如某通道g=−ln2，α=0.5，旧记忆这一行缩小一半。g较接近0则保留得更久。A_log按head、dt_bias按channel广播，广播轴错一层可以shape完全合法却改变模型。Q/K还各自沿128维做L2 normalization；Q再乘缩放因子，不能把这次范数归约和最终RMSNorm混为一谈。</p><p>当前CPU参考的输出支路是gated RMSNorm，并采用sigmoid gate。其他线性attention论文或实现可能用SiLU/不同顺序；不能只凭“都是gate”把其中一个激活搬来。具体参数化应从当前runner核验，公开KDA论文只支持整体机制。</p>"
+        "html": "<p>β是每head标量，经过sigmoid后控制delta写入强度。decay gate是每key channel的向量，在逻辑S[Dk,Dv]中控制每一行的保留程度；物理池[Dv,Dk]对应最后一维。output gate作用于递推读出的输出，不能拿它代替状态遗忘。三者的shape、作用时刻和持久影响都不同。</p><div class=\"formula\">当前safe_gate路径：g = −5 · sigmoid(exp(A_log) · (f + dt_bias))<br>α = exp(g)，β = sigmoid(b)<br>理论上 g∈(−5,0)，α∈(e⁻⁵,1)；有限精度可能到端点。</div><p>例如某通道g=−ln2，α=0.5，旧记忆这一行缩小一半。g较接近0则保留得更久。A_log按head、dt_bias按channel广播，广播轴错一层可以shape完全合法却改变模型。Q/K还各自沿128维做L2 normalization；Q再乘缩放因子，不能把这次范数归约和最终RMSNorm混为一谈。</p><p>当前CPU参考的输出支路是gated RMSNorm，并采用sigmoid gate。其他线性attention论文或实现可能用SiLU/不同顺序；不能只凭“都是gate”把其中一个激活搬来。具体参数化应从当前runner核验，公开KDA论文只支持整体机制。</p>"
       },
       {
         "id": "matrix-update",
         "title": "04 / 递归矩阵的轴向：一次完整数值例子",
-        "html": "<p>逻辑state S[Dk,Dv]表示key方向到value方向的映射；原生物理池却保存[Dv,Dk]。这是方阵也不能忽略的转置。逻辑更新先按key通道衰减S的行，再计算vhat=Sᵀk，最后写入k·(v−vhat)ᵀ。</p><div class=\"formula\">S̃ = diag(α)S<br>e = v − S̃ᵀk<br>Snew = S̃ + β k eᵀ<br>o = Snewᵀq</div><p>教学取S=[[1,2],[3,4]]，α=[0.5,1]，k=[1,0]，v=[2,5]，β=0.25，q=[0,1]。先得S̃=[[0.5,1],[3,4]]，预测[0.5,1]，误差[1.5,4]，增量[[0.375,1],[0,0]]，新S=[[0.875,2],[3,4]]，输出[3,4]。这里q读第二行，所以当前写第一行不改变本次输出，却会影响下一token查询第一行。只检查当前输出会漏掉state写回错误。</p><p>此例使用已准备好的q/k以隔离递推，不包含投影、Q缩放和output norm；它不是完整模型的参考输出。物理布局[Dv,Dk]下，key维在最后一维，decay和outer-product索引要相应转置。Dk=Dv时错误转置不会触发shape检查。</p>"
+        "html": "<p>逻辑state S[Dk,Dv]表示key方向到value方向的映射；原生物理池却保存[Dv,Dk]。这是方阵也不能忽略的转置。理想实数参考的逻辑更新先按key通道衰减S的行，再计算vhat=Sᵀk，最后写入k·(v−vhat)ᵀ。</p><div class=\"formula\">S̃ = diag(α)S<br>e = v − S̃ᵀk<br>Snew = S̃ + β k eᵀ<br>o = Snewᵀq</div><p>教学取S=[[1,2],[3,4]]，α=[0.5,1]，k=[1,0]，v=[2,5]，β=0.25，q=[0,1]。先得S̃=[[0.5,1],[3,4]]，预测[0.5,1]，误差[1.5,4]，增量[[0.375,1],[0,0]]，新S=[[0.875,2],[3,4]]，输出[3,4]。这里q读第二行，所以当前写第一行不改变本次输出，却会影响下一token查询第一行。只检查当前输出会漏掉state写回错误。</p><p>此例使用已准备好的q/k以隔离递推，不包含投影、Q缩放和output norm；它不是完整模型的参考输出。物理布局[Dv,Dk]下，key维在最后一维，decay和outer-product索引要相应转置。Dk=Dv时错误转置不会触发shape检查。</p><p>当前v4设备实现采用decay-last重组，并将outer update和新state等位置窄化为BF16，output读取舍入后的新state；所以上述算例用于解释轴与数学依赖，不能当v4逐位输出预言。新章给出当前helper的实际舍入端点。</p>"
       },
       {
         "id": "state-schedule",
@@ -275,13 +296,13 @@
       },
       {
         "id": "abi-numerics",
-        "title": "06 / 当前BF16 ABI：长期误差与Graph生命周期",
-        "html": "<p>active recipe是v3.1、state_dtype=bfloat16、gpswap=True、safe_gate=True。rec[pool,16,Dv,Dk]与conv[pool,3,6144]都持久保存BF16；旧FP32、不同轴顺序的pool通过显式migration导入。不要在新版本描述中混用旧文档的FP32大小。</p><p>理想FP32计算再每token写BF16，误差会随时间被下一个decay与delta更新继续处理。若α接近1，旧误差可能保留；若输入归一化、gate或参考累计方式不同，误差行为又变。一次随机输入allclose无法证明长请求质量。必须同时检查当前输出、新rec、新conv，再做连续token链以及真实分布的模型指标。</p><p>prepare与call_slot定义临时工作区所有权。Graph记录的地址必须在replay期间有效，cache indices与有效batch可以作为数据更新；两个并发call使用同一workspace而不同请求pool也可能竞争。地址相同的buffer若跨kernel尚有异步消费者，Python作用域结束不是可释放证明。</p>"
+        "title": "06 / 当前 BF16 ABI、版本断点与 Graph 生命周期",
+        "html": "<p>最新算子库active recipe为v4_gdg默认或显式v4_ldg，要求state_dtype=bfloat16、gpswap=True（或默认）、safe_gate=True；开发runner仍显式传v3.1，二者尚有源码可见的版本不兼容。默认GDG的rec[pool,16,Dv,Dk]与conv[pool,3,6144]都持久保存BF16；显式LDG将rec分为两个[pool,8,Dv,Dk] owner bank；旧FP32、不同轴顺序的pool通过显式migration导入。不要在新版本描述中混用旧文档的FP32大小。</p><p>理想FP32递推与当前设备实现有不同舍入端点；设备并非只在每token结尾才写一次BF16。持久state的舍入误差会随时间被下一个decay与delta更新继续处理。若α接近1，旧误差可能保留；若输入归一化、gate或参考累计方式不同，误差行为又变。一次随机输入allclose无法证明长请求质量。必须同时检查当前输出、新rec、新conv，再做连续token链以及真实分布的模型指标。</p><p>prepare与call_slot定义临时工作区所有权。Graph记录的地址必须在replay期间有效，cache indices与有效batch可以作为数据更新；两个并发call使用同一workspace而不同请求pool也可能竞争。地址相同的buffer若跨kernel尚有异步消费者，Python作用域结束不是可释放证明。</p>"
       },
       {
         "id": "full-layer",
         "title": "07 / 一个fused kernel为什么还不能当完整KDA子层延迟",
-        "html": "<p>forward_partial_zeus执行本地融合计算，wrapper随后对TP组做一次all_reduce SUM；更高层运行路径还有DP输出组织。矩阵投影按TP切分后，每rank产生partial hidden，不能将partial直接当成最终hidden，也不能在kernel内外重复SUM。</p><p>测量需分开本地fused kernel、TP归约、必要输入输出重排与完整子层。低batch时本地投影和状态读写的固定成本占比较大；batch增加可摊薄权重读取，但每请求独立state流量大致随B增长。只有看到trace与有效带宽，才能判断优化应瞄准PE、VP、DT还是collective。</p><p>白板练习：把B=1改为B=8，列出哪些权重不变、哪些state和临时激活变8倍；再把D从128改256，矩阵state增长4倍、向量gate增长2倍。由此说明“线性attention O(1)缓存”只针对历史长度N，不能当作对所有维度都不增长。</p>"
+        "html": "<p>本节描述开发runner的既有通信设计；接入最新v4前还需修复上述版本合同并完成匹配验证。</p><p>forward_partial_zeus执行本地融合计算，wrapper随后对TP组做一次all_reduce SUM；更高层运行路径还有DP输出组织。矩阵投影按TP切分后，每rank产生partial hidden，不能将partial直接当成最终hidden，也不能在kernel内外重复SUM。</p><p>测量需分开本地fused kernel、TP归约、必要输入输出重排与完整子层。低batch时本地投影和状态读写的固定成本占比较大；batch增加可摊薄权重读取，但每请求独立state流量大致随B增长。只有看到trace与有效带宽，才能判断优化应瞄准PE、VP、DT还是collective。</p><p>白板练习：把B=1改为B=8，列出哪些权重不变、哪些state和临时激活变8倍；再把D从128改256，矩阵state增长4倍、向量gate增长2倍。由此说明“线性attention O(1)缓存”只针对历史长度N，不能当作对所有维度都不增长。</p><p>run_rank在TP SUM之后调用BoardReplicatedAllgather，lane为[t,t+4,t+8,t+12]，输入[B,4096]返回[4B,4096]。这一步拼不同DP请求，不交换rec/conv状态；是否生产层边界必须保留，应由上下游token-layout证明。</p>"
       }
     ],
     "questions": [
@@ -321,14 +342,14 @@
         "id": "kda-runner",
         "label": "GLM5Next KDA runner与CPU参考",
         "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_linear_attn_fused_tp4_dp4.py",
-        "note": "固定源码 05ee10f9cc25；2026-10-24只读核验，不是本轮设备运行；原权限独立。",
+        "note": "固定源码 05ee10f9cc25；2026-10-25只读核验，不是本轮设备运行；原权限独立。",
         "kind": "源码"
       },
       {
         "id": "kda-config",
         "label": "GLM5Next next配置",
         "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/configs/config_next.json",
-        "note": "固定源码 05ee10f9cc25；2026-10-24只读核验，不是本轮设备运行；原权限独立。",
+        "note": "固定源码 05ee10f9cc25；2026-10-25只读核验，不是本轮设备运行；原权限独立。",
         "kind": "源码"
       },
       {
@@ -337,6 +358,41 @@
         "url": "https://arxiv.org/abs/2510.26692",
         "note": "公开递推和chunkwise背景；内部safe gate与ABI另由当前runner支持。",
         "kind": "论文"
+      },
+      {
+        "id": "ad-kda-v4",
+        "label": "只允许 v4_gdg/v4_ldg，v4 别名映射",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py#L49-L68",
+        "note": "torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7；2026-10-25只读源码核验，sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py:49–68。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-kda-api",
+        "label": "v4 ABI、完整 shape/alias 验证、zero batch 与调用",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py#L1515-L1623",
+        "note": "torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7；2026-10-25只读源码核验，sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py:1515–1623。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-kda-recur",
+        "label": "decay-last、BF16 中间端点和 64×128 state slab",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/3656952bfee88b1d5f7b68d0e724e54a7a5353d7/sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py#L757-L956",
+        "note": "torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7；2026-10-25只读源码核验，sgl-kernel-zeus-triton/python/glm53_flash/kda/sgl_fused_kda_decode_triton.py:757–956。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-kda-gather",
+        "label": "开发回归 TP SUM 之后的 board-replicated gather",
+        "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_linear_attn_fused_tp4_dp4.py#L782-L812",
+        "note": "zeus_dev@05ee10f9cc25d19fca0a144ae095c79b3a888976；2026-10-25只读源码核验，model_state_dev/glm5next_modules/dev_linear_attn_fused_tp4_dp4.py:782–812。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
+      },
+      {
+        "id": "ad-comm",
+        "label": "跨板 lane 和 BoardReplicatedAllgather 的输入/输出形状",
+        "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/_support/_comm.py#L13-L114",
+        "note": "zeus_dev@05ee10f9cc25d19fca0a144ae095c79b3a888976；2026-10-25只读源码核验，model_state_dev/glm5next_modules/_support/_comm.py:13–114。原库访问权限独立；非本轮实测。",
+        "kind": "源码"
       }
     ],
     "takeaways": [
@@ -345,7 +401,7 @@
       "state形状相同不等于轴语义相同。",
       "单步输出、更新后的状态、多步质量与通信各有验证边界。"
     ],
-    "part": "算子数据流",
+    "part": "GLM5Next 300B 真实部署",
     "minutes": 45,
     "level": "深入",
     "tags": [

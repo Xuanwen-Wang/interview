@@ -19,6 +19,11 @@
 
 ## 分领域来源
 
+- [模型与算法演进](model-evolution-sources.md)：Qwen3-8B基线与内部Next配置，算法章节不混入实际部署。
+- [整层部署与通信地图](glm-deployment-map.md)：模型、所有权、baseline与FLAT16。
+- [Attention当前实现](attention-deployment-current.md)：DSA/KDA kernel与caller/callee兼容边界。
+- [MoE当前实现](moe-deployment-current.md)：默认四kernel、可选remap和数值实现。
+
 - [算法与 Attention](algorithms-sources.md)：论文、配置、KDA与DSA当前ABI。
 - [MoE 与真实案例](moe-sources.md)：PR作者、状态、固定代码、历史测量边界。
 - [硬件与编译器](compiler-sources.md)：资源与真实pass源码索引。
