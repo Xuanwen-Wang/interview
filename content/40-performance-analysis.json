@@ -1,0 +1,485 @@
+[
+  {
+    "id": "performance-analysis",
+    "title": "性能分析实战：Nsight、Roofline、通信与模型负载",
+    "part": "性能分析方法",
+    "order": 39.5,
+    "subtitle": "从一份 trace 走到算子画像、资源预算和端到端证据",
+    "minutes": 150,
+    "level": "系统深入",
+    "tags": [
+      "Nsight Systems",
+      "Nsight Compute",
+      "PyTorch Profiler",
+      "Roofline",
+      "算子画像",
+      "NCCL",
+      "负载建模"
+    ],
+    "lead": "把面试要求中的六组关键词连成一条排查路径：先定义慢在哪里，再从时间线锁定关键路径，给算子建立画像，用算力与数据流量解释上界，最后把通信、并行策略和请求分布接回业务指标。配有命令、推导、三个可调实验和逐层追问。",
+    "readingLabel": "沿一次性能调查读完：观测 → 画像 → 建模 → 实验 → 验收",
+    "readingStageLabel": "分析阶段",
+    "portableReading": {
+      "file": "performance.html",
+      "download": "ai-performance-guide.html",
+      "label": "保存完整性能分析 HTML ↓"
+    },
+    "readingStages": [
+      {
+        "id": "perf-stage-map",
+        "title": "建立分析地图",
+        "summary": "先辨认工具与方法，再约定业务指标、时间边界与证据层级。",
+        "sections": [
+          "perf-map",
+          "perf-evidence",
+          "measurement-contract"
+        ]
+      },
+      {
+        "id": "perf-stage-tools",
+        "title": "从时间线到画像",
+        "summary": "动手计时，依次使用框架 profiler、系统 trace、kernel 指标，形成算子档案。",
+        "sections": [
+          "cuda-timing",
+          "torch-profiler",
+          "nsight-systems",
+          "nsight-compute",
+          "operator-portrait"
+        ]
+      },
+      {
+        "id": "perf-stage-roofline",
+        "title": "算出资源上界",
+        "summary": "从 FLOPs 和 bytes 推导 Roofline；手算一个 GEMM，再改变参数观察瓶颈。",
+        "sections": [
+          "roofline-foundation",
+          "roofline-bytes",
+          "roofline-example",
+          "roofline-lab",
+          "roofline-triage"
+        ]
+      },
+      {
+        "id": "perf-stage-communication",
+        "title": "解释多卡等待",
+        "summary": "区分 collective、归一化带宽、到达偏斜与传输成本，检验重叠的净收益。",
+        "sections": [
+          "communication-contract",
+          "communication-bandwidth",
+          "communication-diagnosis",
+          "communication-overlap",
+          "communication-lab"
+        ]
+      },
+      {
+        "id": "perf-stage-workload",
+        "title": "建立模型负载表",
+        "summary": "按 prefill/decode 拆 FLOPs、KV 与权重，加入并行、路由和真实请求分布。",
+        "sections": [
+          "workload-contract",
+          "workload-flops",
+          "workload-memory",
+          "workload-parallel-moe",
+          "workload-lab",
+          "workload-slo"
+        ]
+      },
+      {
+        "id": "perf-stage-practice",
+        "title": "实验与面试表达",
+        "summary": "把局部证据还原为端到端收益，用完整实验卡和追问检验理解。",
+        "sections": [
+          "diagnosis-case",
+          "perf-experiment",
+          "perf-interview"
+        ]
+      }
+    ],
+    "sections": [
+      {
+        "id": "perf-map",
+        "title": "这些岗位要求，实际上在考哪六种能力？",
+        "html": "\n<p>面试官说“熟悉 Nsight、Profiler、Roofline、算子画像、通信性能分析、模型负载建模”，通常期待你能够把<strong>用户看到的慢 → 一段时间线 → 某类工作 → 硬件约束 → 一个可验证的优化</strong>连起来。会打开工具只是起点；更重要的是知道每张图回答什么问题、哪些结论还缺证据。</p>\n<table><thead><tr><th>名词</th><th>它是什么</th><th>你应该交付什么</th></tr></thead><tbody>\n<tr><td>Profiler</td><td>性能观测工具的总称；可以记录事件、采样调用栈或读取硬件计数器</td><td>稳定的采集范围、可追溯的 trace、可信的时间与开销口径</td></tr>\n<tr><td>Nsight Systems / Compute</td><td>NVIDIA 的系统时间线与 GPU kernel 深度分析工具</td><td>先定位关键路径，再解释热点 kernel 为什么慢</td></tr>\n<tr><td>Roofline</td><td>由算力、数据搬运和算术强度构成的条件上界模型</td><td>算出理论瓶颈、离屋顶的距离，以及模型遗漏的约束</td></tr>\n<tr><td>算子画像</td><td>按语义、shape、dtype、布局、频次、资源消耗建立的工作负载档案</td><td>能指导优化优先级的工作量分布，而非只有 kernel 名称的排行榜</td></tr>\n<tr><td>通信性能分析</td><td>解释 collective、拓扑、同步与并行策略的成本</td><td>区分传输、等待、负载偏斜，以及真正暴露在关键路径上的通信</td></tr>\n<tr><td>模型负载建模</td><td>从层结构和请求分布推导 FLOPs、bytes、容量、通信和时间</td><td>能随 batch、上下文长度、并行度变化的预测，并说明校准与误差</td></tr>\n</tbody></table>\n<div class=\"callout\"><strong>本文的证据边界。</strong>官方文档和论文用于核对工具能力与定义，核对日期为 2026-10-25；数字案例和三组交互全部是教学建模，不代表 NVIDIA、518、CycleSim、VCS 或硅上实测。本次只验证网页与公式，没有运行 GPU 性能采集。命令是操作模板，应按实际安装版本检查 <code>--help</code>。</div>\n<p>建议按正文顺序读一遍，第二遍直接练文末面试追问。你应能回答三个不同的问题：<strong>哪里花了时间？为什么必须或不必花这么久？改动后业务是否真的更快？</strong></p>"
+      },
+      {
+        "id": "perf-evidence",
+        "title": "从请求到硬件：把观察放在正确层级",
+        "html": "\n<figure class=\"diagram\"><svg viewBox=\"0 0 760 330\" role=\"img\" aria-label=\"性能分析分层：请求指标、系统时间线、算子画像、kernel硬件计数器与模型预测相互校验\">\n<g font-family=\"sans-serif\" font-size=\"16\"><rect x=\"20\" y=\"20\" width=\"720\" height=\"58\" rx=\"8\" fill=\"#dbe6d6\"/><text x=\"40\" y=\"45\" fill=\"#244a38\">① 请求 / 训练 step：端到端目标</text><text x=\"40\" y=\"66\" font-size=\"13\">TTFT、TPOT、P99、吞吐量、step time；确定用户等待的边界</text>\n<rect x=\"20\" y=\"94\" width=\"455\" height=\"58\" rx=\"8\" fill=\"#e3eaf0\"/><text x=\"40\" y=\"119\">② 系统时间线：谁在等谁</text><text x=\"40\" y=\"140\" font-size=\"13\">CPU · runtime · GPU streams · copies · ranks</text>\n<rect x=\"20\" y=\"168\" width=\"455\" height=\"58\" rx=\"8\" fill=\"#ede4d6\"/><text x=\"40\" y=\"193\">③ 算子画像：哪一类 shape 最值得改</text><text x=\"40\" y=\"214\" font-size=\"13\">语义、调用次数、时间分布、布局与中间张量</text>\n<rect x=\"20\" y=\"242\" width=\"455\" height=\"64\" rx=\"8\" fill=\"#dbe6d6\"/><text x=\"40\" y=\"267\">④ kernel：是什么资源或依赖卡住了</text><text x=\"40\" y=\"290\" font-size=\"13\">DRAM / L2 · scheduler · occupancy · instructions</text>\n<rect x=\"500\" y=\"94\" width=\"240\" height=\"212\" rx=\"8\" fill=\"#f3ece0\" stroke=\"#bc946b\"/><text x=\"520\" y=\"125\">⑤ 条件模型</text><text x=\"520\" y=\"158\" font-size=\"14\">FLOPs / bytes / capacity</text><text x=\"520\" y=\"185\" font-size=\"14\">Roofline / collective / DAG</text><text x=\"520\" y=\"227\" font-size=\"14\">预测 → 实测 → 残差</text><text x=\"520\" y=\"255\" font-size=\"14\">修正假设，再做消融</text><text x=\"520\" y=\"284\" font-size=\"14\">最终回到①验收</text></g></svg><figcaption>图为分析流程示意，框的尺寸和间距不表示耗时。</figcaption></figure>\n<p>假如用户看到一轮生成变慢，不能直接跳到 Tensor Core 利用率。先确认是排队、prefill、逐 token decode，还是流式输出。模型层看到的 <code>linear</code> 也未必对应一个 kernel：融合可以把多个算子合为一个 kernel，拆分与转换也可以让一个算子变成多个 kernel。用关联 ID、NVTX range、shape 与调用栈把这些层对齐。</p>\n<p><strong>CPU 时间与 GPU 时间不能直接相加。</strong>CPU 可以边发射边让 GPU 工作；不同 GPU stream 也可以并行。多个 kernel 耗时之和甚至可以超过观测窗口。端到端看从起点到终点的 wall time，归因看依赖图中的关键路径，资源繁忙比例看时间区间的并集。</p>\n<p>你已有的编译器与加速器经验可以这样迁移：用时间线找依赖和空洞，用访存/计算计数建立预算，用源码或 IR 解释布局与调度，再回到业务负载验收。自研设备的 PE/VP 活跃率、仿真周期、NVIDIA SM 指标有不同定义；可迁移的是方法，不能直接换算指标或把仿真速度当成 GPU 实测。</p>"
+      },
+      {
+        "id": "measurement-contract",
+        "title": "测量契约：先决定你到底在测哪段时间",
+        "html": "<p>同一个“模型用了 10 ms”，可能指 GPU kernel 之和、一次前向的设备区间、训练 step 的 wall time，也可能指排队后的请求响应时间。<strong>没有起止边界、分母和工作负载，数值不能比较。</strong></p>\n<table><thead><tr><th>口径</th><th>边界</th><th>使用场景与限制</th></tr></thead><tbody>\n<tr><td>单次 kernel duration</td><td>一个 kernel 在设备上的开始到结束</td><td>比较实现；不含它排队等待的全部时间</td></tr>\n<tr><td>kernel 累计时间</td><td>所选 kernel duration 相加</td><td>定位高成本类别；跨 stream 重叠会重复计算</td></tr>\n<tr><td>设备区间时间</td><td>有正确依赖关系的开始与结束 CUDA Event</td><td>测一段设备工作；区间内等待或发射空隙也可能计入</td></tr>\n<tr><td>应用 wall time</td><td>主机时钟起点到目标 GPU 工作完成</td><td>包含选定范围的 CPU 调度与 GPU 工作；边界同步会影响正常流水</td></tr>\n<tr><td>服务指标</td><td>请求到达、首 token、每次 token 输出、请求完成</td><td>TTFT、TPOT、吞吐、p95/p99；需要请求分布和并发到达模型</td></tr>\n</tbody></table>\n<h3>一张最小实验卡</h3>\n<ul><li><strong>代码与环境：</strong>仓库 commit、构建选项、GPU 型号与数量、驱动、CUDA、框架、编译器、工具版本，是否独占设备，功耗/时钟策略。</li>\n<li><strong>语义与输入：</strong>训练或推理、batch、序列长度分布、dtype、布局/stride、精度策略、mask、稀疏/路由分布；固定输入是否具有真实代表性。</li>\n<li><strong>运行方式：</strong>eager、编译模式或 CUDA Graph；是否含编译、autotune、分配、数据读取、H2D、通信；warmup 次数与稳定性判断。</li>\n<li><strong>统计：</strong>测多少轮、独立重复多少次、使用均值还是中位数、怎样报告离散程度；吞吐的分母是 GPU 活跃时间、step 时间还是总服务时间。</li>\n<li><strong>证据：</strong>无 profiler 的计时结果、短 trace、目标 kernel 报告、正确性误差阈值和可复现命令。</li></ul>\n<h3>为什么必须 warmup，但又不能永远把启动成本删掉？</h3>\n<p>第一次执行可能涉及 CUDA 上下文、JIT/编译、库算法选择、内存池、页面映射及缓存状态变化。对稳定吞吐，要在相同输入分布下预热，并检查时间是否进入稳定区间；固定写“预热 10 次”不是稳定性的证明。如果关注冷启动、首请求或动态 shape 触发的重编译，这些成本就是业务成本，应另设实验保留。</p>\n<p>先运行无 profiler 的基线，再采集少量代表性迭代。增加 shape、stack、memory、硬件计数器等信息会改变采集代价；观察到小幅加速时，需用独立重复和基线波动判断是否可信。设备后台负载、温度、功耗限制与共享资源也可能使同一程序产生不同结果。</p>\n<p>可复现不等于只测一个固定 shape。工程验收通常先固定样本隔离原因，再在真实 shape、序列长度、路由负载和并发分布上验证收益能否保留。报告中把“受控微基准结论”与“业务分布结论”分开。</p>"
+      },
+      {
+        "id": "cuda-timing",
+        "title": "GPU 异步计时：Event、同步与统计分母",
+        "html": "<p>CUDA 运算通常异步提交。下面的 CPU 代码若没有等待 GPU 完成，得到的主要是提交耗时：<code>t0 = perf_counter(); y = model(x); dt = perf_counter() - t0</code>。不能把这个数称为模型 GPU 延迟。异步和 stream 依赖见 <a href=\"https://docs.pytorch.org/docs/2.9/notes/cuda.html\">PyTorch 2.9 CUDA semantics</a>。</p>\n<h3>例 1：同一 stream 上的一组设备工作</h3>\n<p>此示例用预分配的矩阵输出，测稳定执行区间。所有矩阵乘法都在当前 CUDA stream；输入创建与预热在测量之外。每组 20 次，一共 10 组，打印的是<strong>每组平均时间的中位数</strong>，并非单请求 p99。</p>\n<pre><code>import statistics\nimport torch\n\nassert torch.cuda.is_available()\na = torch.randn(2048, 2048, device=&quot;cuda&quot;, dtype=torch.float16)\nb = torch.randn_like(a)\nout = torch.empty_like(a)\n\ndef work():\n    torch.mm(a, b, out=out)\n\nwith torch.inference_mode():\n    for _ in range(20):\n        work()\n    torch.cuda.synchronize()\n\n    pairs = [(torch.cuda.Event(enable_timing=True),\n              torch.cuda.Event(enable_timing=True)) for _ in range(10)]\n    samples_ms = []\n    for start, end in pairs:\n        start.record()\n        for _ in range(20):\n            work()\n        end.record()\n        end.synchronize()\n        samples_ms.append(start.elapsed_time(end) / 20)\n\nprint(&quot;median group-mean ms:&quot;, statistics.median(samples_ms))</code></pre>\n<p><code>elapsed_time</code> 返回毫秒；结束 Event 完成后才能读取对应区间。Event 的语义见 <a href=\"https://docs.pytorch.org/docs/2.9/generated/torch.cuda.Event.html\">PyTorch 2.9 Event</a>。区间里如果 GPU 等待依赖或等待 CPU 继续提交，时间也会过去，所以它不自动等于“各 kernel 纯执行时间之和”。极短操作尤其要检查 Event 和 Python 发射的影响。</p>\n<p>若工作在多个 stream 上，结束标记必须等待所有需要纳入测量的 stream；仅在默认 stream 放一个 end Event 可能漏测。可以为每个工作 stream 记录完成事件，再让汇合 stream 等待这些事件后记录终点。多卡更不能把一块 GPU 的 Event 时间当成整个任务完成时间。</p>\n<h3>例 2：应用层提交到完成的 wall time</h3>\n<pre><code>from time import perf_counter\nimport torch\n\n# Use the same warmed-up workload as above.\nwith torch.inference_mode():\n    torch.cuda.synchronize()\n    begin = perf_counter()\n    for _ in range(20):\n        work()\n    torch.cuda.synchronize()\n    wall_ms_per_call = (perf_counter() - begin) * 1000 / 20\nprint(&quot;wall ms per call:&quot;, wall_ms_per_call)</code></pre>\n<p>这里包含循环内的主机提交和末尾等待，适合比较这个明确区间的应用耗时。它不包含输入加载或请求排队。不要为了方便计时在生产循环每个算子后插同步，否则原本可以重叠的工作会串行化；应在诊断实验中明确同步边界，再用正常执行方式复验。</p>\n<p><strong>吞吐与延迟不要互换：</strong>连续批量执行的总时间除以次数是摊销成本；单个请求在有排队、动态 batching 或流水线时的响应延迟可能完全不同。取最快一次通常只能估计一个较理想状态，不能代表用户体感。</p>"
+      },
+      {
+        "id": "torch-profiler",
+        "title": "PyTorch Profiler：把模型阶段映射到算子和 kernel",
+        "html": "<p>它的价值是保留框架语义：从 <code>forward</code>、<code>attention</code>、<code>backward</code> 等业务区间找到算子、输入 shape 与设备工作。先查“成本集中在哪类操作”，再挑代表性调用深入分析。API 依据 <a href=\"https://docs.pytorch.org/docs/2.9/profiler.html\">PyTorch 2.9 torch.profiler</a>；操作流程可参考 <a href=\"https://docs.pytorch.org/tutorials/recipes/recipes/profiler_recipe.html\">官方 Profiler recipe</a>。</p>\n<h3>一个完整的 schedule 示例</h3>\n<p>输入已在 GPU；示例只包含推理前向。<code>wait=2, warmup=2, active=4, repeat=2</code> 共需 16 次 step。前面的模型预热是让工作负载稳定；schedule 的 warmup 是 profiler 采集阶段，两者用途不同。输出目录为示意路径，可替换成足够空间的数据盘目录。</p>\n<pre><code>from pathlib import Path\nimport torch\nfrom torch.profiler import profile, ProfilerActivity, record_function, schedule\n\ntrace_dir = Path(&quot;./profile-output&quot;)\ntrace_dir.mkdir(parents=True, exist_ok=True)\nmodel = torch.nn.Sequential(\n    torch.nn.Linear(1024, 4096), torch.nn.GELU(),\n    torch.nn.Linear(4096, 1024)\n).cuda().eval()\nx = torch.randn(64, 1024, device=&quot;cuda&quot;)\n\ndef save_trace(prof):\n    prof.export_chrome_trace(str(trace_dir / f&quot;trace-{prof.step_num}.json&quot;))\n    print(prof.key_averages(group_by_input_shape=True).table(\n        sort_by=&quot;self_cuda_time_total&quot;, row_limit=15))\n\nwith torch.inference_mode():\n    for _ in range(20):\n        model(x)\n    torch.cuda.synchronize()\n\n    with profile(\n        activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],\n        schedule=schedule(wait=2, warmup=2, active=4, repeat=2),\n        on_trace_ready=save_trace,\n        record_shapes=True,\n        with_stack=False,\n        profile_memory=False,\n    ) as prof:\n        for _ in range(16):\n            with record_function(&quot;inference_step&quot;):\n                model(x)\n            prof.step()</code></pre>\n<p><code>prof.step()</code> 表示一个逻辑迭代结束，缺少它会使 schedule 无法按预期前进。回调按采集周期导出，避免只在最后导出时遗漏先前周期。<code>record_shapes=True</code> 便于区分 shape，但会增加代价；追源码时再开 stack，查分配时再开 memory。第一次粗筛可以先关闭这些可选项。</p>\n<h3>表格里最容易误读的字段</h3>\n<table><thead><tr><th>字段</th><th>怎样读</th><th>常见误读</th></tr></thead><tbody>\n<tr><td>Self CPU / CPU total</td><td>Self 尝试排除子调用；total 包含嵌套调用</td><td>把所有 total 相加，重复计算父子范围</td></tr>\n<tr><td>Self CUDA / CUDA total</td><td>框架归因的设备时间；先看具体版本的列名与归因方式</td><td>当成 CPU 等待时间，或直接等同端到端时间</td></tr>\n<tr><td>Calls / Avg</td><td>数量和该组事件平均值；必须结合 shape、阶段与分布</td><td>一个长尾或小批次被总体平均掩盖</td></tr>\n<tr><td>Input Shapes</td><td>帮助拆分同名算子不同工作量</td><td>shape 相同就认定 stride、dtype、稀疏分布也相同</td></tr>\n<tr><td>Memory</td><td>分配/释放等内存事件的归因</td><td>把内存分配字节当作 HBM 实际读写流量</td></tr>\n<tr><td>FLOPs</td><td>对受支持操作按公式估计的工作量</td><td>当成任意自定义、融合或稀疏 kernel 的硬件实测计数</td></tr>\n</tbody></table>\n<p>不同版本可能把 CUDA 字段泛化为 device 字段，先看实际表头和 API。算子与 kernel 也不是一一对应：一个算子可调用多个 kernel；多个算子可能被编译成一个融合 kernel。开启编译后，应保存融合范围、图分段与 kernel 映射，不能靠名称强行对齐优化前后的行。</p>\n<p><strong>实用读法：</strong>先按累计成本找前几类，再按 shape 拆分，回到时间线看是否位于关键路径，最后选一类占比高且可复现的调用。排名第一只说明值得调查，不自动说明它具有最大的可实现收益。</p>"
+      },
+      {
+        "id": "nsight-systems",
+        "title": "Nsight Systems：读懂空隙、排队和重叠",
+        "html": "<p>把 nsys 看成一次执行的时间地图：CPU 在何时准备输入、调用 CUDA、等待同步；GPU 在何时执行 kernel、复制数据；不同 stream 是否真正并行。NVTX 可给这些活动加上模型语义标签。采集选项见 <a href=\"https://docs.nvidia.com/nsight-systems/UserGuide/index.html\">Nsight Systems User Guide</a>（滚动在线文档，2026-10-25 核对）。</p>\n<h3>先采一段短而稳定的区间</h3>\n<pre><code># Run in a writable directory on a data volume.\n# Replace /data/profiling-work with your own data-volume directory.\nexport TMPDIR=/data/profiling-work\nexport TMP=&quot;$TMPDIR&quot;\nexport TEMP=&quot;$TMPDIR&quot;\nmkdir -p &quot;$TMPDIR&quot; ./profile-output\n\nmkdir -p ./profile-output\nnsys --version\nnsys profile --help\nnsys profile --trace=cuda,nvtx --sample=none --cpuctxsw=none \\\n  --capture-range=cudaProfilerApi --capture-range-end=stop \\\n  -o ./profile-output/steady python profile_app.py\nnsys stats ./profile-output/steady.nsys-rep</code></pre>\n<p>本命令仅保留 CUDA/NVTX 基础信息，并关闭 CPU sampling 与线程调度采集以控制初次采集成本；因此<strong>这份结果不能用来直接断言 CPU 在运行、睡眠还是被 OS 调走</strong>。有对应假设时，再按本机版本与权限补开采集。<code>profile_app.py</code> 需在预热后显式设置 capture range：</p>\n<pre><code># model and x are prepared; representative warmup has completed.\nwith torch.inference_mode():\n    torch.cuda.synchronize()\n    torch.cuda.profiler.start()\n    for _ in range(5):\n        with torch.cuda.nvtx.range(&quot;inference_step&quot;):\n            model(x)\n    torch.cuda.synchronize()\n    torch.cuda.profiler.stop()</code></pre>\n<p>NVTX 的 CPU range 标记提交区间，不承诺 GPU 已在 range 结束前完成；要看关联的 GPU 工作与依赖。示例末尾同步保证选中的工作结束后再停止采集。真实训练可标记 <code>input</code>、<code>forward</code>、<code>backward</code>、<code>optimizer</code>，MoE 可标记 route、dispatch、expert、combine；层级不要细到每个标量操作。</p>\n<h3>按“现象 → 多个假设 → 证伪实验”读图</h3>\n<table><thead><tr><th>时间线现象</th><th>可能原因</th><th>下一项证据或实验</th></tr></thead><tbody>\n<tr><td>GPU kernel 之间有大空隙</td><td>CPU 发射不足、数据未就绪、跨 stream/跨 rank 依赖、同步</td><td>对齐 CUDA API 与 GPU 事件；区分尚未提交和已提交但在等待</td></tr>\n<tr><td>CPU 的同步 API 很长</td><td>CPU 在等先前 GPU 工作完成</td><td>看这段等待覆盖的 GPU 工作；不能直接认定同步函数自身计算很慢</td></tr>\n<tr><td>kernel 很短、数量很多</td><td>细碎发射、过多中间张量、融合不足</td><td>固定语义后尝试融合/批处理/Graph，复验 launch 数、流量和 wall time</td></tr>\n<tr><td>H2D 紧贴计算，始终不重叠</td><td>输入路径、内存类型、stream 或依赖设置限制</td><td>检查 pinned memory、异步复制、生产者消费者依赖；异步 API 不等于一定重叠</td></tr>\n<tr><td>通信和计算条带交错或重叠</td><td>可能成功隐藏通信，也可能竞争 SM/HBM 导致双方变慢</td><td>比较独立与并发耗时，观察实际 step 关键路径</td></tr>\n<tr><td>某个 rank 晚进入 collective</td><td>上游计算、路由失衡、数据准备或进程调度落后</td><td>对齐所有 rank 的进入/完成位置；先区分晚到和网络传输慢</td></tr>\n</tbody></table>\n<p>一个 kernel 的 API 提交与 GPU 开始相隔很长，不一定是坏事：它可能在等待已排好的前序工作，此时 GPU 始终忙。要先说明“launch latency”的起点采用 API 开始还是结束，再解释队列。这种时间线语义见 NVIDIA 的 <a href=\"https://developer.nvidia.com/blog/understanding-the-visualization-of-overhead-and-latency-in-nsight-systems/\">overhead 与 latency 可视化说明</a>。</p>\n<p><strong>关键路径是依赖图中决定最终完成时刻的路径。</strong>重叠执行的 kernel、拷贝和通信不能直接求和当作总时间。一个通信 kernel 很长但被后续无依赖计算完全覆盖，缩短它可能没有收益；若它控制下一层计算的开始，则应优先处理。先确认因果依赖，再决定热点优先级。</p><h3>读一张合成时间线：总和、并集与关键路径</h3>\n<figure class=\"diagram\"><svg viewBox=\"0 0 760 260\" role=\"img\" aria-label=\"教学合成时间线，GPU A从1到6毫秒，B从2到7毫秒，依赖二者的C从7到10毫秒；累计kernel为13毫秒，设备忙碌并集9毫秒，观测窗口10毫秒\">\n<g font-family=\"sans-serif\" font-size=\"14\" fill=\"#29483c\"><text x=\"15\" y=\"25\">纯教学构造 · 非 Nsight 截图 · 时间轴单位 ms</text>\n<path d=\"M130 48H730 M130 48V218 M250 48V218 M370 48V218 M490 48V218 M610 48V218 M730 48V218\" fill=\"none\" stroke=\"#cbd7c6\" stroke-dasharray=\"3 4\"/>\n<text x=\"130\" y=\"44\" text-anchor=\"middle\">0</text><text x=\"250\" y=\"44\" text-anchor=\"middle\">2</text><text x=\"370\" y=\"44\" text-anchor=\"middle\">4</text><text x=\"490\" y=\"44\" text-anchor=\"middle\">6</text><text x=\"610\" y=\"44\" text-anchor=\"middle\">8</text><text x=\"730\" y=\"44\" text-anchor=\"middle\">10</text>\n<text x=\"15\" y=\"86\">CPU</text><rect x=\"130\" y=\"64\" width=\"120\" height=\"32\" rx=\"4\" fill=\"#ead6b7\"/><text x=\"140\" y=\"85\" font-size=\"12\">准备 / 提交</text>\n<text x=\"15\" y=\"132\">GPU stream 0</text><rect x=\"190\" y=\"109\" width=\"300\" height=\"34\" rx=\"4\" fill=\"#aac4d0\"/><text x=\"210\" y=\"132\">A · 5 ms</text><rect x=\"550\" y=\"109\" width=\"180\" height=\"34\" rx=\"4\" fill=\"#bdd2b4\"/><text x=\"570\" y=\"132\">C · 3 ms</text>\n<text x=\"15\" y=\"180\">GPU stream 1</text><rect x=\"250\" y=\"158\" width=\"300\" height=\"34\" rx=\"4\" fill=\"#d6b28c\"/><text x=\"270\" y=\"181\">B · 5 ms</text>\n<path d=\"M490 126H543 M550 158V144\" fill=\"none\" stroke=\"#526a51\" stroke-width=\"2\"/><text x=\"483\" y=\"209\" font-size=\"12\">C 必须等待 A 和 B</text>\n<text x=\"15\" y=\"245\">kernel 累计 13 ms ≠ 设备忙碌并集 9 ms ≠ 观测窗口 10 ms</text></g></svg>\n<figcaption>A=[1,6]、B=[2,7]、C=[7,10]；CPU 仅示意准备与异步提交，不是精确 API trace。</figcaption></figure>\n<p>三段 kernel 相加是 13 ms，但设备至少有一个 kernel 执行的区间是 [1,10]，共 9 ms；从请求起点 0 到完成 10 是 10 ms。A 提前到 5 ms 完成，C 仍要等 B 到 7 ms，不会自动缩短整体。这个例子说明：<strong>累计成本用来筛热点，依赖关系决定优化收益。</strong>多 stream 的真实并发还需硬件资源支持；图中的执行关系是给定假设。</p>"
+      },
+      {
+        "id": "nsight-compute",
+        "title": "Nsight Compute：解释一个 kernel 为什么慢",
+        "html": "<p>从 nsys 或框架画像选出代表性 kernel，再用 ncu 检查硬件行为。目标不是把所有百分比调高，而是用指标构成一条可验证的因果链：<strong>哪种资源或依赖限制了进度 → 哪个实现选择造成它 → 修改后是否缩短同口径时间</strong>。</p>\n<h3>限定 kernel 和采集次数</h3>\n<pre><code>mkdir -p ./profile-output\nncu --version\nncu --list-sections\nncu --query-metrics\n\n# Replace the regex with a name verified in your own trace.\nncu --kernel-name-base demangled --kernel-name &#x27;regex:my_kernel&#x27; \\\n  --launch-skip 20 --launch-count 1 \\\n  --section SpeedOfLight --section LaunchStats --section Occupancy \\\n  --section MemoryWorkloadAnalysis --section SchedulerStats \\\n  -o ./profile-output/kernel python kernel_bench.py</code></pre>\n<p>这里 <code>--launch-skip 20</code> 数的是<strong>匹配过滤器的 kernel launch</strong>，不是 20 个模型 step；一个 step 内同名 kernel 可出现多次。先根据 trace 确认名称、shape、调用次序及阶段。section 与 metric 的可用性依工具版本和 GPU 架构而变，以本机列表为准，见 <a href=\"https://docs.nvidia.com/nsight-compute/NsightComputeCli/index.html\">官方 CLI 文档</a>（2026-10-25 核对）。</p>\n<h3>一套读指标的顺序</h3>\n<table><thead><tr><th>层次</th><th>先问什么</th><th>怎样避免错判</th></tr></thead><tbody>\n<tr><td>工作是否相同</td><td>shape、dtype、算法、grid/block、输出是否一致？</td><td>先排除工作量变化、精度变化和选错调用</td></tr>\n<tr><td>并行规模</td><td>grid 是否有足够工作？尾波是否严重？</td><td>小矩阵可能不足以填满机器；不是所有低利用率都能靠调 block 修复</td></tr>\n<tr><td>资源约束</td><td>寄存器、shared memory、block 限制如何影响驻留？</td><td>Occupancy 是驻留 warp 比例，不是算力效率；压寄存器可能产生 spill</td></tr>\n<tr><td>计算与存储吞吐</td><td>哪个执行单元或哪一层存储最繁忙？</td><td>SM 总体忙不等于 Tensor Core 忙；L2 活跃不等于 DRAM 饱和</td></tr>\n<tr><td>调度和依赖</td><td>有多少 warp 真正 ready？是否经常无可发射指令？</td><td>先确认发射不足，再研究 stall 原因；stall 比例不是可直接相加的 wall time 分解</td></tr>\n<tr><td>访问效率</td><td>请求了多少有用数据，产生多少事务？是否重复加载、spill 或布局转换？</td><td>高实际流量可能是浪费；仅凭高带宽不能断言实现已最优</td></tr>\n</tbody></table>\n<p>例如，一个读取离散索引的 gather 即使 DRAM 吞吐不高，也可能受内存访问延迟与有限并发请求限制；这时把结论写成“带宽还有空间，所以不是访存问题”就是错的。另一个 GEMM 可能有充足算术强度，却因 M 很小而并行规模不足。Roofline 能指出潜在上界，但还需要规模与调度证据解释距离上界的原因。</p>\n<h3>ncu 的观察会改变被观察对象</h3>\n<p>计数器不一定能一遍收齐，ncu 会按采集配置重放。典型 kernel replay 还涉及执行序列化、缓存处理和时钟控制；因此其 duration 可能不同于正常应用。为了分析依赖前序缓存状态的行为，可研究 application/range replay 以及 <code>--cache-control none</code>，但须确保可重放性与版本支持，不能把这个开关当成通用修复。机制边界见 <a href=\"https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html\">Nsight Compute Profiling Guide</a>。</p>\n<p>通信 kernel 可能依赖其他 rank 同时执行，普通单 kernel replay 或单进程采集会破坏进度条件。不要把面向独立计算 kernel 的命令直接套在完整分布式训练上；先用系统时间线和通信微基准定位，必要时按该版本文档选择支持并发依赖的采集方式。</p>\n<p><strong>最后的验收仍是无 profiler 的受控计时和真实应用复验。</strong>计数器改善帮助解释原因；绝对耗时、正确性和业务收益决定修改是否值得保留。</p>"
+      },
+      {
+        "id": "operator-portrait",
+        "title": "算子画像：把一次热点列表变成可用的工程记录",
+        "html": "<p>算子画像不是按名字排序的一张排行榜，而是“<strong>谁在什么输入、什么执行环境下，贡献了多少成本，证据指向什么瓶颈</strong>”。它既能决定优化顺序，也能为编译器选型、算子库覆盖和模型容量规划提供输入。</p>\n<h3>建议至少记录六组字段</h3>\n<table><thead><tr><th>字段组</th><th>例子</th><th>为什么需要</th></tr></thead><tbody>\n<tr><td>语义身份</td><td>阶段、层、op、融合范围、实现版本、对应 kernel</td><td>避免把相似名称误认为同一语义</td></tr>\n<tr><td>输入族</td><td>shape、stride、dtype、padding、mask、稀疏度、路由分布</td><td>决定工作量、访存与算法分支</td></tr>\n<tr><td>出现分布</td><td>调用次数、shape 直方图、token 数、专家 token 负载分位数</td><td>判断局部优化能覆盖多少真实请求</td></tr>\n<tr><td>耗时与位置</td><td>每次分布、累计时间、所在 stream/rank、关键路径贡献</td><td>区分频繁小算子、偶发长尾与已被隐藏的工作</td></tr>\n<tr><td>成本与硬件</td><td>有效 FLOPs、理论字节、实测分层流量、occupancy、调度指标</td><td>将建模假设与测量证据配对</td></tr>\n<tr><td>结论与置信度</td><td>候选瓶颈、排除的假设、对照实验、误差与适用范围</td><td>防止“看到一个指标就下结论”</td></tr>\n</tbody></table>\n<p>同为 <code>matmul</code>，prefill 大 M 和 decode 小 M 的性能机制可能不同；同为 MoE expert GEMM，每个专家收到的 token 数分布可能改变填充浪费、并行度和尾部延迟。统计时至少按阶段和输入族分桶，必要时保留原始样本而不是只留平均值。</p>\n<h3>把画像转成优化动作</h3>\n<table><thead><tr><th>画像组合</th><th>值得尝试的方向</th><th>必须复验的副作用</th></tr></thead><tbody>\n<tr><td>小 kernel 很多；应用有发射空隙</td><td>算子融合、批处理、减少主机工作、Graph</td><td>寄存器膨胀、shape 灵活性、编译成本、关键路径是否真的缩短</td></tr>\n<tr><td>低算术强度；重复中间张量读写</td><td>融合生产者消费者、复用数据、减少转换</td><td>融合后资源约束、数值语义、实际 HBM 流量</td></tr>\n<tr><td>小 M；不足的 grid 并行度</td><td>跨样本/专家聚合、合适分块或并行策略</td><td>额外通信、调度成本、尾部形状</td></tr>\n<tr><td>高流量且访存事务利用差</td><td>布局、合并访问、向量化、减少无用字节</td><td>布局转换成本是否被转移到上下游</td></tr>\n<tr><td>个别专家或 rank 形成长尾</td><td>负载均衡、路由/调度策略、并行切分</td><td>语义约束、跨卡流量、平均值改善但 p99 变差</td></tr>\n</tbody></table>\n<p>优先级可用“出现频率 × 当前成本 × 可实现改善比例”做初筛，但必须再用关键路径修正。只占端到端 5% 的串行部分，即使无限加速，整体上限也只有 <code>1 / 0.95 ≈ 1.053×</code>；若它本来就在被其他工作遮蔽的区间，收益可能更低。加速比的分母必须写清楚。</p>\n<p>对编译器岗位，回答还应连到可修改的原因：调度、融合、布局传播、tile、流水深度、寄存器压力、边界掩码、向量化或通信拆分。一个完整结论应是“这个输入族上，某项 lowering 决策造成某种可观测行为；对照修改消除了它，并在业务负载上保留了收益”。</p>"
+      },
+      {
+        "id": "roofline-foundation",
+        "title": "Roofline：把“算不动”和“喂不饱”写成公式",
+        "html": "\n<p>设一次 kernel 的有效工作量为 <code>F</code> FLOP，选定存储层级上搬运的总数据为 <code>Q</code> byte，算力上限为 <code>P</code> FLOP/s，该层级带宽为 <code>Bw</code> byte/s。FMA 按乘法加加法计 2 FLOP。不要把 FLOP（工作量）和 FLOP/s（速率）混用。</p>\n<div class=\"formula\">算术强度 I = F / Q &nbsp; [FLOP/byte]<br>理想计算时间 t_compute = F / P<br>理想搬运时间 t_memory = Q / Bw<br>时间下界 t ≥ max(F/P, Q/Bw)<br>性能上界 R ≤ min(P, I × Bw)<br>拐点 I* = P / Bw</div>\n<p>横轴是算术强度，纵轴是 FLOP/s，通常用双对数坐标。低强度时每搬一个 byte 做不了几次计算，斜线由带宽决定；强度足够大以后，上界变成水平的算力线。<strong>这个屋顶回答“在这些假设下最多多快”，不是保证你能达到。</strong></p>\n<p>为什么取 max？一次执行既要完成算术又要搬完数据；即便能完全重叠，也不能比其中更慢的一项还快。若取 <code>F/P + Q/Bw</code>，那是另一种完全串行的条件估计，不是同一个下界。流水填充、启动、同步、依赖和片上访存会让实际耗时进一步增长。</p>\n<p>图中实测点应使用一致范围的 <code>(F/Q, F/t)</code>。若 F 使用算法的“有效 FLOPs”，峰值也要说明所选精度与执行路径；若 F 来自执行指令计数，可能包含 padding 或重复运算。两种口径都能有用，但必须说清楚。基础定义参考 <a href=\"https://www2.eecs.berkeley.edu/Pubs/TechRpts/2008/EECS-2008-134.html\">Williams、Waterman、Patterson 的 Roofline 技术报告</a>。</p>"
+      },
+      {
+        "id": "roofline-bytes",
+        "title": "最容易算错的不是 FLOPs，而是 bytes 和峰值",
+        "html": "\n<table><thead><tr><th>你在数什么</th><th>它能回答什么</th><th>不能直接替代什么</th></tr></thead><tbody>\n<tr><td>逻辑张量最小读写量</td><td>理想复用成立时的数据需求；可比较融合前后</td><td>重复加载、缓存命中、事务放大之后的真实 DRAM 字节</td></tr>\n<tr><td>DRAM 读 + 写字节</td><td>结合相同窗口的设备内存带宽，建立 DRAM Roofline</td><td>L2、shared memory 或寄存器的数据流量</td></tr>\n<tr><td>L2 / L1 / shared traffic</td><td>片上层级是否成为更紧的约束</td><td>HBM 带宽的分母；多层数据可能经过同一次执行</td></tr>\n<tr><td>有效载荷 / 物理事务</td><td>带宽用在有用数据上的比例</td><td>压缩、对齐、cache line、重试、协议开销之后的链路占用</td></tr>\n<tr><td>精度与指令路径匹配的峰值</td><td>BF16 Tensor、FP32 CUDA core 等各自的执行能力</td><td>不同精度、结构化稀疏或不同设备数量的产品宣传峰值</td></tr>\n</tbody></table>\n<p>例如 fused bias + activation 可以减少中间张量的落盘与回读，逻辑运算几乎不变但 Q 下降；tiling 提高复用，可能减少 DRAM Q，却增加寄存器和 shared memory 压力；量化降低权重 byte，却引入 scale、解包、反量化与精度约束。每次都要重算生产者到消费者的完整成本。</p>\n<p>多层 Roofline 应分别定义 <code>I_DRAM=F/Q_DRAM</code>、<code>I_L2=F/Q_L2</code> 等。如果分子 F 相同而分母层级不同，点的横坐标也随之改变。不要把“总访存次数 × 元素大小”不加区分地填进 HBM 图。NVIDIA 的计数器和图表实现可参看 <a href=\"https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#roofline-charts\">Nsight Compute Profiling Guide</a>；可用指标受架构与版本影响。</p>\n<p><strong>峰值也分两种。</strong>硬件理论峰值给宽松的物理上界；同精度、同形状范围的微基准可以给更有现实意义的经验上限。经验上限取决于环境，不是硬保证。完整报告同时记录 GPU 型号、数量、时钟/功耗状态、dtype、累加精度、dense/sparse、软件版本和带宽来源。</p>"
+      },
+      {
+        "id": "roofline-example",
+        "title": "手算一个 GEMM：为什么 batch 变了，瓶颈也会变？",
+        "html": "\n<p>只考虑 <code>C[M,N] = A[M,K] × W[K,N]</code>，不读取旧 C（β=0），A/W/C 均为 BF16，假设每个输入首次从设备内存读一次、每个输出写一次，数据起初不在片上缓存。取 <code>K=N=4096</code>。这是<strong>冷读与理想复用的最小流量估计</strong>，不是实际 DRAM 测量。</p>\n<div class=\"formula\">F = 2MNK<br>Q_min = 2(MK + KN + MN) byte<br>I_min-traffic = MNK / (MK + KN + MN)</div>\n<table><thead><tr><th>M</th><th>有效工作量</th><th>最小流量</th><th>强度</th><th>条件判断</th></tr></thead><tbody>\n<tr><td>1</td><td>33,554,432 FLOP</td><td>33,570,816 B ≈ 33.571 MB</td><td>约 1.00 FLOP/B</td><td>一行输入，权重几乎没有跨 token 复用</td></tr>\n<tr><td>64</td><td>2,147,483,648 FLOP</td><td>34,603,008 B ≈ 34.603 MB</td><td>约 62.06 FLOP/B</td><td>更多行分摊同一份权重，强度明显增加</td></tr>\n<tr><td>1024</td><td>34,359,738,368 FLOP</td><td>50,331,648 B ≈ 50.332 MB</td><td>约 682.67 FLOP/B</td><td>可能跨过机器的算力/带宽拐点</td></tr>\n</tbody></table>\n<p>再设一台<strong>虚构教学设备</strong>：匹配该精度的算力 200 TFLOP/s，带宽 2 TB/s（均为十进制），拐点为 100 FLOP/B。M=64 的算术下界约 10.737 μs，搬运下界约 17.302 μs，带宽预算较紧。M=1024 时二者约 171.799 μs 和 25.166 μs，变成算术预算较紧。</p>\n<p>这是“增大 token batch 能改善权重复用”的解释，但不能推出“batch 越大越好”：更大 batch 会占用更多 KV cache，还可能增加排队和单请求时延。小矩阵可能连带宽也跑不满，因为并行块数不足、延迟隐藏不够或启动开销占比高。GEMM shape 与 tiling 的关系可参考 <a href=\"https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html\">NVIDIA 矩阵乘性能指南</a>。</p>"
+      },
+      {
+        "id": "roofline-lab",
+        "title": "交互一：移动 GEMM 在 Roofline 上的位置",
+        "html": "\n<p>先保持设备参数不变，把 M 从 1 改到 1024；再保持 M 不变，只提高算力，观察条件时间是否改善。最后增加固定开销，解释为什么“在屋顶下方”不一定是算术或带宽效率差。</p>\n<div data-performance-explorer=\"roofline\"></div>\n<p>图上圆点由公式生成，没有实测点。额外固定开销被假设为完全串行地加在 <code>max(t_compute,t_memory)</code> 后；它不是一个通用硬件定律，也不能直接从 CPU launch API 时间读出。真实应用中 CPU launch 与 GPU 执行可能重叠。</p>"
+      },
+      {
+        "id": "roofline-triage",
+        "title": "离屋顶很远：下一步到底该查什么？",
+        "html": "\n<p>Roofline 给出候选瓶颈，硬件计数器、时间线和消融实验负责验证原因。尤其当两个主要吞吐都很低时，不能简单归类为“算力不够”。</p>\n<table><thead><tr><th>现象</th><th>候选解释</th><th>下一份证据 / 实验</th></tr></thead><tbody>\n<tr><td>DRAM 吞吐高，计算低</td><td>大规模流式读写、复用少</td><td>确认真实 Q、读写比例；融合或复用后 Q 是否下降，耗时是否下降</td></tr>\n<tr><td>强度高，计算仍低</td><td>矩阵太小、tile 尾部、指令路径或调度效率问题</td><td>检查 grid/waves、Tensor 指令、对齐、寄存器与实际活跃 warp</td></tr>\n<tr><td>计算与 DRAM 都低</td><td>依赖链、长延迟、小工作量、同步或片上瓶颈</td><td>看 eligible/issued warps、stall、L2/shared 吞吐，并做规模扫描</td></tr>\n<tr><td>单 kernel 快，业务仍慢</td><td>优化不在关键路径；CPU、通信、布局转换或其他阶段抵消收益</td><td>回到系统时间线与业务 P50/P99，核对实际选择的 kernel</td></tr>\n<tr><td>融合后访存少但变慢</td><td>寄存器增加、spill、occupancy 降低、并行度损失</td><td>比较总流量、local memory、发射效率和完整生产者/消费者范围</td></tr>\n</tbody></table>\n<p><strong>occupancy 是驻留能力指标，不是算术利用率。</strong>高 occupancy 可能有很多 warp 一起等内存；较低 occupancy 也可能已有足够独立指令撑满执行管线。提高 occupancy 是手段，缩短目标时间才是结果。</p>\n<p>对单 kernel 报 <code>F/t</code>；对整个模型报模型有效 FLOPs / 端到端时间时，要明确是否包含重计算、padding、稀疏跳过、通信与空闲。MFU 通常强调模型有效工作量，HFU 等名称在不同系统中的计数边界可能不同；必须写下自己的分子与分母，不要仅报一个百分比。<code>nvidia-smi</code> 的 GPU busy 指标也不能替代 FLOPs 利用率。</p>"
+      },
+      {
+        "id": "communication-contract",
+        "title": "通信分析先把“谁和谁、交换什么”说清楚",
+        "html": "<p>通信性能分析要解释的是：一个分布式步骤为何在某个通信依赖上停住，以及消除这段停顿能缩短多少总时间。NCCL 是执行 GPU 集合通信的库；<code>nccl-tests</code> 是测量这些操作的微基准。它们回答“这个拓扑和消息尺寸下，通信本身有多快”；模型的时间线还要回答“各 rank 何时准备好、通信挡住了谁”。</p>\n<table><thead><tr><th>操作</th><th>每个 rank 的输入与输出</th><th>典型动机</th></tr></thead><tbody>\n<tr><td>AllReduce</td><td>各有 S 字节输入；全部得到 S 字节归约结果</td><td>梯度或部分和合并</td></tr>\n<tr><td>ReduceScatter</td><td>各有 S 字节输入；归约后各得到 S/p 字节</td><td>归约并保留分片</td></tr>\n<tr><td>AllGather</td><td>各有 S/p 字节分片；全部得到 S 字节</td><td>收集权重或激活分片</td></tr>\n<tr><td>AllToAll</td><td>各有 S 字节、按目标分成 p 份；每份发给对应 rank</td><td>重排数据所有权、专家 token 交换</td></tr>\n<tr><td>Send/Recv</td><td>点对点，双方匹配消息</td><td>流水线阶段间传激活</td></tr>\n</tbody></table>\n<p>这里 p 是同一 communicator 的 rank 数，S 的定义随操作明确列在表中。MoE 常见的变长交换还需要逐目标计数矩阵；不能认为所有目的 rank 都收相同大小。先确认逻辑 collective，再核对实现是一个操作、多个 Send/Recv，还是分层通信。操作语义参考 <a href=\"https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/usage/collectives.html\">NCCL Collective Operations</a>。</p>\n<h3>一次可复现测试至少保留什么</h3>\n<p>保留 GPU/节点数量、rank 到 GPU/NIC 的映射、NCCL/CUDA/驱动版本、测试源码 SHA、collective、数据类型、每 rank 消息尺寸、warmup/迭代数、是否 in-place、是否使用 CUDA Graph、时间聚合口径。额外列出后台负载和相关环境变量。只写“8 卡带宽 100 GB/s”不足以比较。</p>\n<pre><code># Example: one process, one thread, eight visible GPUs.\n# Requires a built nccl-tests binary and eight available GPUs.\n./build/all_reduce_perf -b 8 -e 256M -f 2 -g 8</code></pre>\n<p>以上只是命令示例，没有在本文中执行。它扫描消息尺寸，便于看到小消息延迟区、大消息带宽区与算法切换点；实际应用只用某个尺寸时，还应增加该尺寸附近的测试。多进程/多节点需要相应 MPI 构建与站点启动器配置。输出时间单位以所用版本的表头为准，计算带宽前统一换成秒。<a href=\"https://github.com/NVIDIA/nccl-tests/blob/afd59abab774a6a4b492eb344bd0c845a0b7bb4d/README.md\">nccl-tests 使用说明（固定版本）</a>。</p>"
+      },
+      {
+        "id": "communication-bandwidth",
+        "title": "algbw、busbw 与 ring：分母错了，结论就错了",
+        "html": "<p><strong>algbw 是逻辑消息量除以时间；busbw 是按 collective 语义归一化的带宽指标。</strong>它不是 NIC 硬件计数器，也不等于所有物理链路的流量总和。统一使用 S 字节、t 秒，结果为 B/s；GB/s 使用 10⁹，GiB/s 使用 2³⁰。</p>\n<pre><code>algbw = S / t\nAllReduce:     busbw = algbw × 2(p−1)/p\nReduceScatter: busbw = algbw × (p−1)/p  [S = full input size]\nAllGather:     busbw = algbw × (p−1)/p  [S = full output size]\nAllToAll:      busbw = algbw × (p−1)/p  [S = total input per rank]</code></pre>\n<p>这些是 <a href=\"https://github.com/NVIDIA/nccl-tests/blob/afd59abab774a6a4b492eb344bd0c845a0b7bb4d/doc/PERFORMANCE.md\">nccl-tests 的带宽约定</a>。AllToAll 的 S 包含留给本 rank 的那份，因此均匀交换只需向远端发送 S(p−1)/p；其 <a href=\"https://github.com/NVIDIA/nccl-tests/blob/afd59abab774a6a4b492eb344bd0c845a0b7bb4d/src/alltoall.cu\">GetBw 实现</a>也明确使用这个因子。不能把 AllReduce 的 2 倍因子套给 AllToAll。</p>\n<h3>从 ring 过程独立推导发送字节</h3>\n<p>理想均匀 ring AllReduce 把 S 分成 p 块。ReduceScatter 走 p−1 步，AllGather 再走 p−1 步，每步每 rank 向下一跳发送 S/p。因此：</p>\n<pre><code>每 rank 发送量 = 2(p−1)S/p\n每 rank 接收量 = 2(p−1)S/p\n全组发送量     = 2(p−1)S\nt_ring ≈ 2(p−1)α + [2(p−1)S/p] / B_link</code></pre>\n<p>α 是简化模型中每一步的固定开销，B_link 是每 rank 的有效单向瓶颈带宽。发送和接收可并行时，不应再把“发 + 收”除以单向 B_link，凭空多算一倍时间。这是忽略争用、归约开销、协议报头和分层路径的教学模型；树、交换机内归约、分层算法等不能用它还原物理流量。</p>\n<aside><strong>纯教学建模例子，不代表 518 或 NVIDIA 实测：</strong>p = 8、每 rank 输入 S = 64 MiB，ring 每 rank 发送 112 MiB。如果有效单向带宽假设为 100 GB/s，忽略固定开销的传输项为 1.1744 ms。若再假设完整操作耗时 1.5 ms，则 algbw = 44.74 GB/s，busbw = 78.29 GB/s。两者不同来自分子定义，不能据此说测量矛盾。</aside>\n<p>比较硬件规格时还要核对：规格是单向还是双向、每条链路还是每张卡合计、单个 NIC 还是整节点、是否有交换机汇聚瓶颈。先把口径对齐，再谈带宽利用率。</p>"
+      },
+      {
+        "id": "communication-diagnosis",
+        "title": "通信看起来慢：先分清链路慢、到达晚与负载不均",
+        "html": "<p>时间线上一个很长的 NCCL kernel 可能正在传数据，也可能在等某个 rank 的数据就绪。只截最慢 rank 的一条时间线，无法区分这两类原因。应对齐所有参与 rank 的同一迭代、同一 collective 序号，核对输入大小与前驱计算。</p>\n<pre><code>arrival_skew = max_r(ready_r) − min_r(ready_r)\ncollective_window = max_r(done_r) − min_r(ready_r)\npost_last_arrival_tail = max_r(done_r) − max_r(ready_r)</code></pre>\n<p><code>ready_r</code> 指该 rank 输入及依赖已经就绪、通信可以推进的时刻；CPU 调用时间未必等于这个时刻。不同节点的时间戳需要可靠对齐。最后一个量只是诊断用尾部窗口，通信可能在所有 rank 到齐前已经部分推进，不能把它直接叫作“纯网络时间”。</p>\n<table><thead><tr><th>观察到的现象</th><th>优先假设</th><th>怎样验证</th></tr></thead><tbody>\n<tr><td>早到 rank 的 NCCL 很长，最后到的短</td><td>前驱算子或 CPU 发射造成到达偏斜</td><td>比较各 rank 前驱完成时刻；做输入就绪对齐的微基准</td></tr>\n<tr><td>所有 rank 到达接近，大消息仍整体慢</td><td>带宽、拓扑路径或协议选择</td><td>消息尺寸扫描；单链路/单节点/跨节点分层比较</td></tr>\n<tr><td>只有某个专家 rank 接收和计算显著更大</td><td>路由倾斜、填充放大或专家映射</td><td>保存每 rank、每专家 token 数及逐目标字节矩阵</td></tr>\n<tr><td>隔离测试快，与 GEMM 并发就慢</td><td>SM、HBM 或互联资源争用</td><td>串行、并发两组对照，同时观察计算变慢量</td></tr>\n</tbody></table>\n<h3>排查顺序要能排除假设</h3>\n<ol><li>先验证正确性与调用匹配，再保存应用通信尺寸分布和所有 rank 时间线。</li><li>看 GPU、NIC、CPU NUMA 的亲和关系与拓扑；用 GPU 间带宽工具检查底层路径，用网络微基准检查跨节点链路。</li><li>用同版本 nccl-tests 重放相同规模、尺寸与 rank 映射；比较“小尺寸固定开销”和“大尺寸斜率”，不要只看最大带宽。</li><li>基础路径正常后才定向比较算法、协议、CTA 等配置；一次改变一个因素，回到真实业务验证。</li></ol>\n<p>NCCL 官方同样建议先区分系统配置、硬件路径与库自身问题，并指出通信 CTA 增多会消耗更多 GPU 资源。这里的实验设计据此展开，参见 <a href=\"https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/troubleshooting/performance_and_tuning.html\">Performance and tuning</a>。调优应保留默认配置作为对照，微基准最优点未必是业务最优点。</p>"
+      },
+      {
+        "id": "communication-overlap",
+        "title": "重叠优化的成绩单：缩短了多少关键路径",
+        "html": "<p>“开了另一条 stream”只说明具备并发条件，不说明真的隐藏了通信。先画出数据依赖：哪个计算块产生通信输入，哪个消费通信结果，中间有没有与这次通信无关的工作。只有落在可并行窗口内、且没有把其他工作拖慢的部分，才能转化为总时间收益。</p>\n<pre><code>完全串行：T = T_compute + T_comm\n理想独立重叠下界：T ≥ max(T_compute, T_comm)\n实际时间：依赖图的关键路径 + 调度/同步与资源争用影响</code></pre>\n<p>上述 max 关系只适用于起点一致、可独立推进且资源不互相拖慢的简化情形。对真实执行图，更可靠的方法是比较完整步骤的起止时间，并沿最后完成的结果向前追踪依赖。不同 stream 的 kernel 时长相加，常常超过实际经过的时间；这不是计时错误，而是重复计算了重叠区间。</p>\n<aside><strong>纯教学建模：</strong>计算独立执行 6 ms，通信独立执行 4 ms，串行共 10 ms。并发后完整步骤 7 ms，端到端节省 3 ms，提速 1.43×。只有确认计算仍为 6 ms 且没有新增其他开销时，才可把剩余 1 ms 称为暴露在外的通信；若计算因争用延长，须重新拆账。</aside>\n<h3>分块为何既可能有效，也可能更慢</h3>\n<p>把一大块切成多个 chunk，可以让第一个 chunk 更早进入通信、下一块继续计算，使生产者—通信—消费者形成流水。代价是更多启动、同步、消息头，以及过小 GEMM 的效率下降。分块粒度需要同时满足计算和网络效率，不能只追求时间线上颜色相互覆盖。</p>\n<p>建议同时报告：完整步骤 p50/p95、每 rank 完成时间、通信独立测试时间、并发期间计算变化，以及结果正确性。如果优化了并不位于关键路径的通信，局部指标可能很漂亮，端到端几乎不变。</p>"
+      },
+      {
+        "id": "communication-lab",
+        "title": "交互二：通信真的被隐藏了吗？",
+        "html": "\n<p>8 ms 计算与 6 ms 通信完全串行需要 14 ms；若满足数据独立、资源足够、无额外代价，全部可隐藏的部分为 6 ms，下界为 8 ms。只做到一半潜在重叠时，交叠为 3 ms，总时间 11 ms。增加资源竞争后，也可能把这 3 ms 的收益吃掉。</p>\n<div data-performance-explorer=\"overlap\"></div>\n<p>这里的“可重叠比例”是人为条件，不是直接读取工具里的一个利用率。真实优化需在 trace 中确认输入是否已准备好、消费者何时开始，以及并行后的 compute/communication 是否各自变慢。吞吐优化不能只展示两种颜色重叠，还要比较完整迭代时间。</p>"
+      },
+      {
+        "id": "workload-contract",
+        "title": "模型负载建模：从“多少参数”变成可计算的工作清单",
+        "html": "<p>负载模型是一个可校准的解释器：输入模型结构、请求分布、并行布局和硬件能力，输出算量、数据流、容量需求与时间估计。它首先用于筛选方向和识别下界，之后必须拿实测校准。只凭参数量除以峰值算力，无法预测一个在线服务的延迟。</p>\n<table><thead><tr><th>输入层</th><th>至少要明确的变量</th></tr></thead><tbody>\n<tr><td>模型</td><td>层数、hidden size、Q/KV head 数、head dimension、FFN 宽度、专家数与 top-k、词表；权重/激活/KV 精度</td></tr>\n<tr><td>请求</td><td>输入长度与输出长度的分布及相关性、到达时刻、并发量、前缀命中率、输出策略</td></tr>\n<tr><td>执行</td><td>prefill 分块、动态 batching、padding、图捕获、量化/反量化、算子融合、TP/EP/PP/DP 布局</td></tr>\n<tr><td>资源</td><td>可用显存、各精度可达计算吞吐、HBM 带宽、互联拓扑与消息尺寸对应性能</td></tr>\n<tr><td>目标</td><td>TTFT、逐 token 延迟、吞吐、尾延迟、SLO 达标率、单位成本</td></tr>\n</tbody></table>\n<h3>为什么 prefill 和 decode 必须分开</h3>\n<p>常规自回归推理的 prefill 一次处理多个 prompt token；线性层会形成较大的 GEMM，权重能在很多 token 间复用。常规 decode 每个活跃请求每步增加一个 token，小 batch 时线性层更接近矩阵向量乘，权重读取常更突出；长上下文还会带来大量 KV 读取。大 batch decode、极长 prefill、GQA、量化与融合都会改变这个判断，所以“prefill 永远算力受限、decode 永远带宽受限”不成立。</p>\n<p>建模时区分“本步新 token 数 T”和“注意力访问的历史长度 L”。两个批次都有 T = 128，一个是短 prompt prefill，一个是 128 个长上下文 decode 请求，它们的线性层算量可能接近，注意力和 KV 流量却不同。投机解码也会改变“每步一个 token”的假设，应另外建模验证与接受率。</p>\n<p>Prefill/decode 的资源目标差异，以及分离执行时的 KV 传输成本，可参考 <a href=\"https://arxiv.org/abs/2401.09670v3\">DistServe（OSDI 2024）</a>。本文使用的是分析框架，不把论文中的特定测试加速比外推到其他模型或设备。</p>"
+      },
+      {
+        "id": "workload-flops",
+        "title": "手算一层 Transformer：GEMM、Attention、FFN、MoE",
+        "html": "<p>以下均是<strong>前向、稠密数学操作量</strong>，约定一次乘加算 2 FLOPs；忽略 bias、归一化、softmax、激活、RoPE 等较小项，但这些项的时间不一定小。令 T 为本层处理的新 token 总数，H 为 hidden size，H = n<sub>q</sub>d，n<sub>kv</sub> 为 KV head 数，I 为 FFN 中间宽度。未做 TP/EP 分片，未含词表输出头。</p>\n<table><thead><tr><th>部分</th><th>公式与解释</th></tr></thead><tbody>\n<tr><td>一般 GEMM</td><td>A[M,K] × B[K,N]：F = 2MKN</td></tr>\n<tr><td>Q、K、V、O 投影</td><td>F = 4TH² + 4TH(n<sub>kv</sub>d)；MHA 中 n<sub>kv</sub>d = H，得到 8TH²</td></tr>\n<tr><td>普通两层 FFN</td><td>H → I → H：F = 4THI</td></tr>\n<tr><td>门控 FFN（如 SwiGLU）</td><td>两个 H → I 投影加一个 I → H 投影：F = 6THI，不含逐元素门控</td></tr>\n<tr><td>Routed MoE 专家</td><td>T 个 token、每个选 k 个、专家宽 I<sub>e</sub>：F ≈ 6TkHI<sub>e</sub>；假设无丢弃、无重复填充，每个专家是门控 FFN</td></tr>\n<tr><td>MoE 额外项</td><td>稠密 router 约 2THE；另加 top-k、重排、combine 和 shared expert。E 是总专家数</td></tr>\n</tbody></table>\n<h3>Attention 的二次项从哪里来</h3>\n<p>QKᵀ 和 AV 都要沿 head dimension 做乘加。B 个请求，每个长度 L，完整双向 attention 的两次矩阵乘合计约 <code>4BL²H</code> FLOPs。若是 causal attention，且真正跳过上三角，数学有效 pair 数为 L(L+1)/2，合计 <code>2BL(L+1)H</code>；内核的 tile 边界、掩码策略与填充可能让实际执行更多。不能拿有效 FLOPs 与执行 FLOPs 混算利用率。</p>\n<p>Decode 每个请求一个 query，若请求 i 本步实际访问 L<sub>i</sub> 个 KV 位置，则 QKᵀ 与 AV 合计约 <code>4HΣL<sub>i</sub></code>。这里 L<sub>i</sub> 明确包含本步可见的位置。GQA 减少 KV head 数，但所有 query head 仍参与注意力；因此这两次乘法的主项仍按 n<sub>q</sub> 计算。GQA 的结构定义参考 <a href=\"https://arxiv.org/abs/2305.13245v3\">GQA 原论文</a>。</p>\n<h3>为什么少算 FLOPs 不一定更快</h3>\n<p>MoE 的激活专家数量决定 token 专家计算量，但总专家权重影响容量，命中的不同专家数量影响读取量，token 分布决定各个小 GEMM 的效率和最慢 rank。逻辑 FLOPs 还要与 padding 后 FLOPs、编译器生成的实际工作、Tensor Core 所支持的数据类型区分。下一步把这些算量映射到真实 shape 的微基准曲线，而不是统一除以一张卡的峰值。</p>"
+      },
+      {
+        "id": "workload-memory",
+        "title": "字节与容量：权重、KV cache 和中间结果分别记账",
+        "html": "<p>显存容量回答“能否放下”，HBM 流量回答“本步搬运多少”，两者不能互换。相同的 1 GiB KV cache 可能被多次读、被部分复用，或因为分片只在本 rank 存一部分。计算算术强度时，字节数必须来自与该算子同一边界的内存层级。</p>\n<h3>先从 GEMM 的理想最少字节入手</h3>\n<pre><code>A[M,K] × W[K,N] → C[M,N]\nF = 2MKN\nD_min = bA·MK + bW·KN + bC·MN\nAI_min_traffic = F / D_min</code></pre>\n<p>假设 A、W 各读一次，C 写一次，且不读旧 C；如果 βC、类型转换、中间落盘或重复读取存在，要补上相应字节。这个 D<sub>min</sub> 是理想数据量，并不自动等于硬件测得的 HBM 流量。</p>\n<aside><strong>纯教学建模：</strong>K = N = 4096，A/W/C 都是 2 字节。M = 1 时上述强度约 1.00 FLOP/byte；M = 128 时约 120.47 FLOP/byte。权重在更多行间复用，使同一线性层更有机会靠近计算上限。这里没有计入其他算子或任何设备实测。</aside>\n<h3>KV cache 的基础容量公式</h3>\n<pre><code>KV_bytes = 2 × N_layers × n_kv × d × b_kv × Σ_i L_i\n           ↑ K 与 V                                ↑ 所有活跃请求长度</code></pre>\n<p>这是标准 MHA/GQA、等宽 K/V、全部相关层都存缓存时的逻辑容量；不含分页尾部空洞、块表、量化 scale/zero-point、allocator 预留和临时 workspace。滑窗、压缩或 latent attention 需用其实际缓存结构替换公式。TP 下也不能盲目除以 TP 数：KV heads 是否整除、是否复制，必须看布局。</p>\n<aside><strong>纯教学建模：</strong>32 层、8 个 KV heads、d = 128、KV 每元素 2 字节：每 token 跨所有层占 128 KiB。8192-token 请求占 1 GiB，16 个同长度请求占 16 GiB；若 KV heads 改成 32，其余不变，则分别为 4 GiB 和 64 GiB。这只是逻辑容量，未包含其他显存占用。</aside>\n<p>若本步访问的 KV 没有驻留于片上缓存，理想 decode 读取模型可先按本步访问的 K/V 位置各从 HBM 读一次估计 KV 流量，再加新 K/V 写入、权重和中间激活。GQA 实现是否有效复用共享 KV，需要看内核与计数器。<a href=\"https://arxiv.org/abs/2205.14135v2\">FlashAttention</a>说明减少 HBM 中间结果往返可以提升性能；<a href=\"https://arxiv.org/abs/2309.06180v1\">PagedAttention</a>关注 KV 管理与碎片，两者解决的瓶颈层次不同。</p>"
+      },
+      {
+        "id": "workload-parallel-moe",
+        "title": "并行布局与 MoE：按最忙的 rank 和实际远端字节建模",
+        "html": "<table><thead><tr><th>方式</th><th>如何划分</th><th>建模时要付的成本</th></tr></thead><tbody>\n<tr><td>TP 张量并行</td><td>在层内切权重或激活</td><td>collective、局部 GEMM 变小、可能的 KV 复制；不能简单把时间除以 TP</td></tr>\n<tr><td>PP 流水线并行</td><td>按层分阶段</td><td>阶段间激活传输、流水线气泡、阶段不均衡和单请求阶段依赖</td></tr>\n<tr><td>EP 专家并行</td><td>专家分布到不同 rank</td><td>token dispatch/combine、路由倾斜、打包重排、小 GEMM 与远端比例</td></tr>\n<tr><td>DP 数据并行</td><td>复制模型处理不同数据/请求</td><td>训练常有梯度同步；推理副本更关注请求分流、容量与排队</td></tr>\n</tbody></table>\n<p>这些维度如何组合要按框架实际进程组解释；不能在有共享或重用维度时机械地把 TP×EP×PP×DP 当成设备总数。TP 的经典层内分解可参考 <a href=\"https://arxiv.org/abs/1909.08053\">Megatron-LM 原论文</a>。</p>\n<h3>MoE dispatch：把“每 token 复制几份”写在分子里</h3>\n<p>设源 rank r 有 T<sub>r</sub> 个 token、每个选择 k 个专家、隐藏向量宽 H、传输元素宽 b 字节；f<sub>r</sub> 是这些 token–expert 路由中发往远端 rank 的比例。在每个远端路由都发送完整向量、没有按目的 rank 去重或压缩的假设下：</p>\n<pre><code>dispatch_out_bytes(r) ≈ T_r × k × H × b × f_r\n全组 dispatch 发送量 = Σ_r dispatch_out_bytes(r)</code></pre>\n<p>这是<strong>源 rank 发往远端的一个方向、一个 dispatch 阶段</strong>。本地专家路由不应算进远端网络字节。若 combine 为每个路由返回同样宽度的输出，全组 combine 发送总量近似相同；但是个别 rank 的 combine 发送量取决于它接收的专家任务，未必等于自己的 dispatch 发送量。不要再把接收量加到全组发送量中重复统计同一 payload。</p>\n<aside><strong>纯教学建模：</strong>EP = 8，每个源 rank 有 1024 个 token，k = 2、H = 4096、b = 2；假设专家分布和路由均匀，f = 7/8。则每源 rank dispatch 远端发送约 14 MiB，全组约 112 MiB；再加同样大小的 combine，全组前向两个阶段发送共约 224 MiB。未包含元数据、padding、协议开销、额外转发或反向传播。</aside>\n<p>在真实实现里，同一 token 的多个专家若在同一目的 rank，按 rank 去重会降低 dispatch 字节；combine 在远端预归约也会改变返回量。另一边，capacity padding 和对齐又会增加字节。应记录实际逐源—目的字节矩阵，而非仅用 k 推断。</p>\n<h3>平均专家负载不能预测最后完成时间</h3>\n<p>保存每专家 token 数的均值、最大值、分位数、空专家比例和 padding 倍率。粗略时间下界至少受到最大 rank 的计算时间、出站字节/出站带宽、入站字节/入站带宽以及共享网络割带宽共同约束；再把 dispatch → expert GEMM → combine 的依赖接起来。增加 EP 可能减少权重和单 rank 算量，也可能扩大远端流量、缩小 GEMM，并放大长尾。</p>"
+      },
+      {
+        "id": "workload-lab",
+        "title": "交互三：batch、上下文和 KV cache 的联动",
+        "html": "\n<p>下面采用一个虚构的 dense decoder：32 层、hidden size 4096、query heads 32、KV heads 8、head dim 128、gated FFN intermediate size 11008；权重与 KV 均为 BF16。没有借用任何公开或内部模型的名称，也不等同于 GLM-5 或内部 GLM5Next。</p>\n<div data-performance-explorer=\"workload\"></div>\n<p>把 batch 固定为 8，将已有上下文从 512 改到 32768：权重存储基本不变，KV 容量、读取和 Attention 计算随长度增长。再固定上下文增大 batch：权重每 step 读一次的理想复用更充分，但所有请求的 KV 需求同步增加。模型中不包含词表投影、其他激活流量和服务调度，时间只是一组指定条件下的下界。</p>\n<p>容量不是时间：KV 能装下不代表读取足够快；带宽满足也不代表能容纳足够并发。实际最大并发还要从可用显存中扣掉权重、激活峰值、workspace、通信 buffer、碎片与保留余量，再按请求长度分布而非单个平均长度估算。</p><p>还要区分整体下界与逐阶段估算：本实验取 <code>max(ΣFᵢ/P, ΣQᵢ/BW)</code>，相当于只看总资源需求，通常较松。若各阶段严格串行且各自满足相同资源假设，<code>Σ max(Fᵢ/P, Qᵢ/BW)</code> 会给出更紧的下界。一个阶段算力受限、另一个阶段带宽受限，不能用全模型平均强度把两者抹平；实际部署应保留算子级或阶段级模型。</p>"
+      },
+      {
+        "id": "workload-slo",
+        "title": "从负载模型走到服务指标：校准、排队与面试表述",
+        "html": "<p>先用算量和字节得到下界，再用真实 shape 的算子与通信微基准校准，最后按依赖图与调度过程组合。可以给每个形状区间拟合可达吞吐、有效带宽和固定启动开销；用没有参与拟合的长度、batch 和路由分布验证误差。一个全局“效率系数”很容易在训练样本上好看、换 workload 就失效。</p>\n<pre><code>t_op ≈ max(F / P_effective, D / BW_effective) + launch/scheduling terms\n          [筛选用近似；依赖、不同阶段与额外资源瓶颈需单列]\nTTFT = t_first_token − t_request_start\nTPOT_request = (t_last_token − t_first_token) / (output_tokens − 1)\nITL_j = t_token_j − t_token_(j−1)</code></pre>\n<p>以上把请求起点定义为所选测量边界中的请求发出/到达时刻，报告时明确是客户端还是服务端。TTFT 可能包含网络、排队、tokenize、prefill 与首 token 采样。TPOT 对输出大于 1 的请求定义，表示该请求首 token 后的平均间隔；它会掩盖某个特别慢的 token，所以还应看 ITL 的分位数。端到端时间等于 TTFT + (输出数−1)×该请求 TPOT。</p>\n<h3>吞吐高，不等于用户体验好</h3>\n<p>离线持续喂满设备得到的 token/s 是容量参考；在线服务需同时约束 TTFT 和 token 间隔。本文把 request goodput 定义为“在测量窗口内，完成且同时满足所定 TTFT/TPOT 条件的请求数 ÷ 窗口时间”；如果使用 token goodput，应另外明确分子。<a href=\"https://arxiv.org/abs/2401.09670v3\">DistServe</a>也是以满足阶段延迟约束的服务能力作为优化目标。</p>\n<p>在稳定且测量边界一致的队列系统中，Little 定律给出平均在系统请求数 N = 到达率 λ × 平均逗留时间 W。它连接平均量，不能直接推出 p99，也不能把“并发 100”当成“每秒 100 请求”。负载接近容量时，波动和长请求更容易形成排队；测试应保存到达分布、长度分布、突发程度以及是否开放式发压。只让上一批完成后再发下一批，可能掩盖真实排队。</p>\n<h3>一个足够扎实的面试回答</h3>\n<p>“我先固定请求长度、并发和 SLO，按 prefill/decode 拆开估算每层 FLOPs、权重与 KV 字节；用算子画像找到占关键路径的 shape。系统时间线若显示通信等待，我对齐所有 rank 的输入就绪点，区分 arrival skew 与传输瓶颈，再用匹配尺寸的 nccl-tests 和拓扑测试验证。最后只把完整请求或迭代的改善计入收益，同时报告正确性、尾延迟、版本和适用负载。”</p>\n<p>这段话表达的是可执行的方法。若你尚未亲自完成实验，应说“我会这样分析”或“我已做过教学建模”，再展示模型和待验证假设；不要把公式推导、论文结果、模拟器数字描述成自己的 GPU 实测。</p>"
+      },
+      {
+        "id": "diagnosis-case",
+        "title": "贯穿案例：GPU 很忙，为什么整体还是慢？",
+        "html": "<aside><strong>以下完全是教学构造案例，不是 NVIDIA、518、CycleSim 或 VCS 的实测。</strong>所有时间都以一个稳定推理 step 为边界；数字只用于演示如何推理。</aside>\n<p>假设无 profiler 基线是 20 ms。通过时间线和依赖关系，将决定完成时刻的路径划分为：输入/提交空隙 4 ms、关键计算 12 ms、未被覆盖的通信与等待 4 ms。这里的三段被构造为互斥区间；实际应用应从时间线证明，不能把 profiler 各行总计拿来拼出这张表。</p>\n<ol><li><strong>先定位：</strong>PyTorch 画像显示 GEMM 累计时间高，nsys 同时揭示开头 4 ms 的 GPU 空隙。沿 API 与业务标记回查，发现一部分前处理和动态调度在关键路径。</li>\n<li><strong>一次只改变一个因素：</strong>把可预处理工作移出关键路径后，假设空隙从 4 ms 降至 1 ms，计算和等待不变，则 step 从 20 ms 降至 17 ms，即约 1.18×。这项收益应由独立计时验证。</li>\n<li><strong>再分析 kernel：</strong>选中占关键计算 6 ms 的 GEMM 输入族，用 ncu 研究规模、资源、吞吐和访存。即使把它加速 2×，原始 20 ms 只会降到 17 ms；不能宣称模型加速 2×。</li>\n<li><strong>排查通信：</strong>某 collective 在快 rank 上持续很久，但慢 rank 进入晚。若延后的是上游 expert 计算，直接调整网络参数可能无效；应先解释 rank 间的进入时间差。</li>\n<li><strong>组合修改后重测：</strong>分别改善的两项并不必然线性相加。新的 overlap、资源竞争或关键路径切换可能改变收益，必须重新采集短 trace，并用正常执行方式测量。</li></ol>\n<h3>面试官追问时，怎样把答案说具体？</h3>\n<table><thead><tr><th>追问</th><th>应回答的核心</th></tr></thead><tbody>\n<tr><td>GPU utilization 95%，还可能慢吗？</td><td>可能。忙碌时间不代表有效计算效率；访存、等待、低效率 kernel 也可能让设备持续活跃。先看有效吞吐和资源/关键路径证据。</td></tr>\n<tr><td>一个算子占 40%，一定先优化它吗？</td><td>确认这个 40% 的分母、嵌套与重叠，再估计可改善空间、覆盖范围和工程成本；累计时间高不保证关键路径收益最大。</td></tr>\n<tr><td>ncu 比 nsys 测得慢，哪个错了？</td><td>先比较采集方式、replay、缓存、时钟、同步与目标调用。它们可能测的是不同执行条件，不要任选一个作为真值。</td></tr>\n<tr><td>Occupancy 低，要不要降低寄存器？</td><td>先看是否因此缺少可发射 warp。降低寄存器可能引入 spill、减少复用或破坏流水；以时间与证据评价。</td></tr>\n<tr><td>局部快了，端到端没变怎么办？</td><td>检查是否在关键路径、是否优化了真实输入族、是否发生瓶颈转移，以及新增转换、调度、通信等成本。</td></tr>\n<tr><td>没有 NVIDIA GPU，能证明什么？</td><td>能核对 API、构建负载模型、分析已有可信 trace；不能声称取得新的 GPU 硬件计数器或硅上性能证据。</td></tr>\n</tbody></table>\n<p><strong>一段可直接练习的表达：</strong>“我先固定输入分布、精度和计时范围，用无 profiler 运行建立基线；通过框架画像找输入族，用系统时间线确认关键路径，再对代表性 kernel 收集硬件指标。针对证据提出一个可证伪假设，做单变量对照，并同时验正确性、局部时延和业务指标。结论只覆盖已验证的版本、硬件与负载。”</p>\n<p>如果要写进简历，应填入你真正做过的 workload、工具版本、问题证据、修改点和最终口径；不要把本页示例数字改写成个人项目业绩。</p>"
+      },
+      {
+        "id": "perf-experiment",
+        "title": "从假设到结论：一份可复现的性能实验怎么写？",
+        "html": "\n<ol><li><strong>冻结目标与环境：</strong>模型/代码提交、GPU与节点数、驱动/CUDA/库/编译器版本、dtype、并行策略、shape与请求分布、计时范围、预热、统计方法。</li>\n<li><strong>建立无重型采集的基线：</strong>先检查结果正确性，再采端到端 P50/P95/P99、吞吐和波动。kernel 优化还应记录误差容限，不能用错误计算换速度。</li>\n<li><strong>逐层缩小范围：</strong>系统 trace 找关键路径；框架 profiler 找 shape/调用栈；热点 kernel 用计数器检验 Roofline 和资源假设；多卡检查所有 rank。</li>\n<li><strong>一次主要改变一个因素：</strong>如融合、tile、batch、并行方式或通信调度。记录预测：它应该减少什么工作量、哪一段时间、代价是什么。</li>\n<li><strong>做匹配的 A/B 与消融：</strong>同一 workload，交替运行或重复采样控制漂移；比较分布。再扫邻近 shape、长短请求和并发，避免只优化一个幸运点。</li>\n<li><strong>回到业务验收：</strong>去掉高开销 profiler，确认端到端收益、显存、精度和 SLO。kernel、模型 step、服务请求是三种证据，分别报告。</li></ol>\n<pre><code># Example report fields, not a measurement result\nrevision / environment / topology:\nworkload: shapes, dtypes, request lengths, concurrency, seed\nmetric: start boundary, end boundary, denominator, samples\nbaseline: p50, p95, p99, throughput, memory\nhypothesis: expected reduction and expected side effects\nchange: one primary factor\nevidence: trace interval, operator group, counters, model residual\nvalidation: correctness, A/B distribution, neighboring shapes\nresult: kernel / model step / service metrics separately</code></pre>\n<p>基线 10 ms，某个串行热点占 30%，即使把它优化到 2 倍，整段也只是 <code>1 / (0.7 + 0.3/2) ≈ 1.176</code> 倍。这个 Amdahl 估计假设其余工作和重叠关系不变；对并行 DAG，要重新计算关键路径，不能直接拿 kernel 累计时间占比套公式。</p>"
+      },
+      {
+        "id": "perf-interview",
+        "title": "面试时怎样回答“你熟悉这些工具吗”？",
+        "html": "\n<p>回答应包含目标、证据、推理、行动和验收。下面是一段<strong>方法演示</strong>，不是可冒用的个人项目经历：</p>\n<div class=\"callout\"><p>“我会先把慢定义为 TTFT、逐 token 延迟或吞吐，并固定模型版本、shape、并发和并行策略。先用无重型采集的运行建立基线，再用 Nsight Systems 看 CPU、GPU 与通信关键路径；通过 NVTX 或框架 profiler 把热点关联到算子和 shape。对占比高且处在关键路径上的 kernel，用 Nsight Compute 看执行路径、实际流量、发射和资源约束，再用 Roofline 检验算力或带宽假设。多卡会分离 rank 到达偏差和传输成本，用匹配消息尺寸的 collective 基准校准。优化后我会重新验证精度与端到端指标，并扫 batch、长度、并发，确认收益范围。”</p></div>\n<p>如果你目前做过的是自研 profiler、编译器或仿真分析，直接讲真实工具和证据层级，再说明与 Nsight 分层分析的对应关系。可以说“理解方法，正在用最小案例熟悉工具”，不应说自己已经跑过不存在的 NVIDIA 测试。</p>\n<table><thead><tr><th>练习</th><th>最小交付</th><th>你应讲明白</th></tr></thead><tbody>\n<tr><td>单卡 GEMM shape 扫描</td><td>M=1/8/64/1024 的计时、F/Q、曲线与一次热点分析</td><td>权重复用、启动/并行度、理论与测量差异</td></tr>\n<tr><td>融合前后对比</td><td>相同精度下的 trace、流量和生产者到消费者总时间</td><td>减少读写与增加资源压力的权衡</td></tr>\n<tr><td>多卡 collective 扫描</td><td>按消息尺寸的时延、algbw/busbw，明确节点/拓扑</td><td>启动项、带宽项、慢 rank 与真实业务重叠</td></tr>\n<tr><td>decoder 负载表</td><td>batch × 上下文长度的 FLOPs、KV、流量和误差表</td><td>prefill/decode 分工、容量与时间、SLO约束</td></tr>\n</tbody></table>\n<p>没有 GPU 时，可以先完成本页的公式推导和交互练习，再阅读公开 trace/文档；这属于建模和工具学习，不能作为实测项目。真正具备“熟悉”的标志，是拿到一份陌生 trace，也能提出可证伪的假设并设计下一次实验。</p>"
+      }
+    ],
+    "questions": [
+      {
+        "id": "performance-analysis-q1",
+        "q": "Nsight Systems 和 Nsight Compute 应该先用哪个？",
+        "a": "一般先用 Systems 看 CPU/GPU/通信时间线与关键路径，确认代表性热点和空隙来源，再用 Compute 深入 kernel 的计数器、资源和发射行为。若已有稳定最小 kernel 复现，可直接做局部分析；最终仍回到无重型采集的端到端验收。",
+        "followup": "GPU 时间线几乎全空时，采全套 ncu 指标为什么可能没有帮助？"
+      },
+      {
+        "id": "performance-analysis-q2",
+        "q": "PyTorch Profiler 的 total time 可以逐行加起来吗？",
+        "a": "通常不能。父子范围可能嵌套，CPU/GPU 可以重叠，跨 stream 的设备时间也可能重叠。self 与 total 有不同归因范围；先看字段定义，再用时间线与明确起止边界求 wall time。",
+        "followup": "框架算子被融合后，怎样比较优化前后的画像？"
+      },
+      {
+        "id": "performance-analysis-q3",
+        "q": "在 model(x) 前后放 CPU 时间戳，为什么可能不准？",
+        "a": "CUDA 通常异步提交，若不等待完成，CPU 区间主要测到提交成本。设备区间用有正确 stream 依赖的 CUDA Events；应用区间可在边界同步后用主机时钟。两者都须说明输入、预热和统计口径。",
+        "followup": "多 stream 下，结束 Event 怎样覆盖所有工作？"
+      },
+      {
+        "id": "performance-analysis-q4",
+        "q": "算子画像相比 kernel 排名，多了什么？",
+        "a": "多了语义/融合范围、shape/stride/dtype、阶段、调用频率与分布、路由/padding、stream/rank、关键路径位置、理论工作量、硬件证据和适用范围。它帮助识别值得覆盖的输入族。",
+        "followup": "同名 GEMM 在 prefill 和 decode 为什么可能需要不同策略？"
+      },
+      {
+        "id": "performance-analysis-q5",
+        "q": "Roofline 拐点怎么算？点落在左边是否就证明带宽饱和？",
+        "a": "拐点是匹配精度与层级的 P/BW。左边表示在该强度下带宽屋顶较低；并不证明已饱和带宽。低并行度、延迟、依赖、片上瓶颈或启动成本也可能让点远低于屋顶。",
+        "followup": "如果 DRAM 带宽与计算吞吐都低，下一步看哪些证据？"
+      },
+      {
+        "id": "performance-analysis-q6",
+        "q": "GEMM 算术强度为什么随 M 增大？",
+        "a": "β=0、输入输出都是2字节、冷读理想复用时，F=2MNK，Q=2(MK+KN+MN)。固定K/N增大M，使同一份权重KN的流量由更多行分摊，但Q还包含激活与输出，不能无限按M线性增长。",
+        "followup": "缓存命中时，这个最小逻辑流量能直接当实际DRAM字节吗？"
+      },
+      {
+        "id": "performance-analysis-q7",
+        "q": "occupancy 高，就代表利用率高吗？",
+        "a": "不代表。驻留 warp 可能在等数据或依赖；较少驻留也可能已经有足够可发射指令。结合理论/实际 occupancy、eligible warps、issue、吞吐与耗时判断。强压寄存器可能引入spill。",
+        "followup": "融合减少了HBM流量，却增加耗时，怎么解释？"
+      },
+      {
+        "id": "performance-analysis-q8",
+        "q": "ncu 和 nsys 中的 kernel 时长不一样，谁才是对的？",
+        "a": "先核对同一调用、shape与版本，再检查 replay、序列化、缓存、时钟和采集开销。两者可能观察到不同执行条件。业务成绩以指定正常执行条件下的基线与A/B为准。",
+        "followup": "为何不能把依赖其他rank推进的通信kernel随意放进普通kernel replay？"
+      },
+      {
+        "id": "performance-analysis-q9",
+        "q": "8 rank ring AllReduce，每 rank 输入64 MiB，发送多少？",
+        "a": "理想均匀ring分ReduceScatter和AllGather，共2(p−1)步，每步S/p。每rank发送112 MiB，接收也为112 MiB；全组发送896 MiB。不把收发相加后再除单向带宽。",
+        "followup": "algbw和busbw怎么换算，换成AllToAll还一样吗？"
+      },
+      {
+        "id": "performance-analysis-q10",
+        "q": "看到很长的 NCCL kernel，能否认定网络慢？",
+        "a": "不能。可能是等待其他rank的数据或依赖就绪。对齐同一collective的所有rank，比较前驱完成、输入就绪和完成时间，再用相同拓扑与消息尺寸的微基准检查传输。",
+        "followup": "最后一个rank到达后的尾部窗口为什么不一定等于纯网络时间？"
+      },
+      {
+        "id": "performance-analysis-q11",
+        "q": "通信和计算已经重叠，为什么整轮反而更慢？",
+        "a": "可能争用SM/HBM/链路，计算和通信各自变慢，也可能分块导致小GEMM低效或增加同步。比较串行基线、并发各项变化与完整step；重叠的颜色面积不是最终收益。",
+        "followup": "哪些数据依赖允许通信提早开始，哪些会限制消费者？"
+      },
+      {
+        "id": "performance-analysis-q12",
+        "q": "GQA 把 KV heads 缩小4倍，Attention FLOPs也缩小4倍吗？",
+        "a": "KV容量及理想读取可相应下降，K/V投影也减少；但QK和AV仍要服务全部query heads，主项仍按query heads计算。实际KV流量还取决于内核能否复用共享KV。",
+        "followup": "长上下文decode下，怎样分别估容量、流量与算量？"
+      },
+      {
+        "id": "performance-analysis-q13",
+        "q": "MoE 只激活少量专家，为什么还可能慢？",
+        "a": "容量受全部驻留专家权重影响，流量受本批命中的专家与复用影响，时间受小GEMM效率、padding、路由偏斜、dispatch/combine和最慢rank约束。激活FLOPs少不等于端到端快。",
+        "followup": "多路专家位于同一目标rank时，dispatch字节为何未必等于T×k×H×b？"
+      },
+      {
+        "id": "performance-analysis-q14",
+        "q": "TPOT、ITL、吞吐和 goodput 有什么区别？",
+        "a": "TPOT是请求首token后的平均生成间隔；ITL保留相邻token间隔分布；吞吐是规定窗口内完成的工作量/时间；goodput还要求满足指定SLO。都要说明请求边界和分子。",
+        "followup": "同样的token/s，在突发长短混合请求下P99为什么会不同？"
+      },
+      {
+        "id": "performance-analysis-q15",
+        "q": "一个算子加速2倍，为什么模型只有1.18倍？",
+        "a": "若它在串行总时间中占30%，其他项不变，Amdahl给出1/(0.7+0.3/2)=1.176倍。若有重叠和瓶颈转移，必须重新计算实际关键路径，不能套累计时间占比。",
+        "followup": "哪些证据能证明收益来自预期改动，而非缓存、shape或精度变化？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "perf-source-1",
+        "label": "PyTorch 2.9 — torch.profiler",
+        "url": "https://docs.pytorch.org/docs/2.9/profiler.html",
+        "note": "固定 2.9 文档；核对 schedule、shape/stack 开销、FLOPs 估计与 trace 导出，2026-10-25。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-source-2",
+        "label": "PyTorch 2.9 — CUDA semantics",
+        "url": "https://docs.pytorch.org/docs/2.9/notes/cuda.html",
+        "note": "固定 2.9 文档；核对异步执行与 stream 同步边界，2026-10-25。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-source-3",
+        "label": "PyTorch 2.9 — torch.cuda.Event",
+        "url": "https://docs.pytorch.org/docs/2.9/generated/torch.cuda.Event.html",
+        "note": "固定 2.9 文档；核对 Event 时间单位、record 与 synchronize 语义，2026-10-25。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-source-4",
+        "label": "PyTorch — Profiler recipe",
+        "url": "https://docs.pytorch.org/tutorials/recipes/recipes/profiler_recipe.html",
+        "note": "滚动教程，2026-10-25 核对；本文 API 示例以 2.9 文档为边界。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-source-5",
+        "label": "NVIDIA Nsight Systems — User Guide",
+        "url": "https://docs.nvidia.com/nsight-systems/UserGuide/index.html",
+        "note": "滚动在线文档，2026-10-25 核对；命令应结合本机 nsys --version 与 --help。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-source-6",
+        "label": "NVIDIA — Understanding the Visualization of Overhead and Latency in Nsight Systems",
+        "url": "https://developer.nvidia.com/blog/understanding-the-visualization-of-overhead-and-latency-in-nsight-systems/",
+        "note": "官方技术文章，2020-09-18；用于解释时间线语义，不引用原文硬件时延为当前实测。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-source-7",
+        "label": "NVIDIA Nsight Compute — CLI",
+        "url": "https://docs.nvidia.com/nsight-compute/NsightComputeCli/index.html",
+        "note": "滚动在线文档，2026-10-25 核对 kernel 过滤、launch-skip、section 及 replay。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-source-8",
+        "label": "NVIDIA Nsight Compute — Profiling Guide",
+        "url": "https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html",
+        "note": "滚动在线文档，2026-10-25 核对采集扰动、occupancy、scheduler 与指标边界。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-source-9",
+        "label": "NVIDIA CUDA — Best Practices Guide",
+        "url": "https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html",
+        "note": "滚动在线文档，2026-10-25 核对测量与优化方法背景；未引用任何硬件峰值为本地测量。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-source-10",
+        "label": "NCCL Collective Operations",
+        "url": "https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/usage/collectives.html",
+        "note": "2026-10-25 核对，页面显示 NCCL 2.32.3；操作语义。在线文档可能继续更新。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-source-11",
+        "label": "nccl-tests PERFORMANCE.md",
+        "url": "https://github.com/NVIDIA/nccl-tests/blob/afd59abab774a6a4b492eb344bd0c845a0b7bb4d/doc/PERFORMANCE.md",
+        "note": "固定源码 SHA afd59abab774a6a4b492eb344bd0c845a0b7bb4d，2026-10-25 核对；algbw/busbw 因子与消息尺寸定义。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-source-12",
+        "label": "nccl-tests alltoall.cu",
+        "url": "https://github.com/NVIDIA/nccl-tests/blob/afd59abab774a6a4b492eb344bd0c845a0b7bb4d/src/alltoall.cu",
+        "note": "同一固定 SHA，AlltoAllGetBw 的总输入量与 (p−1)/p 因子。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-source-13",
+        "label": "nccl-tests README",
+        "url": "https://github.com/NVIDIA/nccl-tests/blob/afd59abab774a6a4b492eb344bd0c845a0b7bb4d/README.md",
+        "note": "同一固定 SHA，rank 数、MPI 构建、消息尺寸扫描。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-source-14",
+        "label": "NCCL Performance and tuning",
+        "url": "https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/troubleshooting/performance_and_tuning.html",
+        "note": "2026-10-25 核对，NCCL 2.32.3；拓扑、链路微基准、CPU/NUMA 亲和及调优资源代价。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-source-15",
+        "label": "Megatron-LM",
+        "url": "https://arxiv.org/abs/1909.08053",
+        "note": "2019 原论文；张量模型并行的背景；未外推论文测量值。",
+        "kind": "论文"
+      },
+      {
+        "id": "perf-source-16",
+        "label": "FlashAttention",
+        "url": "https://arxiv.org/abs/2205.14135v2",
+        "note": "2022 v2；减少 HBM/SRAM 间数据搬运的方法。",
+        "kind": "论文"
+      },
+      {
+        "id": "perf-source-17",
+        "label": "GQA",
+        "url": "https://arxiv.org/abs/2305.13245v3",
+        "note": "2023 v3；query head 与 KV head 分组的结构定义。",
+        "kind": "论文"
+      },
+      {
+        "id": "perf-source-18",
+        "label": "PagedAttention / vLLM",
+        "url": "https://arxiv.org/abs/2309.06180v1",
+        "note": "SOSP 2023；KV cache 分页管理、碎片与共享。",
+        "kind": "论文"
+      },
+      {
+        "id": "perf-source-19",
+        "label": "DistServe",
+        "url": "https://arxiv.org/abs/2401.09670v3",
+        "note": "OSDI 2024 / v3；prefill/decode 分离、TTFT/TPOT 和 goodput；没有引用论文加速倍数作为本项目结果。",
+        "kind": "论文"
+      },
+      {
+        "id": "perf-roofline-paper",
+        "label": "Roofline 原始技术报告 — UCB/EECS-2008-134",
+        "url": "https://www2.eecs.berkeley.edu/Pubs/TechRpts/2008/EECS-2008-134.html",
+        "note": "Williams / Waterman / Patterson，2008-10-17；2026-10-25 核对。用于基础模型定义，非当前设备基准。",
+        "kind": "论文"
+      },
+      {
+        "id": "perf-gemm-guide",
+        "label": "NVIDIA — Matrix Multiplication Background",
+        "url": "https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html",
+        "note": "2026-10-25 核对；采用GEMM工作量、复用、tile/wave解释，不引用原页面硬件测试作为本地结果。",
+        "kind": "官方资料"
+      }
+    ],
+    "takeaways": [
+      "能按业务指标、系统时间线、算子画像、kernel计数器四层解释证据，分清Profiler、benchmark与性能模型。",
+      "会设计预热、CUDA异步计时、采集范围与A/B统计；知道采集自身会扰动执行。",
+      "能手算FLOPs、分层bytes、Roofline拐点和时间下界，不把理论屋顶当实测速度。",
+      "能推导ring AllReduce字节及algbw/busbw，区分到达偏斜、链路限制和重叠的实际收益。",
+      "能按prefill/decode、GQA、MoE和并行布局估算计算、容量、流量与慢rank成本。",
+      "能将局部收益放回端到端与SLO，给出适用负载、版本和未验证边界。"
+    ]
+  }
+]

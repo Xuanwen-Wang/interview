@@ -10,7 +10,7 @@
 
 ## 内容与导航
 
-当前使用 **8 个知识域 → 18 个专题 → 50 章** 的目录结构。侧边栏只展开当前专题；全站目录支持主题、标题/标签与阅读状态筛选。已有章节链接、笔记和学习记录保留。
+当前使用 **8 个知识域 → 19 个专题 → 51 章** 的目录结构。侧边栏只展开当前专题；全站目录支持主题、标题/标签与阅读状态筛选。已有章节链接、笔记和学习记录保留。
 
 | 知识域 | 内容 |
 | --- | --- |
@@ -19,12 +19,14 @@
 | GLM5Next 300B真实部署 | MoE 单篇：卡间 EP4、卡内 TP4 → token 往返 → Router/Shared/Routed/Reduce → 通信与验证；完整模型与 Attention 另有专题 |
 | Triton · MLIR · LLVM | AST/TTIR/布局、Op/Region/Dialect、PassManager与分析失效、Rewrite/Conversion、LLVM中后端 |
 | 518硬件与后端 | 真实pass、PE/MAC、minitile、AL1/WL1、hub/credit；VP wide/pipe、PRG、PostCal、多执行器；资源事件与InjectSync |
-| 性能与推理系统 | Roofline、并发与容量、服务与运行时 |
+| 性能与推理系统 | Nsight / Profiler、算子画像、Roofline、通信分析、模型负载、并发与容量、服务与运行时 |
 | 公司与面经 | 12个公司或公司组、28条来源，区分官方JD、个人面经、官方作业与第三方材料 |
 | Coding实作 | 算法、图/数据流、kernel、玩具pass；原创Python/C++参考与测试 |
 
-当前 **417 小节、319 道追问、111 张正文 SVG**。附全文搜索、图示放大、3个通用交互实验、2个PE交互演示和1个MoE拓扑/容量交互、术语表、阅读进度及本地笔记导入导出。SVG、样式和内容均内嵌；网页不依赖CDN、外部字体或第三方脚本。
+当前 **444 小节、334 道追问、113 张正文 SVG**。附全文搜索、图示放大、3个通用交互实验、2个PE交互演示、1个MoE拓扑/容量交互和3个性能分析实验、术语表、阅读进度及本地笔记导入导出。SVG、样式和内容均内嵌；网页不依赖CDN、外部字体或第三方脚本。
 
+- [性能分析完整长文](https://xuanwen-wang.github.io/interview/performance.html)：27节、15道追问，串联 Nsight Systems / Compute、PyTorch Profiler、Roofline、算子画像、通信与模型负载；含3个交互教学实验，可独立离线阅读。
+- [性能分析审查与验收](evidence/review-performance-analysis.md)：来源、公式口径、教学边界与浏览器验证。
 - [MoE 完整长文](https://xuanwen-wang.github.io/interview/moe.html)：34节、9个阅读阶段、18道追问；按卡间EP4、卡内TP4，用T24贯穿部署与四个kernel。并列真实权重验收配置绑定链和当前开发四核链，保留旧15章/107节链接及个人笔记。
 - [MoE 单篇重构与验收](evidence/review-moe-continuous.md)：固定版本、纠错、旧链接迁移与浏览器验证。
 - [PE 完整长文](https://xuanwen-wang.github.io/interview/pe.html)：一个 HTML，沿整体边界与接口 → 8×8 阵列 → ALU/MAC → 累加与写回 → minitile 连续展开；23节、21张图、2个交互；新增MTW/MTC/MTK本质、GLM5Next Gate/Up/Down真实配置与逐坐标映射。
@@ -55,7 +57,7 @@ python3 scripts/check.py
 python3 -m http.server 8768 --bind 127.0.0.1 --directory dist
 ```
 
-也可以直接打开 `dist/index.html`，或用 `dist/moe.html`、`dist/pe.html`、`dist/vp.html` 从头到尾阅读对应长文。正文与应用可离线阅读，外部来源链接需要网络。笔记仅存在当前浏览器的 localStorage，不会上传；不同域名、设备之间需要手动导出导入。
+也可以直接打开 `dist/index.html`，或用 `dist/moe.html`、`dist/pe.html`、`dist/vp.html` 从头到尾阅读对应长文。性能分析长文可直接打开 `dist/performance.html`。正文与应用可离线阅读，外部来源链接需要网络。笔记仅存在当前浏览器的 localStorage，不会上传；不同域名、设备之间需要手动导出导入。
 
 `dist/jobs.html` 可单独保存并离线查看岗位要求；岗位来源和状态边界见 [岗位核验记录](evidence/job-sources.md)。
 

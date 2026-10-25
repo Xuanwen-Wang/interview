@@ -92,6 +92,7 @@ function renderChapter(id, section) {
  if('IntersectionObserver' in window){sectionObserver=new IntersectionObserver(entries=>{entries.filter(e=>e.isIntersecting).forEach(e=>{highlightReadingSection(e.target.id);});},{rootMargin:'-90px 0px -65% 0px'});$$('section[data-section]').forEach(s=>sectionObserver.observe(s));}
  initPeExplorers();
  initMoeExplorers();
+ initPerformanceExplorers();
  enableFigureZoom();
  if(section)scrollChapterAnchor(section);
 }

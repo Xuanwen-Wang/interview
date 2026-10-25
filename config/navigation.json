@@ -208,6 +208,13 @@
       "description": "把单算子优化放回容量、并发、服务与端到端指标中。",
       "groups": [
         {
+          "id": "profiling",
+          "title": "工具、画像与负载建模",
+          "chapters": [
+            "performance-analysis"
+          ]
+        },
+        {
           "id": "serving",
           "title": "性能模型与部署",
           "chapters": [
