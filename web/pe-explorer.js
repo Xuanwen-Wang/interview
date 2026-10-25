@@ -11,7 +11,7 @@ function renderPeMapping(root) {
   root.innerHTML = `<header class="pe-widget-head"><span class="eyebrow">FOLLOW ONE OUTPUT</span><h3>从 W[k,c]，走到一个输出 y[k]</h3><p>单核 · KC · FP8×FP8 · normal packing · 无 UScale。矩阵按 <strong>W[输出 K, 归约 C]</strong> 展示。</p></header>
     <div class="pe-controls">
       <label>输出列 k <output data-value="k">37</output><input data-control="k" aria-label="选择输出列k" type="range" min="0" max="127" value="37"></label>
-      <label>局部 CI c <output data-value="c">86</output><input data-control="c" aria-label="选择局部CI坐标c" type="range" min="0" max="127" value="86"></label>
+      <label>局部 CI c <output data-value="c">73</output><input data-control="c" aria-label="选择局部CI坐标c" type="range" min="0" max="127" value="73"></label>
       <label>C 总长度<select data-control="blocks" aria-label="选择归约总长度"><option value="1">128：一个 C 块</option><option value="2" selected>256：两个 C 块</option></select></label>
     </div>
     <div class="pe-map-layout"><div class="pe-map-main"><div data-view="matrix"></div><button class="pe-zoom" type="button" data-action="zoom-matrix">放大当前矩阵 ↗</button><p class="pe-legend"><i class="weight"></i>橙：选中 weight / 输出列 <i class="act"></i>蓝：选中 activation 的 CI 段</p></div><div class="pe-location" data-view="location" aria-live="polite"></div></div>

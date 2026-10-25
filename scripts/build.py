@@ -38,13 +38,14 @@ def build():
     template = (ROOT / 'web/index.html').read_text(encoding='utf-8')
     payload = {'CHAPTERS': chapters, 'CATALOG': json.loads((ROOT / 'config/navigation.json').read_text(encoding='utf-8')), 'REPORTS': json.loads((ROOT / 'config/interviews.json').read_text(encoding='utf-8')), 'COMPANIES': json.loads((ROOT / 'config/companies.json').read_text(encoding='utf-8'))}
     data = '\n'.join(f'const {name} = ' + json.dumps(value, ensure_ascii=False).replace('</', '<\\/') + ';' for name, value in payload.items())
-    result = template.replace('/* INLINE_STYLE */', '\n'.join((ROOT / 'web' / name).read_text(encoding='utf-8') for name in ['style.css', 'catalog.css', 'pe-explorer.css']))
+    result = template.replace('/* INLINE_STYLE */', '\n'.join((ROOT / 'web' / name).read_text(encoding='utf-8') for name in ['style.css', 'catalog.css', 'pe-explorer.css', 'reading.css']))
     result = result.replace('/* INLINE_DATA */', data)
-    result = result.replace('/* INLINE_APP */', '\n'.join((ROOT / 'web' / name).read_text(encoding='utf-8') for name in ['catalog.js', 'pe-model.js', 'pe-explorer.js', 'app.js']))
+    result = result.replace('/* INLINE_APP */', '\n'.join((ROOT / 'web' / name).read_text(encoding='utf-8') for name in ['catalog.js', 'reading.js', 'pe-model.js', 'pe-explorer.js', 'app.js']))
     assert not re.search(r'/\* INLINE_\w+ \*/', result)
     out = ROOT / 'dist'
     out.mkdir(exist_ok=True)
     (out / 'index.html').write_text(result, encoding='utf-8')
+    (out / 'pe.html').write_text(result.replace('<body>', '<body data-default-route="chapter/hw-memory-hierarchy">'), encoding='utf-8')
     (out / '.nojekyll').touch()
     manifest = {'modules': len(payload['CATALOG']['modules']), 'topics': sum(len(m['groups']) for m in payload['CATALOG']['modules']), 'companies': len(payload['COMPANIES']), 'reports': len(payload['REPORTS']), 'diagrams': sum(s['html'].count('<svg') for c in chapters for s in c['sections']), 'chapters': len(chapters), 'sections': sum(len(c['sections']) for c in chapters), 'questions': sum(len(c['questions']) for c in chapters), 'characters': sum(len(re.sub('<[^>]+>', '', s['html'])) for c in chapters for s in c['sections']), 'bytes': len(result.encode())}
     (out / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')

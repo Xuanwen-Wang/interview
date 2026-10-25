@@ -5,21 +5,45 @@ const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const plain = html => { const d = document.createElement('div'); d.innerHTML = html; return d.textContent || ''; };
 const sectionTitle = title => title.replace(/^\d+(?:\.\s*|\s*\/\s*)/, '');
 const STORE_KEY = 'interview-field-notes-v1';
-const emptyState = () => ({read: [], notes: {}, practice: {}, last: null});
+const emptyState = () => ({readingVersion:2,read:[],legacyRead:[],notes:{},practice:{},last:null});
 function normalizeState(raw) {
  const value=raw && typeof raw==='object'?raw:{};
  const known=new Set(CHAPTERS.map(c=>c.id));
+ const merged=CHAPTERS.filter(c=>c.legacyChapters);
+ const legacyIds=new Set(merged.flatMap(c=>Object.keys(c.legacyChapters)));
+ const noteKeys=new Set([...known,...merged.flatMap(c=>Object.entries(c.legacyChapters).map(([id,old])=>old.noteKey||id))]);
  const dict=(v,valid)=>Object.fromEntries(Object.entries(v&&typeof v==='object'&&!Array.isArray(v)?v:{}).filter(([k,x])=>valid(k,x)));
- return {read:[...new Set((Array.isArray(value.read)?value.read:[]).filter(id=>known.has(id)))],notes:dict(value.notes,(k,v)=>known.has(k)&&typeof v==='string'),practice:dict(value.practice,(k,v)=>['good','weak'].includes(v)),last:known.has(value.last)?value.last:null};
+ const oldRead=Array.isArray(value.read)?value.read:[];
+ let read=oldRead.filter(id=>known.has(id));
+ const notes=dict(value.notes,(k,v)=>(noteKeys.has(k)||legacyIds.has(k))&&typeof v==='string');
+ let legacyRead=(Array.isArray(value.legacyRead)?value.legacyRead:[]).filter(id=>legacyIds.has(id));
+ if (value.readingVersion!==2) {
+   legacyRead=[...new Set([...legacyRead,...oldRead.filter(id=>legacyIds.has(id))])];
+   read=read.filter(id=>!legacyIds.has(id));
+   for(const c of merged)for(const [id,old] of Object.entries(c.legacyChapters))if(old.noteKey&&old.noteKey!==id&&notes[id]!==undefined){notes[old.noteKey]=notes[id];delete notes[id];}
+ }
+ const practice=dict(value.practice,(k,v)=>['good','weak'].includes(v));
+ for(const c of CHAPTERS)for(const q of c.questions){const key=c.id+':'+(q.id||q.q);if(practice[key]===undefined){const prior=(q.legacyKeys||[]).map(k=>practice[k]);if(prior.includes('weak'))practice[key]='weak';else if(prior.includes('good'))practice[key]='good';}}
+ const last=chapterAliases.get(value.last)?.chapter||value.last;
+ return {readingVersion:2,read:[...new Set(read)],legacyRead,notes,practice,last:known.has(last)?last:null};
 }
-function readStorage(){try{return normalizeState(JSON.parse(localStorage.getItem(STORE_KEY)||'{}'));}catch{return emptyState();}}
+function readStorage(){
+ try {
+  const raw=localStorage.getItem(STORE_KEY)||'{}',value=JSON.parse(raw);
+  if(value.readingVersion!==2&&CHAPTERS.some(c=>c.legacyChapters&&Object.keys(c.legacyChapters).some(id=>value.notes?.[id]||(Array.isArray(value.read)&&value.read.includes(id))))){
+   try{if(!localStorage.getItem(STORE_KEY+'-before-pe-merge'))localStorage.setItem(STORE_KEY+'-before-pe-merge',raw);}catch{}
+  }
+  return normalizeState(value);
+ }catch{return emptyState();}
+}
 let state=readStorage(), stateBase=JSON.parse(JSON.stringify(state));
-let toastTimer, sectionObserver, practiceTimer, elapsed = 0;
+let toastTimer, sectionObserver, practiceTimer, elapsed = 0, renderedChapterId = null;
 function toast(message) { $('#toast').textContent = message; $('#toast').classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('#toast').classList.remove('visible'), 2200); }
 function mergePending(merged) {
   for(const id of CHAPTERS.map(c=>c.id))if(state.read.includes(id)!==stateBase.read.includes(id))merged.read=state.read.includes(id)?[...new Set([...merged.read,id])]:merged.read.filter(x=>x!==id);
   for(const field of ['notes','practice'])for(const key of new Set([...Object.keys(state[field]),...Object.keys(stateBase[field])]))if(state[field][key]!==stateBase[field][key]){if(state[field][key]===undefined)delete merged[field][key];else merged[field][key]=state[field][key];}
   if(state.last!==stateBase.last)merged.last=state.last;
+  merged.legacyRead=[...new Set([...merged.legacyRead,...state.legacyRead])];
   return merged;
 }
 function save() {
@@ -37,7 +61,7 @@ function progress() {
  $('#progress-bar').style.width = (n / CHAPTERS.length * 100) + '%';
  $$('#chapter-nav a').forEach(a => a.classList.toggle('read', state.read.includes(a.dataset.chapter)));
 }
-function nav(){const [route,id]=(location.hash.slice(1)||'home').split('/');renderNavigation(route,id);}
+function nav(){const [route,id]=currentRoute();renderNavigation(route,id);}
 function heroArt() { return `<div class="hero-art"><svg viewBox="0 0 490 346" role="img" aria-label="从模型语义经编译IR、资源调度到芯片执行的四层映射图">
 <defs><marker id="hero-arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0 0L6 3L0 6" fill="none" stroke="#7d9772"/></marker></defs>
 <g fill="none" stroke="#ccd6c4"><path d="M42 55H445M42 126H445M42 197H445M42 268H445" stroke-dasharray="3 5"/></g>
@@ -55,17 +79,18 @@ function sourceHTML(s) { return `<a href="${esc(sourceUrl(s))}" target="_blank" 
 function renderChapter(id, section) {
  const c = CHAPTERS.find(c=>c.id===id);
  if (!c) { renderNotFound(); return; }
- state.last = id; save(); const context=chapterContext(id);const sequence=context.module?moduleChapters(context.module):CHAPTERS;const index=sequence.indexOf(c);
- $('#main').innerHTML=`<div class="eyebrow">${esc(context.module?.title||c.part)} / ${esc(context.group?.title||'CHAPTER')}</div><h1 class="page-title">${esc(c.title)}</h1><p class="page-lead">${esc(c.lead)}</p><div class="chapter-meta"><span>${c.minutes} 分钟 · ${esc(c.level)}</span><span>${c.sections.length} 节 · ${c.questions.length} 个追问</span></div><div>${c.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div><div class="chapter-layout"><article class="article">${c.sections.map((s,i)=>`<section id="${s.id}" data-section="${s.id}"><h2><span class="sec-no">${String(i+1).padStart(2,'0')}</span>${esc(sectionTitle(s.title))}</h2>${s.html}</section>`).join('')}<section id="takeaways"><div class="takeaways"><h3>读完这一章，应该能讲清楚</h3><ul>${c.takeaways.map(t=>`<li>${esc(t)}</li>`).join('')}</ul></div></section><section id="questions"><h2>面试官继续追问</h2>${c.questions.map(q=>`<details class="qa"><summary>${esc(q.q)}</summary><div>${esc(q.a).replace(/\n/g,'<br>')}<div class="followup"><strong>再追一层：</strong>${esc(q.followup)}</div></div></details>`).join('')}</section><section id="references"><h2>来源与证据范围</h2><p class="small muted">来源状态以采集时刻为准；原始仓库的访问权限独立于本指南。教学推导与历史实测在正文中分别标注。</p><ul class="source-list">${c.sources.map(s=>`<li>${sourceHTML(s)}</li>`).join('')}</ul></section><section id="notes"><h2>用自己的话再讲一遍</h2><textarea class="note-textarea" id="chapter-note" aria-label="本章个人笔记" placeholder="尝试写下：这个问题的核心约束是什么？我的方案为什么成立？如果条件改变呢？">${esc(state.notes[id]||'')}</textarea><p class="note-hint">自动保存到当前浏览器，不上传服务器。可在“个人笔记与备份”导出。</p><button id="read-main">${state.read.includes(id)?'已完成本章 ✓ · 取消标记':'标记本章已读 ✓'}</button></section><div class="chapter-bottom">${index>0?`<a href="#chapter/${sequence[index-1].id}"><small>PREVIOUS</small>← ${esc(sequence[index-1].title)}</a>`:'<a href="#home">← 知识地图</a>'}${index<sequence.length-1?`<a href="#chapter/${sequence[index+1].id}"><small>NEXT</small>${esc(sequence[index+1].title)} →</a>`:'<a href="#practice">进入面试练习 →</a>'}</div></article><aside class="toc"><div class="toc-title">IN THIS CHAPTER</div>${c.sections.map((s,i)=>`<a href="#chapter/${id}/${s.id}" data-toc="${s.id}">${String(i+1).padStart(2,'0')} ${esc(sectionTitle(s.title))}</a>`).join('')}<a href="#chapter/${id}/questions">面试追问</a><a href="#chapter/${id}/references">来源与证据</a><a href="#chapter/${id}/notes">我的笔记</a><button class="read-toggle" id="read-toggle">${state.read.includes(id)?'已完成 ✓':'标记已读'}</button></aside></div>`;
+ renderedChapterId=id;state.last = id; save(); const context=chapterContext(id);const sequence=context.module?moduleChapters(context.module):CHAPTERS;const index=sequence.indexOf(c);
+ $('#main').innerHTML=`<div class="eyebrow">${esc(context.module?.title||c.part)} / ${esc(context.group?.title||'CHAPTER')}</div><h1 class="page-title">${esc(c.title)}</h1><p class="page-lead">${esc(c.lead)}</p><div class="chapter-meta"><span>${c.minutes} 分钟 · ${esc(c.level)}</span><span>${c.sections.length} 节 · ${c.questions.length} 个追问</span></div><div>${c.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>${readingPathHTML(c)}<div class="chapter-layout ${c.readingStages?'longform-chapter':''}"><article class="article">${chapterSectionsHTML(c)}<section id="takeaways"><div class="takeaways"><h3>读完这一章，应该能讲清楚</h3><ul>${c.takeaways.map(t=>`<li>${esc(t)}</li>`).join('')}</ul></div></section><section id="questions"><h2>面试官继续追问</h2>${c.questions.map(q=>`<details class="qa"><summary>${esc(q.q)}</summary><div>${esc(q.a).replace(/\n/g,'<br>')}<div class="followup"><strong>再追一层：</strong>${esc(q.followup)}</div></div></details>`).join('')}</section><section id="references"><h2>来源与证据范围</h2><p class="small muted">来源状态以采集时刻为准；原始仓库的访问权限独立于本指南。教学推导与历史实测在正文中分别标注。</p><ul class="source-list">${c.sources.map(s=>`<li>${sourceHTML(s)}</li>`).join('')}</ul></section><section id="notes"><h2>用自己的话再讲一遍</h2><textarea class="note-textarea" id="chapter-note" aria-label="本章个人笔记" placeholder="尝试写下：这个问题的核心约束是什么？我的方案为什么成立？如果条件改变呢？">${esc(state.notes[id]||'')}</textarea><p class="note-hint">自动保存到当前浏览器，不上传服务器。可在“个人笔记与备份”导出。</p>${legacyNotesHTML(c)}<button id="read-main">${state.read.includes(id)?'已完成本章 ✓ · 取消标记':'标记本章已读 ✓'}</button></section><div class="chapter-bottom">${index>0?`<a href="#chapter/${sequence[index-1].id}"><small>PREVIOUS</small>← ${esc(sequence[index-1].title)}</a>`:'<a href="#home">← 知识地图</a>'}${index<sequence.length-1?`<a href="#chapter/${sequence[index+1].id}"><small>NEXT</small>${esc(sequence[index+1].title)} →</a>`:'<a href="#practice">进入面试练习 →</a>'}</div></article><aside class="toc"><div class="toc-title">IN THIS CHAPTER</div>${chapterTocHTML(c,section)}<a href="#chapter/${id}/questions">面试追问</a><a href="#chapter/${id}/references">来源与证据</a><a href="#chapter/${id}/notes">我的笔记</a><button class="read-toggle" id="read-toggle">${state.read.includes(id)?'已完成 ✓':'标记已读'}</button></aside></div>`;
  $$('.article table').forEach(t=>{const w=document.createElement('div');w.className='table-wrap';t.before(w);w.append(t);});
  $$('.article a').forEach(a=>{ const href=a.getAttribute('href')||''; if(href && !/^(https?:|#)/.test(href)) a.href=sourceUrl({url:href}); if (/^https?:/.test(a.getAttribute('href'))) { a.target='_blank'; a.rel='noreferrer'; } });
  $('#chapter-note').oninput=e=>{state.notes[id]=e.target.value;save();};
+ $$('[data-note]').forEach(el=>el.oninput=()=>{state.notes[el.dataset.note]=el.value;save();});
  function toggleRead(){state.read=state.read.includes(id)?state.read.filter(x=>x!==id):[...state.read,id];save();progress();$('#read-toggle').textContent=state.read.includes(id)?'已完成 ✓':'标记已读';$('#read-main').textContent=state.read.includes(id)?'已完成本章 ✓ · 取消标记':'标记本章已读 ✓';}
  $('#read-toggle').onclick=toggleRead;$('#read-main').onclick=toggleRead;
- if('IntersectionObserver' in window){sectionObserver=new IntersectionObserver(entries=>{entries.filter(e=>e.isIntersecting).forEach(e=>{$$('[data-toc]').forEach(a=>a.classList.toggle('current',a.dataset.toc===e.target.id));});},{rootMargin:'-90px 0px -65% 0px'});$$('section[data-section]').forEach(s=>sectionObserver.observe(s));}
+ if('IntersectionObserver' in window){sectionObserver=new IntersectionObserver(entries=>{entries.filter(e=>e.isIntersecting).forEach(e=>{highlightReadingSection(e.target.id);});},{rootMargin:'-90px 0px -65% 0px'});$$('section[data-section]').forEach(s=>sectionObserver.observe(s));}
  initPeExplorers();
  enableFigureZoom();
- if(section)requestAnimationFrame(()=>document.getElementById(section)?.scrollIntoView());
+ if(section)scrollChapterAnchor(section);
 }
 function renderNotFound(){ $('#main').innerHTML='<div class="eyebrow">404 / KNOWLEDGE MAP</div><h1 class="page-title">这一页没有找到</h1><p>章节可能已调整。回到知识地图，或搜索你想找的概念。</p><a class="primary" href="#home">回到知识地图 →</a>'; }
 function lineChart(series, label, xLabel='并发 / Batch'){
@@ -118,23 +143,26 @@ const GLOSSARY=[
 ];
 function renderGlossary(){ $('#main').innerHTML=`<div class="eyebrow">A SHARED VOCABULARY</div><h1 class="page-title">先把术语，用在同一层上。</h1><p class="page-lead">${GLOSSARY.length} 个常用概念。理解术语时，顺便问一句：它属于算法、编程模型、编译 IR、物理执行，还是验证证据？</p><div class="source-filter"><input id="glossary-search" aria-label="搜索术语" placeholder="搜索中英文术语…"></div><dl class="glossary-grid" id="glossary-list"></dl>`;const update=()=>{const q=$('#glossary-search').value.toLowerCase();$('#glossary-list').innerHTML=GLOSSARY.filter(x=>x.join(' ').toLowerCase().includes(q)).map(x=>`<div class="glossary-item"><dt>${esc(x[0])}</dt><dd>${esc(x[1])}</dd></div>`).join('');};$('#glossary-search').oninput=update;update();}
 function renderNotebook(){
- $('#main').innerHTML=`<div class="eyebrow">MAKE IT YOUR OWN</div><h1 class="page-title">写下你自己的解释。</h1><p class="page-lead">笔记、阅读进度和练习状态只保存在当前浏览器。不同设备和域名之间不会自动同步；请导出 JSON 备份，或导出 Markdown 用自己的工具编辑。</p><div class="note-actions"><button id="export-json" class="primary">导出完整备份</button><button id="export-md">导出 Markdown 笔记</button><button id="import-json">导入备份</button><input id="import-file" type="file" accept="application/json,.json" hidden></div><div class="source-filter"><input id="note-search" type="search" aria-label="搜索笔记" placeholder="搜索章节标题或笔记内容…"><select id="note-module" aria-label="筛选笔记主题"><option value="all">全部主题</option>${MODULES.map(m=>`<option value="${m.id}">${esc(m.title)}</option>`).join('')}</select></div><div id="notebook-list">${CHAPTERS.map(c=>`<div class="notebook-item" data-note-chapter="${c.id}"><h3><a href="#chapter/${c.id}">${esc(c.title)} ↗</a></h3><textarea class="note-textarea" data-note="${c.id}" aria-label="${esc(c.title)}笔记" placeholder="写下这一章你还不熟悉的地方，以及你自己的项目例子。">${esc(state.notes[c.id]||'')}</textarea></div>`).join('')}</div>`;
- const filterNotes=()=>{const term=$('#note-search').value.toLowerCase(),mod=$('#note-module').value;$$('[data-note-chapter]').forEach(el=>{const c=chapterMap.get(el.dataset.noteChapter);el.hidden=!(mod==='all'||chapterContext(c.id).module?.id===mod)||!(c.title+' '+(state.notes[c.id]||'')).toLowerCase().includes(term);});};
+ const entries=notebookEntries();
+ $('#main').innerHTML=`<div class="eyebrow">MAKE IT YOUR OWN</div><h1 class="page-title">写下你自己的解释。</h1><p class="page-lead">笔记、阅读进度和练习状态只保存在当前浏览器。不同设备和域名之间不会自动同步；请导出 JSON 备份，或导出 Markdown 用自己的工具编辑。</p><div class="note-actions"><button id="export-json" class="primary">导出完整备份</button><button id="export-md">导出 Markdown 笔记</button><button id="import-json">导入备份</button><input id="import-file" type="file" accept="application/json,.json" hidden></div><div class="source-filter"><input id="note-search" type="search" aria-label="搜索笔记" placeholder="搜索章节标题或笔记内容…"><select id="note-module" aria-label="筛选笔记主题"><option value="all">全部主题</option>${MODULES.map(m=>`<option value="${m.id}">${esc(m.title)}</option>`).join('')}</select></div><div id="notebook-list">${entries.map(c=>`<div class="notebook-item" data-note-chapter="${c.id}"><h3><a href="#chapter/${c.parent||c.id}/${c.parent?'note-'+c.id:'notes'}">${esc(c.title)} ↗</a></h3><textarea class="note-textarea" data-note="${c.id}" aria-label="${esc(c.title)}笔记" placeholder="写下这一章你还不熟悉的地方，以及你自己的项目例子。">${esc(state.notes[c.id]||'')}</textarea></div>`).join('')}</div>`;
+ const filterNotes=()=>{const term=$('#note-search').value.toLowerCase(),mod=$('#note-module').value;$$('[data-note-chapter]').forEach(el=>{const c=entries.find(c=>c.id===el.dataset.noteChapter);el.hidden=!(mod==='all'||chapterContext(c.parent||c.id).module?.id===mod)||!(c.title+' '+(state.notes[c.id]||'')).toLowerCase().includes(term);});};
  $('#note-search').oninput=filterNotes;$('#note-module').onchange=filterNotes;
  $$('[data-note]').forEach(el=>el.oninput=()=>{state.notes[el.dataset.note]=el.value;save();});
  const download=(content,type,name)=>{const url=URL.createObjectURL(new Blob([content],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
  $('#export-json').onclick=()=>download(JSON.stringify({version:1,exported:new Date().toISOString(),...state},null,2),'application/json','interview-notes.json');
- $('#export-md').onclick=()=>download('# AI Compiler 面试笔记\n\n'+CHAPTERS.filter(c=>state.notes[c.id]).map(c=>'## '+c.title+'\n\n'+state.notes[c.id]).join('\n\n'),'text/markdown','interview-notes.md');
+ $('#export-md').onclick=()=>download('# AI Compiler 面试笔记\n\n'+entries.filter(c=>state.notes[c.id]).map(c=>'## '+c.title+'\n\n'+state.notes[c.id]).join('\n\n'),'text/markdown','interview-notes.md');
  $('#import-json').onclick=()=>$('#import-file').click();
- $('#import-file').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{if(f.size>5e6)throw Error('文件过大');const data=JSON.parse(await f.text());if(data.version!==1||!Array.isArray(data.read)||!data.notes||typeof data.notes!=='object')throw Error('格式不匹配');const allowed=new Set(CHAPTERS.map(c=>c.id));const cleanNotes=Object.fromEntries(Object.entries(data.notes).filter(([k,v])=>allowed.has(k)&&typeof v==='string'));const cleanPractice=Object.fromEntries(Object.entries(data.practice||{}).filter(([k,v])=>questions.some(q=>q.key===k)&&['good','weak'].includes(v)));state={...state,read:[...new Set([...state.read,...data.read.filter(x=>allowed.has(x))])],notes:{...state.notes,...cleanNotes},practice:{...state.practice,...cleanPractice}};save();progress();renderNotebook();toast('备份已合并导入');}catch(err){toast('无法导入：'+err.message);}};
+ $('#import-file').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{if(f.size>5e6)throw Error('文件过大');const data=JSON.parse(await f.text());if(data.version!==1||!Array.isArray(data.read)||!data.notes||typeof data.notes!=='object')throw Error('格式不匹配');const imported=normalizeState(data);state={...state,read:[...new Set([...state.read,...imported.read])],legacyRead:[...new Set([...state.legacyRead,...imported.legacyRead])],notes:{...state.notes,...imported.notes},practice:{...state.practice,...imported.practice}};save();progress();renderNotebook();toast('备份已合并导入');}catch(err){toast('无法导入：'+err.message);}};
 }
 function setMenu(open){
  document.body.classList.toggle('menu-open',open);$('#menu-toggle').setAttribute('aria-expanded',String(open));
  $('#sidebar').inert=window.matchMedia('(max-width:700px)').matches&&!open;
 }
 function render(){
- clearInterval(practiceTimer);practiceTimer=null;sectionObserver?.disconnect();
- const [route,id,section]=(location.hash.slice(1)||'home').split('/');
+ const [route,id,section]=currentRoute();
+ if(chapterAliases.has(location.hash.slice(1).split('/')[1]))history.replaceState(null,'','#chapter/'+id+(section?'/'+section:''));
+ if(route==='chapter'&&renderedChapterId===id){setMenu(false);scrollChapterAnchor(section);return;}
+ renderedChapterId=null;clearInterval(practiceTimer);practiceTimer=null;sectionObserver?.disconnect();
  setMenu(false);
  renderNavigation(route,id);
  $$('.main-nav a').forEach(a=>a.classList.toggle('active',a.dataset.nav===route));
@@ -176,7 +204,7 @@ $('#focus-toggle').onclick=()=>{document.body.classList.toggle('focus');$('#focu
 $('#print').onclick=()=>window.print();
 $('.skip').onclick=e=>{e.preventDefault();$('#main').focus({preventScroll:true});$('#main').scrollIntoView();};
 window.addEventListener('hashchange',render);
-window.addEventListener('storage',e=>{if(e.key!==STORE_KEY)return;const latest=readStorage();const base=JSON.parse(JSON.stringify(latest));state=mergePending(latest);stateBase=base;progress();$$('[data-note]').forEach(el=>{if(el!==document.activeElement)el.value=state.notes[el.dataset.note]||'';});const note=$('#chapter-note');if(note&&note!==document.activeElement)note.value=state.notes[(location.hash.slice(1).split('/'))[1]]||'';});
-window.addEventListener('beforeprint',()=>{$$('.qa').forEach(q=>{q.dataset.wasOpen=String(q.open);q.open=true;});});
-window.addEventListener('afterprint',()=>{$$('.qa').forEach(q=>q.open=q.dataset.wasOpen==='true');});
+window.addEventListener('storage',e=>{if(e.key!==STORE_KEY)return;const latest=readStorage();const base=JSON.parse(JSON.stringify(latest));state=mergePending(latest);stateBase=base;progress();const id=currentRoute()[1];if($('#read-toggle'))$('#read-toggle').textContent=state.read.includes(id)?'已完成 ✓':'标记已读';if($('#read-main'))$('#read-main').textContent=state.read.includes(id)?'已完成本章 ✓ · 取消标记':'标记本章已读 ✓';$$('[data-note]').forEach(el=>{if(el!==document.activeElement)el.value=state.notes[el.dataset.note]||'';});const note=$('#chapter-note');if(note&&note!==document.activeElement)note.value=state.notes[currentRoute()[1]]||'';});
+window.addEventListener('beforeprint',()=>{$$('.article details:not(.legacy-notes)').forEach(q=>{q.dataset.wasOpen=String(q.open);q.open=true;});});
+window.addEventListener('afterprint',()=>{$$('.article details:not(.legacy-notes)').forEach(q=>q.open=q.dataset.wasOpen==='true');});
 nav();render();

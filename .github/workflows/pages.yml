@@ -27,6 +27,7 @@ jobs:
           python3 scripts/check.py
           node --check web/app.js
           node --check web/catalog.js
+          node --check web/reading.js
           node --check web/pe-explorer.js
           node scripts/check_pe_model.js
       - name: Verify original coding references

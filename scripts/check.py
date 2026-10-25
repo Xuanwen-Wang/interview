@@ -11,7 +11,28 @@ from html.parser import HTMLParser
 ROOT = Path(__file__).resolve().parent.parent
 rows = [c for p in sorted((ROOT / 'content').glob('*.json')) for c in json.loads(p.read_text(encoding='utf-8'))]
 chapters = {c['id']: c for c in rows}
+aliases = {old: {'chapter': c['id'], **meta} for c in rows for old, meta in c.get('legacyChapters', {}).items() if old != c['id']}
 errors = []
+class AnchorCollector(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.ids = set()
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if 'id' in attrs:
+            self.ids.add(attrs['id'])
+
+anchors = {}
+for c in rows:
+    collector = AnchorCollector()
+    for s in c['sections']:
+        collector.feed(s['html'])
+    anchors[c['id']] = collector.ids | {s['id'] for s in c['sections']} | {s['id'] for s in c.get('readingStages', [])} | {'questions', 'takeaways', 'references', 'notes'}
+    if c.get('readingStages'):
+        assert [sid for stage in c['readingStages'] for sid in stage['sections']] == [s['id'] for s in c['sections']], f'Reading stages must cover every section exactly once in order: {c["id"]}'
+    for old, meta in c.get('legacyChapters', {}).items():
+        assert meta['section'] in anchors[c['id']], (old, meta)
+        assert set(meta['anchors']) <= anchors[c['id']], f'Lost historical anchors: {old}'
 catalog = json.loads((ROOT / 'config/navigation.json').read_text())
 modules = {m['id']: m for m in catalog['modules']}
 reports = json.loads((ROOT / 'config/interviews.json').read_text())
@@ -46,9 +67,10 @@ def check_link(url, where):
     if url.startswith('#'):
         parts = url[1:].split('/')
         if parts[0] == 'chapter':
-            if len(parts) < 2 or parts[1] not in chapters:
+            target = aliases.get(parts[1], {}).get('chapter', parts[1]) if len(parts) > 1 else None
+            if target not in chapters:
                 errors.append(f'{where}: missing chapter {url}')
-            elif len(parts) > 2 and parts[2] not in ({s['id'] for s in chapters[parts[1]]['sections']} | {'questions', 'takeaways', 'references', 'notes'}):
+            elif len(parts) > 2 and parts[2] not in anchors[target]:
                 errors.append(f'{where}: missing section {url}')
         elif parts[0] == 'module':
             if len(parts) < 2 or parts[1] not in modules or (len(parts) > 2 and parts[2] not in {g['id'] for g in modules[parts[1]]['groups']}):
@@ -99,6 +121,7 @@ for c in rows:
     assert not ({s['id'] for s in c['sections']} & {'questions', 'takeaways', 'references', 'notes'}), c['id']
     assert len({q.get('id', q['q']) for q in c['questions']}) == len(c['questions']), c['id']
     parser = CheckHTML(c['id'])
+    parser.ids = {s['id'] for s in c['sections']} | {stage['id'] for stage in c.get('readingStages', [])} | {'questions', 'takeaways', 'references', 'notes'}
     for s in c['sections']:
         parser.feed(s['html'])
     for s in c['sources']:
@@ -113,6 +136,8 @@ assert not re.search(r'<script[^>]+src=', html), 'Standalone HTML must not need 
 assert not re.search(r'https?://[^\s"\']+\.(?:woff|ttf|css)', html), 'External asset dependency'
 assert not re.search(r'(?:ghp_|github_pat_|sk-proj-)[A-Za-z0-9_]{15,}', html)
 assert not re.search(r'/data/wangxw/home|/home/wangxw|172\.16\.\d+\.\d+', html)
+pe = (ROOT / 'dist/pe.html').read_text(encoding='utf-8')
+assert pe.replace('<body data-default-route="chapter/hw-memory-hierarchy">', '<body>') == html, 'Portable PE entry must contain the same reviewed application'
 if errors:
     raise SystemExit('\n'.join(errors))
 print(f'PASS: {len(modules)} modules, {len(rows)} chapters, {len(companies)} company groups, {len(reports)} reports; catalog ownership, code example parity, internal routes, source files/anchors, SVG labels, portable HTML and credential patterns checked.')

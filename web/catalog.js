@@ -17,6 +17,8 @@ function renderNavigation(route, id) {
   if (context.group) {
     $('#context-label').textContent = context.group.title;
     target.innerHTML = `<a class="context-back" href="#module/${context.module.id}/${context.group.id}">← 返回专题目录</a>` + groupChapters(context.group).map((c, i) => `<a href="#chapter/${c.id}" data-chapter="${c.id}" ${c.id === id ? 'aria-current="page" class="active"' : ''}><i>${String(i+1).padStart(2,'0')}</i><span>${esc(c.title)}</span></a>`).join('');
+    const chapter=chapterMap.get(id);
+    if(chapter?.readingStages)target.innerHTML+=chapter.readingStages.map((stage,i)=>`<a class="stage-nav-link" data-stage-jump="${stage.id}" href="#chapter/${id}/${stage.id}"><i>${String(i+1).padStart(2,'0')}</i><span>${esc(stage.title)}</span></a>`).join('');
   } else if (context.module) {
     $('#context-label').textContent = '本主题的专题';
     target.innerHTML = context.module.groups.map(g => `<a href="#module/${context.module.id}/${g.id}"><span>${esc(g.title)}</span><small>${groupChapters(g).length}</small></a>`).join('');

@@ -11,7 +11,19 @@
 5. 添加原创 SVG 时使用 `figure.diagram`、`viewBox`、`role="img"`、`aria-label` 和 `figcaption`。图会自动支持放大；较密的机制图不要只依赖缩小后的字号。HTML 内不要写脚本或事件处理器。
 6. 构建、检查，并在桌面/手机查看新章、专题目录和打印预览。
 
-`part` 是章节的语义标签，继续用于部分问答和检索显示；它不再驱动侧边栏。学习记录仍使用原 `interview-field-notes-v1` 存储键与备份格式，无需迁移旧笔记。
+`part` 是章节的语义标签，继续用于部分问答和检索显示；它不再驱动侧边栏。学习记录仍使用原 `interview-field-notes-v1` 存储键与 version 1 备份格式；合并章节时由下述兼容元数据迁移记录。
+
+## 连续长文与旧链接
+
+PE 使用一个 chapter、一个完整 HTML，按六个阅读层次组织。`readingStages` 的每项包含 `id/title/summary/sections`；所有 `sections` 展平后必须与章内 section 顺序完全相同。侧边栏、页首路径和右侧目录都跳到同一篇文章的锚点，页面不拆载、不重新初始化交互。阶段标题用 h2，小节用 h3，小节内部标题从 h3 转为 h4。
+
+正文的硬件字节映射、credit 等补充推导可放在 `<details class="pe-deep-dive">` 中。直接访问其内部锚点会展开对应内容；打印时所有技术补充自动展开，结束后恢复原状态。
+
+合并已有章节时，使用 `legacyChapters` 保存原 chapter ID、`title`、入口 `section`、全部旧 `anchors` 和可选 `noteKey`。旧 hash 路由映射到长文；旧笔记单独保留，不能用旧章的完成状态代替整篇长文的完成状态。当前 PE 的原总览笔记使用 `legacy-pe-overview`，避免覆盖同 ID 新长文笔记。问答的 `legacyKeys` 只映射语义相同的原题，改题后不要沿用已有熟练度。
+
+首次迁移先备份旧存储原文，再写入 `readingVersion: 2`。旧版备份导入、JSON/Markdown 导出、多标签合并和取消已读都须验证。`scripts/check.py` 检查阶段覆盖、旧锚点与重名 ID；浏览器验证实际跳转及历史笔记定位。
+
+`scripts/build.py` 同时生成 `dist/index.html` 和直接打开 PE 长文的 `dist/pe.html`。两者内嵌同一份内容和应用，仅默认路由不同；`pe.html` 可保存后独立离线阅读。它们在同一来源共享浏览器笔记，文件离线副本则需导出/导入来转移笔记。
 
 ## 未来专题怎么放
 
@@ -42,6 +54,7 @@ python3 scripts/build.py
 python3 scripts/check.py
 node --check web/app.js
 node --check web/catalog.js
+node --check web/reading.js
 node --check web/pe-explorer.js
 node scripts/check_pe_model.js
 python3 -m unittest discover -s practice -v

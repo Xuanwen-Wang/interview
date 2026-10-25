@@ -8,7 +8,7 @@
 
 ## 内容与导航
 
-当前使用 **8 个知识域 → 16 个专题 → 58 章** 的目录结构。侧边栏只展开当前专题；全站目录支持主题、标题/标签与阅读状态筛选。已有章节链接、笔记和学习记录保留。
+当前使用 **8 个知识域 → 16 个专题 → 53 章** 的目录结构。侧边栏只展开当前专题；全站目录支持主题、标题/标签与阅读状态筛选。已有章节链接、笔记和学习记录保留。
 
 | 知识域 | 内容 |
 | --- | --- |
@@ -21,9 +21,11 @@
 | 公司与面经 | 12个公司或公司组、28条来源，区分官方JD、个人面经、官方作业与第三方材料 |
 | Coding实作 | 算法、图/数据流、kernel、玩具pass；原创Python/C++参考与测试 |
 
-当前 **416 小节、306 道追问、73 张正文 SVG**。附全文搜索、图示放大、3个通用交互实验和2个PE交互演示、术语表、阅读进度及本地笔记导入导出。SVG、样式和内容均内嵌；网页不依赖CDN、外部字体或第三方脚本。
+当前 **384 小节、306 道追问、72 张正文 SVG**。附全文搜索、图示放大、3个通用交互实验和2个PE交互演示、术语表、阅读进度及本地笔记导入导出。SVG、样式和内容均内嵌；网页不依赖CDN、外部字体或第三方脚本。
 
-- [PE 微架构重构审查](evidence/review-pe-v3.md)：6章、52节、19张静态图；沿activation/weight/partial sum推带宽，最后讲minitile。
+- [PE 完整长文](https://xuanwen-wang.github.io/interview/pe.html)：一个 HTML，沿整体边界与接口 → 8×8 阵列 → ALU/MAC → 累加与写回 → minitile 连续展开；20节、18张图、2个交互。
+- [PE 单篇重构审查](evidence/review-pe-continuous.md)：旧链接、笔记迁移、连续阅读与离线验收。
+- [此前 PE 微架构审查](evidence/review-pe-v3.md)：原六章的数据路径与 RTL 证据。
 - [第二版审查与验收](evidence/review-v2.md)
 - [第一版审查与验收](evidence/review-and-validation.md)
 - [扩展指南](docs/authoring.md)：未来添加中端Pass、模型部署、新公司或Coding专题的方法。
@@ -39,7 +41,7 @@ python3 scripts/check.py
 python3 -m http.server 8768 --bind 127.0.0.1 --directory dist
 ```
 
-也可以直接打开 `dist/index.html`。正文与应用可离线阅读，外部来源链接需要网络。笔记仅存在当前浏览器的 localStorage，不会上传；不同域名、设备之间需要手动导出导入。
+也可以直接打开 `dist/index.html`，或用 `dist/pe.html` 从头到尾阅读 PE 长文。正文与应用可离线阅读，外部来源链接需要网络。笔记仅存在当前浏览器的 localStorage，不会上传；不同域名、设备之间需要手动导出导入。
 
 ## 维护
 
