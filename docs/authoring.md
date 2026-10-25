@@ -42,6 +42,8 @@ python3 scripts/build.py
 python3 scripts/check.py
 node --check web/app.js
 node --check web/catalog.js
+node --check web/pe-explorer.js
+node scripts/check_pe_model.js
 python3 -m unittest discover -s practice -v
 TMPDIR=/data/wangxw/tmp g++ -std=c++17 -Wall -Wextra -Werror \
   -fsanitize=address,undefined practice/coding.cpp \
@@ -50,3 +52,11 @@ TMPDIR=/data/wangxw/tmp g++ -std=c++17 -Wall -Wextra -Werror \
 ```
 
 浏览器验收包括主题/专题、旧深链接、目录筛选、公司来源筛选、全文搜索、图示放大、实验计算、笔记、问答、移动端与打印。构建产物 `dist/` 不提交；push 到 `main` 后由 GitHub Actions 构建并发布，发布完成再核验线上内容。
+
+## PE 交互演示
+
+正文用 `<div data-pe-explorer="mapping"></div>` 或 `<div data-pe-explorer="budget"></div>` 声明挂载点。纯数学模型在 `web/pe-model.js`，展示与事件在 `web/pe-explorer.js`，样式在 `web/pe-explorer.css`，构建时一起内嵌。不要在章节 JSON 中加入脚本。
+
+`mapping` 只适用于 normal KC FP8 权重布局。它按实际 pack/RTL 位切片解释坐标，但小整数归约例子没有模拟舍入或 RTL 时序。`budget` 中 R、频率和发射率是显式条件参数；它计算 weight 供数上界和 AL1 输入容量，不取代编译器代价模型。
+
+修改映射需同时核对 pack 与硬件 slice，并运行 `scripts/check_pe_model.js` 的完整字节空间、独立反向映射与直接点积 oracle。修改界面需检查 C128/C256、最后一个字节、单/双 hub、w 改变造成的驻留翻转、当前状态放大与打印。新增其他格式时独立建立公式与证据，不能只换显示标签。

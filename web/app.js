@@ -63,6 +63,7 @@ function renderChapter(id, section) {
  function toggleRead(){state.read=state.read.includes(id)?state.read.filter(x=>x!==id):[...state.read,id];save();progress();$('#read-toggle').textContent=state.read.includes(id)?'已完成 ✓':'标记已读';$('#read-main').textContent=state.read.includes(id)?'已完成本章 ✓ · 取消标记':'标记本章已读 ✓';}
  $('#read-toggle').onclick=toggleRead;$('#read-main').onclick=toggleRead;
  if('IntersectionObserver' in window){sectionObserver=new IntersectionObserver(entries=>{entries.filter(e=>e.isIntersecting).forEach(e=>{$$('[data-toc]').forEach(a=>a.classList.toggle('current',a.dataset.toc===e.target.id));});},{rootMargin:'-90px 0px -65% 0px'});$$('section[data-section]').forEach(s=>sectionObserver.observe(s));}
+ initPeExplorers();
  enableFigureZoom();
  if(section)requestAnimationFrame(()=>document.getElementById(section)?.scrollIntoView());
 }

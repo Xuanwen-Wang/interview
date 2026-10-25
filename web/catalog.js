@@ -71,9 +71,15 @@ function updateDiagramZoom() {
   stage.style.setProperty('--zoom',String(scale*100)+'%');
   svg.style.width=String(baseline*scale)+'px';
 }
+function openFigureDialog(svg, caption, namespace = 'figure') {
+  const clone=svg.cloneNode(true), renames=new Map();
+  [clone,...clone.querySelectorAll('[id]')].forEach(el=>{if(el.id){renames.set(el.id,'zoom-'+namespace+'-'+el.id);el.id=renames.get(el.id);}});
+  [clone,...clone.querySelectorAll('*')].forEach(el=>{for(const attr of [...el.attributes]){let value=attr.value;for(const [oldId,newId] of renames){value=value.replaceAll('url(#'+oldId+')','url(#'+newId+')');if(['href','xlink:href'].includes(attr.name)&&value==='#'+oldId)value='#'+newId;if(['aria-labelledby','aria-describedby'].includes(attr.name))value=value.split(' ').map(v=>v===oldId?newId:v).join(' ');}if(value!==attr.value)el.setAttribute(attr.name,value);}});
+  $('#diagram-stage').replaceChildren(clone);$('#diagram-caption').textContent=caption||svg.getAttribute('aria-label')||'';$('#diagram-scale').value='100';$('#diagram-dialog').showModal();updateDiagramZoom();
+}
 function enableFigureZoom() {
   $$('.article svg').forEach(svg=>{
-    if(svg.closest('svg')!==svg)return;
+    if(svg.closest('svg')!==svg || svg.closest('.pe-explorer'))return;
     let fig=svg.closest('figure');
     if(!fig){fig=document.createElement('figure');svg.before(fig);fig.append(svg);}
     fig.classList.add('diagram');
@@ -81,11 +87,6 @@ function enableFigureZoom() {
   $$('.article .diagram').forEach((fig,i)=>{
     const svg=$('svg',fig);if(!svg)return;
     const button=document.createElement('button');button.className='figure-open';button.textContent='放大图示 ↗';button.setAttribute('aria-label','放大图示 '+(svg.getAttribute('aria-label')||i+1));
-    button.onclick=()=>{
-      const clone=svg.cloneNode(true), renames=new Map();
-      [clone,...clone.querySelectorAll('[id]')].forEach(el=>{if(el.id){renames.set(el.id,'zoom-'+i+'-'+el.id);el.id=renames.get(el.id);}});
-      [clone,...clone.querySelectorAll('*')].forEach(el=>{for(const attr of [...el.attributes]){let value=attr.value;for(const [oldId,newId] of renames){value=value.replaceAll('url(#'+oldId+')','url(#'+newId+')');if(['href','xlink:href'].includes(attr.name)&&value==='#'+oldId)value='#'+newId;if(['aria-labelledby','aria-describedby'].includes(attr.name))value=value.split(' ').map(v=>v===oldId?newId:v).join(' ');}if(value!==attr.value)el.setAttribute(attr.name,value);}});
-      $('#diagram-stage').replaceChildren(clone);$('#diagram-caption').textContent=$('figcaption',fig)?.textContent||svg.getAttribute('aria-label')||'';$('#diagram-scale').value='100';$('#diagram-dialog').showModal();updateDiagramZoom();
-    };fig.append(button);
+    button.onclick=()=>openFigureDialog(svg,$('figcaption',fig)?.textContent,i);fig.append(button);
   });
 }

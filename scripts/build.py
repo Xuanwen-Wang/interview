@@ -38,9 +38,9 @@ def build():
     template = (ROOT / 'web/index.html').read_text(encoding='utf-8')
     payload = {'CHAPTERS': chapters, 'CATALOG': json.loads((ROOT / 'config/navigation.json').read_text(encoding='utf-8')), 'REPORTS': json.loads((ROOT / 'config/interviews.json').read_text(encoding='utf-8')), 'COMPANIES': json.loads((ROOT / 'config/companies.json').read_text(encoding='utf-8'))}
     data = '\n'.join(f'const {name} = ' + json.dumps(value, ensure_ascii=False).replace('</', '<\\/') + ';' for name, value in payload.items())
-    result = template.replace('/* INLINE_STYLE */', (ROOT / 'web/style.css').read_text(encoding='utf-8') + '\n' + (ROOT / 'web/catalog.css').read_text(encoding='utf-8'))
+    result = template.replace('/* INLINE_STYLE */', '\n'.join((ROOT / 'web' / name).read_text(encoding='utf-8') for name in ['style.css', 'catalog.css', 'pe-explorer.css']))
     result = result.replace('/* INLINE_DATA */', data)
-    result = result.replace('/* INLINE_APP */', (ROOT / 'web/catalog.js').read_text(encoding='utf-8') + '\n' + (ROOT / 'web/app.js').read_text(encoding='utf-8'))
+    result = result.replace('/* INLINE_APP */', '\n'.join((ROOT / 'web' / name).read_text(encoding='utf-8') for name in ['catalog.js', 'pe-model.js', 'pe-explorer.js', 'app.js']))
     assert not re.search(r'/\* INLINE_\w+ \*/', result)
     out = ROOT / 'dist'
     out.mkdir(exist_ok=True)

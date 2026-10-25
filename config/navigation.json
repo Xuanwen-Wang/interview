@@ -132,11 +132,14 @@
         },
         {
           "id": "pe",
-          "title": "PE、minitile 与带宽",
+          "title": "PE 微架构：从数据路径到 minitile",
           "chapters": [
             "hw-memory-hierarchy",
-            "hw-pe-minitile",
-            "hw-bandwidth-credit"
+            "hw-pe-activation-path",
+            "hw-pe-weight-path",
+            "hw-pe-compute-path",
+            "hw-bandwidth-credit",
+            "hw-pe-minitile"
           ]
         },
         {
