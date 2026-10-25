@@ -94,6 +94,7 @@ function renderChapter(id, section) {
  initMoeExplorers();
  initPerformanceExplorers();
  initDecodeExplorers();
+ initAttentionLabs();
  enableFigureZoom();
  if(section)scrollChapterAnchor(section);
 }

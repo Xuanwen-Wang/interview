@@ -111,3 +111,10 @@ TMPDIR=/data/wangxw/tmp g++ -std=c++17 -Wall -Wextra -Werror \
 正文使用 `<div data-decode-explorer="attention"></div>` 或 `<div data-decode-explorer="ffn"></div>`。`web/decode-explorer.js` 与 CSS 在构建时内嵌，不依赖服务或外部资源。Qwen3-8B 固定 H4096、Q32、KV8、D128、I12288、36 层；BF16 是显式教学口径。MHA32 / MQA1 仅为相同维度的反事实对照，不是另一份 Qwen 配置。
 
 Attention 的 N 包含本步新 token，按等长请求、每步每请求一个 query 计数；完整逻辑 KV 扫描不能写成测得的 HBM 流量。FFN 展示单层 Dense 三矩阵的理想权重复用，N 不改变其矩阵工作量。更新时运行 `node scripts/check_decode_model.js`，并验证两独立入口、旧章节/笔记、搜索、图示放大、B/N 变化、移动与打印。
+
+
+## Attention 逐步动画
+
+正文使用 `<div data-attention-lab="flash"></div>`；支持 `flash`、`decode`、`rope`、`heads`、`mla`、`sparse`、`state`。`web/attention-lab.js`/CSS 在构建时内嵌，由 `initAttentionLabs()` 挂载，不依赖外部资源。页面默认静止，提供前后、重置、播放、键盘与步骤直达；页面切换、隐藏、离屏与打印停播。打印输出完整步骤与最终静态图。通用图示放大忽略 `.attention-lab` 内部SVG，避免替换/包裹破坏动画。
+
+新增例子须声明玩具维度与真实模型维度的边界，数据变化由可复算数值驱动。数学函数由 `node scripts/check_attention_lab.js` 的独立oracle校验；动画不代表GPU计时或硬件性能。RoPE示例必须区分当前新K与历史K；固定状态必须明确key/value轴、门控顺序与跨步保存语义。

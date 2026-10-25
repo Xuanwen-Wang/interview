@@ -33,10 +33,12 @@ jobs:
           node --check web/moe-explorer.js
           node --check web/performance-explorer.js
           node --check web/decode-explorer.js
+          node --check web/attention-lab.js
           node scripts/check_pe_model.js
           node scripts/check_moe_model.js
           node scripts/check_performance_model.js
           node scripts/check_decode_model.js
+          node scripts/check_attention_lab.js
       - name: Verify original coding references
         run: |
           python3 -m unittest discover -s practice -v

@@ -87,7 +87,7 @@ function openFigureDialog(svg, caption, namespace = 'figure') {
 }
 function enableFigureZoom() {
   $$('.article svg').forEach(svg=>{
-    if(svg.closest('svg')!==svg || svg.closest('.pe-explorer, .performance-explorer'))return;
+    if(svg.closest('svg')!==svg || svg.closest('.pe-explorer, .performance-explorer, .attention-lab'))return;
     let fig=svg.closest('figure');
     if(!fig){fig=document.createElement('figure');svg.before(fig);fig.append(svg);}
     fig.classList.add('diagram');

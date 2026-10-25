@@ -1,5 +1,7 @@
 # Attention 连续教程：来源、教学账本与验证
 
+> 本记录保留首次合并时的来源与账本。2026-10-25 后续全篇重写、25张正文图与7类动画的最新验收见 [教学重写记录](review-attention-teaching.md)。
+
 核验日期：2026-10-25（Asia/Shanghai）。正文为 `content/13-attention-guide.json`，独立阅读入口 `attention.html`。将 10 个算法/Attention 旧章合为一个 8 阶段、24 节连续教程，含 20 张原创 SVG、8 道问答。算法、固定配置、内部源码与教学容量均注明范围；没有新增模型运行或设备性能测量。
 
 ## 叙事与数据约定
