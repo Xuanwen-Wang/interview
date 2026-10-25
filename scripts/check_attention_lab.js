@@ -170,6 +170,121 @@ matrix(model.gateState(oldState, [1, 1]), oldState);
 assert.throws(() => model.gateState(oldState, [1]));
 assert.throws(() => model.gateState(oldState, [1, Infinity]));
 
+// MLA has a diagram animation, not a production model implementation here.
+// These independent teaching checks validate the displayed algebra and numbers.
+// The dense oracle expands K/V and normalizes with pairwise exponent ratios;
+// the compact path contracts Q first, then uses the tested streaming primitive.
+const rowTimes = (row, weights) => weights[0].map((_, j) => row.reduce((sum, x, i) => sum + x * weights[i][j], 0));
+const transpose = weights => weights[0].map((_, j) => weights.map(row => row[j]));
+const differs = (a, b, epsilon = 1e-6) => a.some((x, i) => Math.abs(x - b[i]) > epsilon);
+
+// Exact fixture printed in the MLA section. It deliberately omits RoPE and
+// scaling so the first encounter with absorption has small, inspectable values.
+const mlaToyC = [[1, 2], [3, 1]], mlaToyAK = [[1, 0], [1, 1]], mlaToyAV = [[1, 2], [0, 1]];
+const mlaToyQ = [2, 1];
+const mlaToyK = mlaToyC.map(row => rowTimes(row, mlaToyAK));
+const mlaToyV = mlaToyC.map(row => rowTimes(row, mlaToyAV));
+matrix(mlaToyK, [[3, 2], [4, 1]]);
+matrix(mlaToyV, [[1, 4], [3, 7]]);
+const mlaToyScores = mlaToyK.map(key => dot(mlaToyQ, key));
+vector(mlaToyScores, [8, 9]);
+vector(rowTimes(mlaToyQ, transpose(mlaToyAK)), [2, 3]);
+const mlaToyP = [1 / (1 + Math.E), Math.E / (1 + Math.E)];
+vector(rowTimes(mlaToyP, mlaToyC), [2.46211715726001, 1.2689414213699952]);
+const mlaToyExpected = probabilityOracle(mlaToyScores, mlaToyV);
+vector(mlaToyExpected, [2.46211715726001, 6.193175735890014]);
+vector(rowTimes(rowTimes(mlaToyP, mlaToyC), mlaToyAV), mlaToyExpected);
+
+// Keep the real dimension ratios: content 128:RoPE 64:latent 512:value 128
+// become 4:2:16:4. Heads and sequence length are small independent test axes.
+// C denotes the already-normalized latent. These synthetic weights are not a
+// checkpoint, and the test does not claim to run DeepSeek or measure hardware.
+const mlaShape = {heads: 3, rows: 7, content: 4, rope: 2, latent: 16, value: 4, hidden: 10};
+const fixture = (rows, cols, phase) => Array.from({length: rows}, (_, r) => Array.from({length: cols}, (_, c) => Math.sin((r + 1) * (c + 2) + phase) * 0.7));
+const mlaC = fixture(mlaShape.rows, mlaShape.latent, 0.2);
+const mlaKR = fixture(mlaShape.rows, mlaShape.rope, 1.3);
+const mlaQC = fixture(mlaShape.heads, mlaShape.content, 2.1);
+const mlaQR = fixture(mlaShape.heads, mlaShape.rope, 3.4);
+const mlaOutputWeights = fixture(mlaShape.heads * mlaShape.value, mlaShape.hidden, 4.2);
+const mlaOmega = 0.37, mlaPosition = 6;
+const rotatePair = (pair, angle) => [pair[0] * Math.cos(angle) - pair[1] * Math.sin(angle), pair[0] * Math.sin(angle) + pair[1] * Math.cos(angle)];
+
+// V2 checkpoint scale: qk_nope=128, qk_rope=64, YaRN factor=40,
+// mscale_all_dim=0.707. Absorption must preserve this scalar independently of
+// the effective latent contraction width. We retain it in the synthetic test.
+const mlaModelScale = (1 + 0.1 * 0.707 * Math.log(40)) ** 2 / Math.sqrt(192);
+close(mlaModelScale, 0.11472138679292612);
+const mlaMasks = [
+  [true, true, true, true, true, true, true],
+  [false, false, true, false, true, true, true],
+  [false, false, false, false, false, false, true]
+];
+let detectsWrongScale = false, detectsSeparateSoftmax = false;
+for (const visible of mlaMasks) {
+  const denseOutputs = [], compactOutputs = [];
+  for (let h = 0; h < mlaShape.heads; h++) {
+    const ak = fixture(mlaShape.latent, mlaShape.content, 0.8 + h);
+    const av = fixture(mlaShape.latent, mlaShape.value, 1.7 + h);
+    const denseQ = [...mlaQC[h], ...rotatePair(mlaQR[h], mlaPosition * mlaOmega)];
+    const denseK = mlaC.map((row, n) => [...rowTimes(row, ak), ...rotatePair(mlaKR[n], n * mlaOmega)]);
+    const denseV = mlaC.map(row => rowTimes(row, av));
+    const denseScores = denseK.map((key, n) => visible[n] ? dot(denseQ, key) * mlaModelScale : -Infinity);
+    const expected = probabilityOracle(denseScores, denseV);
+
+    const absorbedQ = rowTimes(mlaQC[h], transpose(ak));
+    assert.equal(absorbedQ.length, mlaShape.latent);
+    const contentScores = mlaC.map(row => dot(absorbedQ, row));
+    // Independent relative-angle identity instead of reusing the dense path's
+    // two explicit rotations; historical n and current p stay distinct.
+    const positionScores = mlaKR.map((key, n) => {
+      const angle = (n - mlaPosition) * mlaOmega;
+      const cross = mlaQR[h][1] * key[0] - mlaQR[h][0] * key[1];
+      return dot(mlaQR[h], key) * Math.cos(angle) + cross * Math.sin(angle);
+    });
+    const compactScores = contentScores.map((score, n) => visible[n] ? (score + positionScores[n]) * mlaModelScale : -Infinity);
+    denseScores.forEach((score, n) => score === -Infinity ? assert.equal(compactScores[n], -Infinity) : close(compactScores[n], score));
+    const compactLatent = model.onlineAttention(compactScores, mlaC, [[0, 1], [2, 3], [4, 5], [6]]).output;
+    const actual = rowTimes(compactLatent, av);
+    vector(actual, expected);
+    denseOutputs.push(...expected);
+    compactOutputs.push(...actual);
+
+    // Retain the YaRN factor and change only sqrt(192) to sqrt(576), so the
+    // counterexample isolates the contraction-width mistake.
+    const wrongWidthScale = mlaModelScale * Math.sqrt(192 / 576);
+    const wrongScaleScores = contentScores.map((score, n) => visible[n] ? (score + positionScores[n]) * wrongWidthScale : -Infinity);
+    detectsWrongScale ||= differs(probabilityOracle(wrongScaleScores, denseV), expected);
+    const separateContent = probabilityOracle(contentScores.map((score, n) => visible[n] ? score * mlaModelScale : -Infinity), denseV);
+    const separatePosition = probabilityOracle(positionScores.map((score, n) => visible[n] ? score * mlaModelScale : -Infinity), denseV);
+    // Even averaging the two normalized outputs to restore unit total weight
+    // cannot replace softmax(content + position).
+    detectsSeparateSoftmax ||= differs(separateContent.map((x, i) => (x + separatePosition[i]) / 2), expected);
+  }
+  vector(rowTimes(compactOutputs, mlaOutputWeights), rowTimes(denseOutputs, mlaOutputWeights));
+}
+assert.ok(detectsWrongScale, 'Changing to the absorbed width must change the function for this fixture.');
+assert.ok(detectsSeparateSoftmax, 'Normalizing the content and positional branches separately must change the function.');
+
+// Noncommutation counterexample in the text: stretch x by 2, then rotate 90
+// degrees. Reversing the order changes both the transformed key and its score.
+const stretch = [[2, 0], [0, 1]], quarterTurn = [[0, -1], [1, 0]];
+const columnTimes = (weights, col) => weights.map(row => dot(row, col));
+const rightOrder = columnTimes(quarterTurn, columnTimes(stretch, [1, 0]));
+const wrongOrder = columnTimes(stretch, columnTimes(quarterTurn, [1, 0]));
+vector(rightOrder, [0, 2]);
+vector(wrongOrder, [0, 1]);
+close(dot([1, 1], rightOrder), 2);
+close(dot([1, 1], wrongOrder), 1);
+
+// Capacity and core-FLOP ledger from the guide, not runtime allocations.
+const mlaN = 4096, mlaHeads = 128, bf16Bytes = 2, MiB = 2 ** 20;
+close(mlaN * (mlaHeads * (128 + 128) + 64) * bf16Bytes / MiB, 256.5);
+close(mlaN * (512 + 64) * bf16Bytes / MiB, 4.5);
+close(mlaN * mlaHeads * (192 + 128) * bf16Bytes / MiB, 320);
+close(256.5 / 4.5, 57);
+assert.equal(2 * mlaHeads * mlaN * (192 + 128), 335544320);
+assert.equal(2 * mlaHeads * mlaN * (576 + 512), 1140850688);
+
 for (const bad of [[], [[0], [0, 1, 2, 3]], [[0, 1], [2]], [[0, 1], [2, 4]], [[0, 1], []]]) {
   assert.throws(() => model.onlineAttention(toyScores, toyValues, bad));
   assert.throws(() => model.splitAttention(toyScores, toyValues, bad));
@@ -180,4 +295,4 @@ assert.throws(() => model.onlineAttention([0, 1], [[1, 2], [1]]));
 assert.throws(() => model.rope([1, 2, 3], 1, 1));
 assert.throws(() => model.rope([1, Infinity], 1, 1));
 assert.throws(() => model.deltaStep([[0]], [1, 0], [1], 1, [1]));
-console.log('Attention labs: independent softmax oracle; all toy partitions; 100 varied shapes; ±1000 shift stability; masked tiles and short tails; LSE-weighted decode merge; RoPE geometry and relative position; affine-matrix delta oracle, overwrite semantics and gate-before-prediction order passed. Teaching arithmetic only, not hardware performance.');
+console.log('Attention labs: independent softmax oracle; all toy partitions; 100 varied shapes; ±1000 shift stability; masked tiles and short tails; LSE-weighted decode merge; RoPE geometry and relative position; affine-matrix delta oracle, overwrite semantics and gate-before-prediction order; MLA expanded versus compact attention with RoPE, masks, checkpoint scale and output projection; wrong-scale and separate-softmax counterexamples; noncommuting rotation; teaching capacity/FLOP ledger passed. Teaching arithmetic only, not a model execution or hardware performance result.');
