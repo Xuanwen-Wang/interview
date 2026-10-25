@@ -4,6 +4,8 @@
 
 **在线阅读：[xuanwen-wang.github.io/interview](https://xuanwen-wang.github.io/interview/)**
 
+**[岗位收藏](https://xuanwen-wang.github.io/interview/jobs.html)**：集中查看 6 个编译器、算子性能与异构硬件岗位，按公司、方向、状态和要求关键词筛选；直接读职责、要求和加分项，跳转官网或准备章节。2026-10-25 复核，区分官方可见、已下线与待复核。关注标记仅保存在当前浏览器。
+
 围绕“模型语义 → 算子 → 硬件映射 → 编译分析与变换 → 指令与验证”组织。内容面向已有项目经验、希望重建算法基础并准备资深 AI 编译器面试的工程师。
 
 ## 内容与导航
@@ -52,6 +54,8 @@ python3 -m http.server 8768 --bind 127.0.0.1 --directory dist
 ```
 
 也可以直接打开 `dist/index.html`，或用 `dist/pe.html`、`dist/vp.html` 从头到尾阅读架构长文。正文与应用可离线阅读，外部来源链接需要网络。笔记仅存在当前浏览器的 localStorage，不会上传；不同域名、设备之间需要手动导出导入。
+
+`dist/jobs.html` 可单独保存并离线查看岗位要求；岗位来源和状态边界见 [岗位核验记录](evidence/job-sources.md)。
 
 ## 维护
 

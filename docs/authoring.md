@@ -49,6 +49,16 @@ PE 与 VP 各使用一个 chapter、一个完整 HTML；PE 按六个阅读层次
 - `config/companies.json`：公司卡片、来源 ID 和关联章节 ID。公司组必须明确包含哪些公司，不把一个多家公司帖子里的所有题分配给每家公司。
 - 不用搜索摘要生成面试事实；保留原始身份、不确定日期、历史岗位状态。一次面经不表示固定题库，也不能由样本数推出出题概率。
 
+## 岗位收藏
+
+`config/jobs.json` 独立维护岗位，`#jobs` 为列表、`#job/<id>` 为详情；`jobs.html` 内嵌同一应用和数据并默认打开列表。添加岗位时使用稳定 ID、官方 URL、来源编号、核验日期、地点、招聘类型、经验、职责、基本要求与加分项；旧官方来源通过 `sourceId` 关联，不把面经当作在招 JD。新增记录自动出现在页面和全站搜索中。
+
+`origin` 为 `user` 或 `research`；`direction` 取“编译器与DSL”“算子与性能优化”“硬件性能与软硬协同”。`status` 为 `listed`（核验时官方可见）、`closed`（有下线证据）、`unverified`（当前状态未确认）。同时填写 `verification`、`sourceType` 与 `evidenceUrls`，来源记入 `evidence/job-sources.md`。发布日期不能用抓取日期代替。
+
+`relevance` 是本站解读，分关联理由、可展示的证据和建议补齐的能力，不代表雇主认可。`chapters` 必须引用存在的准备章节。要求以概述为主；原文中的“优先”“desired”不能改写为必须。没有提供的年限、学历或地域不推测。本地关注存于独立浏览器键，不包含在原笔记导出中，也不会上传。
+
+验收包括列表多词搜索、公司/方向/状态组合筛选、清空筛选、详情直达、关注持久化、官网和章节链接、全站搜索、手机与打印布局，以及 `file://` 打开 `jobs.html`。运行 `node --check web/jobs.js` 并执行现有构建和内容检查。
+
 ## Coding 与验证
 
 原创 CPU 参考在 `practice/`。Python 正文示例用 `<pre data-reference="函数名"><code>…</code></pre>`，静态检查会与 `practice/reference.py` 的 AST 源码片段比较，避免正文代码漂移。C++、CUDA 示例另行检查。

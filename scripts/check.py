@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Validate authored chapter references and portable build invariants."""
 import ast
+from datetime import date
 import json
 from collections import Counter
 import re
@@ -39,6 +40,10 @@ modules = {m['id']: m for m in catalog['modules']}
 reports = json.loads((ROOT / 'config/interviews.json').read_text())
 companies = json.loads((ROOT / 'config/companies.json').read_text())
 company_map = {c['id']: c for c in companies}
+jobs = json.loads((ROOT / 'config/jobs.json').read_text(encoding='utf-8'))
+job_map = {j['id']: j for j in jobs}
+assert len(job_map) == len(jobs), 'Duplicate job'
+assert len({j['url'] for j in jobs}) == len(jobs), 'Duplicate job URL'
 assert len(modules) == len(catalog['modules']), 'Duplicate module'
 assert len(company_map) == len(companies), 'Duplicate company'
 report_ids = {r['id'] for r in reports}
@@ -82,7 +87,10 @@ def check_link(url, where):
         elif parts[0] == 'company':
             if len(parts) != 2 or parts[1] not in company_map:
                 errors.append(f'{where}: missing company {url}')
-        elif parts[0] not in {'home', 'catalog', 'companies', 'lab', 'sources', 'practice', 'notebook', 'glossary'}:
+        elif parts[0] == 'job':
+            if len(parts) not in {2, 3} or parts[1] not in job_map or (len(parts) == 3 and parts[2] not in {'requirements', 'preparation'}):
+                errors.append(f'{where}: missing job {url}')
+        elif parts[0] not in {'home', 'catalog', 'companies', 'jobs', 'lab', 'sources', 'practice', 'notebook', 'glossary'}:
             errors.append(f'{where}: unsupported route {url}')
         return
     path, _, anchor = url.partition('#')
@@ -119,6 +127,27 @@ class CheckHTML(HTMLParser):
                 errors.append(f'{self.label}: stale code example {self.reference}')
             self.reference = None
 
+for job in jobs:
+    assert re.fullmatch(r'[a-z0-9-]+', job['id']), job['id']
+    assert job['status'] in {'listed', 'closed', 'unverified'}, job['id']
+    assert job['origin'] in {'user', 'research'}, job['id']
+    assert job['direction'] in {'硬件性能与软硬协同', '编译器与DSL', '算子与性能优化'}, job['id']
+    for key in ['title', 'company', 'employment', 'experience', 'sourceId', 'checked', 'url', 'verification', 'summary']:
+        assert isinstance(job.get(key), str) and job[key].strip(), (job['id'], key)
+    assert urlsplit(job['url']).scheme == 'https' and urlsplit(job['url']).netloc, job['id']
+    date.fromisoformat(job['checked'])
+    if job.get('published'):
+        date.fromisoformat(job['published'])
+    for key in ['locations', 'responsibilities', 'requirements', 'preferred', 'keywords', 'chapters']:
+        assert isinstance(job[key], list) and all(isinstance(v, str) and v.strip() for v in job[key]), (job['id'], key)
+    assert job['requirements'] and job['responsibilities'] and job['chapters'], job['id']
+    assert set(job['chapters']) <= set(chapters), job['id']
+    assert job['relevance']['summary'] and job['relevance']['evidence'] and job['relevance']['prepare'], job['id']
+    source = next((r for r in reports if r['id'] == job['sourceId']), None)
+    if source:
+        assert source['category'] == 'job' and source['url'] == job['url'], job['id']
+assert {r['id'] for r in reports if r['category'] == 'job'} <= {j['sourceId'] for j in jobs}, 'Missing previously researched job'
+
 for c in rows:
     assert len(c['sections']) >= 5, c['id']
     assert len(c['questions']) >= 3, c['id']
@@ -135,6 +164,7 @@ for c in rows:
 
 html = (ROOT / 'dist/index.html').read_text(encoding='utf-8')
 assert 'const CHAPTERS =' in html
+assert 'const JOBS =' in html
 assert 'INLINE_' not in html
 assert not re.search(r'<script[^>]+src=', html), 'Standalone HTML must not need script downloads'
 assert not re.search(r'https?://[^\s"\']+\.(?:woff|ttf|css)', html), 'External asset dependency'
@@ -145,6 +175,9 @@ for filename, chapter_id in portable_readings(rows).items():
     body = f'<body data-default-route="chapter/{chapter_id}">'
     assert portable.count(body) == 1, f'Portable entry must open its own chapter: {filename}'
     assert portable.replace(body, '<body>') == html, f'Portable entry must contain the same reviewed application: {filename}'
+job_html = (ROOT / 'dist/jobs.html').read_text(encoding='utf-8')
+assert job_html.count('<body data-default-route="jobs">') == 1
+assert job_html.replace('<body data-default-route="jobs">', '<body>') == html, 'Jobs entry must contain the same application'
 
 if errors:
     raise SystemExit('\n'.join(errors))

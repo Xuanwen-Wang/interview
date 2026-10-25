@@ -1,0 +1,416 @@
+[
+  {
+    "id": "bytedance-7647081477118085429",
+    "title": "AI异构硬件性能评估专家 - Seed Model",
+    "company": "字节跳动",
+    "locations": [
+      "杭州"
+    ],
+    "employment": "社招 · 正式",
+    "experience": "未注明年限或学历门槛",
+    "sourceId": "J01",
+    "origin": "user",
+    "direction": "硬件性能与软硬协同",
+    "status": "listed",
+    "checked": "2026-10-25",
+    "published": "2026-06-03",
+    "url": "https://jobs.bytedance.com/experienced/position/7647081477118085429/detail",
+    "verification": "2026-10-25 直接读取官方职位接口，发布状态为在线。状态只代表核验时页面发布情况，投递以官网为准。",
+    "summary": "围绕真实 LLM 训推负载评估异构加速卡，把硬件性能、软件栈与业务成本连起来。",
+    "responsibilities": [
+      "建立硬件仿真、性能评估与业务 ROI 体系，为加速卡引入提供依据。",
+      "通过 Benchmark 和负载画像，预测真实模型端到端表现。",
+      "分析架构、软件栈、互联与算子之间的约束。",
+      "综合收益、迁移成本与稳定性风险，支持选型及规模化部署。"
+    ],
+    "requirements": [
+      "在 Linux 下使用 C/C++ 或 Python，能设计实验、分析数据并实现工具。",
+      "体系结构、微架构、HPC、分布式或并行计算中至少有一个熟悉方向。",
+      "了解一种 CPU/GPU/NPU 架构，能解释算力、带宽、缓存、显存和互联指标。",
+      "能从业务负载评估性能、软件成熟度、落地成本与 ROI。"
+    ],
+    "preferred": [
+      "相关计算机、软件、AI、电子或微电子专业优先；JD 未指定学历和年限。",
+      "硬件仿真、性能建模、Benchmark、加速卡评测或适配经历。",
+      "Nsight/Profiler、Roofline、算子画像、通信分析或负载建模方法。",
+      "了解 GPU/NPU 软件栈，包括编译器、算子库、通信库及训推框架。",
+      "ROI/TCO、容量规划、资源效率或选型经验；架构、HPC、系统科研或开源经历。"
+    ],
+    "keywords": [
+      "异构硬件",
+      "性能评估",
+      "编译器",
+      "AI Infra",
+      "Benchmark",
+      "Roofline",
+      "仿真",
+      "ROI",
+      "TCO",
+      "C++",
+      "Python",
+      "GPU",
+      "NPU",
+      "Nsight",
+      "LLM"
+    ],
+    "relevance": {
+      "summary": "这类岗位与编译工作的交集在于解释“模型如何映射到硬件、瓶颈在哪里、软件改动值不值得”。编译器在 JD 中属于加分方向，主职责是性能评估与选型。",
+      "evidence": [
+        "可用现有 518/Triton 案例说明算子、存储、同步和硬件利用率的因果关系。",
+        "可用有固定输入、版本和计时口径的优化案例，展示从仿真证据到业务判断的过程。"
+      ],
+      "prepare": [
+        "补齐从单 kernel 到整模型、集群与 ROI/TCO 的评估方法。",
+        "准备软硬件成熟度、容量、迁移成本与稳定性之间的取舍。",
+        "展示结果时明确 CycleSim、VCS 与硅上测量边界；局部提速不能替代端到端收益。"
+      ]
+    },
+    "chapters": [
+      "performance-model",
+      "compiler-518-hardware",
+      "compiler-real-case",
+      "serving-runtime"
+    ],
+    "jobCode": "A54228",
+    "sourceType": "官方 API 实时核验",
+    "evidenceUrls": [
+      "https://jobs.bytedance.com/api/v1/job/posts/7647081477118085429/"
+    ]
+  },
+  {
+    "title": "机器学习编译优化工程师 - Seed Model",
+    "company": "字节跳动",
+    "experience": "未注明年限",
+    "sourceId": "S01",
+    "checked": "2026-10-25",
+    "url": "https://jobs.bytedance.com/experienced/position/7503827063050635538/detail",
+    "responsibilities": [
+      "规划 AI 编译器方案，设计在线与离线系统的计算图优化链路。",
+      "提升搜索、推荐、广告模型的训练与推理执行效率。",
+      "与算法团队合作，推进算法和系统联合优化。"
+    ],
+    "requirements": [
+      "熟悉 XLA、MLIR、TVM 等开源 ML 编译器源码，并有实际开发经验。",
+      "具备 CPU/GPU 算子开发与性能优化经历。",
+      "C/C++、数据结构和算法基础扎实。",
+      "能够独立分析问题、抽象拆分业务，并与团队合作。"
+    ],
+    "preferred": [
+      "软硬件联合设计经验。",
+      "深入研究过 TensorFlow、PyTorch、MXNet 或自研框架的底层机制。"
+    ],
+    "keywords": [
+      "AI 编译器",
+      "图优化",
+      "XLA",
+      "MLIR",
+      "TVM",
+      "CPU",
+      "GPU",
+      "Kernel",
+      "C++",
+      "训练",
+      "推理"
+    ],
+    "jobCode": "A122003",
+    "sourceType": "官方 API 实时核验",
+    "evidenceUrls": [
+      "https://jobs.bytedance.com/api/v1/job/posts/7503827063050635538/"
+    ],
+    "id": "bytedance-7503827063050635538",
+    "locations": [
+      "北京"
+    ],
+    "employment": "社招 · 正式",
+    "origin": "research",
+    "direction": "编译器与DSL",
+    "status": "listed",
+    "published": "2025-05-13",
+    "verification": "本轮直接读取官方 API，channel_online_status=1。该字段反映核验时发布状态，投递前仍以官网为准。",
+    "summary": "直接做 AI 编译器、全系统图优化与 CPU/GPU 算子。",
+    "relevance": {
+      "summary": "直接覆盖编译器设计、计算图优化与算子性能。",
+      "evidence": [
+        "可用 Triton 后端与真实优化案例，说明图、kernel 和硬件层分别负责什么。"
+      ],
+      "prepare": [
+        "补齐图级优化和框架集成；把手工优化经验归纳成可复用 Pass 与回归机制。"
+      ]
+    },
+    "chapters": [
+      "triton-ir-stack",
+      "mlir-object-model",
+      "rewrite-conversion",
+      "interview-bytedance"
+    ]
+  },
+  {
+    "title": "硬件加速模型编译优化工程师",
+    "company": "字节跳动",
+    "experience": "未注明年限",
+    "sourceId": "S02",
+    "checked": "2026-10-25",
+    "url": "https://jobs.bytedance.com/experienced/position/7404679843633334579/detail",
+    "responsibilities": [
+      "支持业务模型在自研 AI 编译器中的端到端编译与优化。",
+      "解析 PyTorch/TensorFlow 模型，进行图层算子融合和量化编译。",
+      "评估新模型与硬件的适配性，推进软硬件协同优化。"
+    ],
+    "requirements": [
+      "深入理解深度学习框架及软件栈，熟悉 C++、Python。",
+      "具备主动学习、快速解决问题的能力与自驱力。"
+    ],
+    "preferred": [
+      "体系结构、并行计算、编译优化与 MLIR/TVM/XLA 开发经验。",
+      "深入理解 TensorFlow/PyTorch/MXNet，或具备深入的 LLVM/C++ 开发经验。",
+      "AI 加速器量化工具，GPU/FPGA/AI 芯片开发或评测经验。",
+      "大语言模型优化与部署经验。"
+    ],
+    "keywords": [
+      "AI 编译器",
+      "图融合",
+      "量化",
+      "模型部署",
+      "MLIR",
+      "TVM",
+      "XLA",
+      "LLVM",
+      "C++",
+      "Python",
+      "GPU",
+      "FPGA"
+    ],
+    "jobCode": "A245845",
+    "sourceType": "官方 API 实时核验的历史岗位",
+    "evidenceUrls": [
+      "https://jobs.bytedance.com/api/v1/job/posts/7404679843633334579/"
+    ],
+    "id": "bytedance-7404679843633334579",
+    "locations": [
+      "上海"
+    ],
+    "employment": "社招 · 正式",
+    "origin": "research",
+    "direction": "编译器与DSL",
+    "status": "closed",
+    "published": "2024-08-19",
+    "verification": "本轮直接读取官方 API，channel_online_status=0；仅保留为历史岗位要求参考。",
+    "summary": "自研 AI 编译器的模型解析、图融合、量化和硬件适配；已下线，仅作历史参考。",
+    "relevance": {
+      "summary": "直接覆盖框架前端、图优化、量化编译和硬件适配；注意 LLVM/MLIR 等在原 JD 中列为加分项。",
+      "evidence": [
+        "可用模型到后端的链路说明硬件适配、精度和验证如何联动。"
+      ],
+      "prepare": [
+        "保留为历史能力对照；准备量化、图融合、部署与编译器边界，投递应另找当前职位。"
+      ]
+    },
+    "chapters": [
+      "compiler-triton-pipeline",
+      "compiler-codegen-debug",
+      "serving-runtime"
+    ]
+  },
+  {
+    "title": "Deep Learning Performance Software Engineer",
+    "company": "NVIDIA",
+    "experience": "3 年及以上相关工作经验",
+    "sourceId": "S10",
+    "checked": "2026-10-25",
+    "url": "https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/Deep-Learning-Performance-Software-Engineer_JR2013068",
+    "responsibilities": [
+      "开发面向深度学习的编译器和 DSL，以及高性能算子。",
+      "演进编译器架构以适配当代与下一代芯片。",
+      "分析新 AI 工作负载的性能，并与框架集成。"
+    ],
+    "requirements": [
+      "相关专业硕士/博士或同等经验，3 年以上相关工作经历。",
+      "扎实的 C/C++ 编程及软件设计能力。",
+      "具有 XLA、TVM、MLIR、LLVM 及深度学习模型与算法方面的经验。"
+    ],
+    "preferred": [],
+    "keywords": [
+      "性能优化",
+      "AI 编译器",
+      "DSL",
+      "Kernel",
+      "GPU",
+      "C++",
+      "XLA",
+      "TVM",
+      "MLIR",
+      "LLVM"
+    ],
+    "jobCode": "JR2013068",
+    "sourceType": "官方招聘页搜索快照",
+    "evidenceUrls": [
+      "https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/Deep-Learning-Performance-Software-Engineer_JR2013068"
+    ],
+    "id": "nvidia-jr2013068",
+    "locations": [
+      "上海"
+    ],
+    "employment": "全职（未标校招/社招）",
+    "origin": "research",
+    "direction": "算子与性能优化",
+    "status": "unverified",
+    "published": "",
+    "verification": "本轮读取到官方 Workday 页面搜索快照；直接页面未返回正文，官方 CXS API 为 HTTP 403，无法确认当前是否接受申请。",
+    "summary": "标题是性能工程，职责覆盖编译器、DSL、高性能算子和架构适配。",
+    "relevance": {
+      "summary": "标题偏性能工程，职责明确包含编译器、DSL、算子与芯片适配，适合纳入编译相邻岗位。",
+      "evidence": [
+        "现有算子性能归因、编译优化和硬件映射案例能对应其职责。"
+      ],
+      "prepare": [
+        "准备 GPU profiling 与真实 kernel 实验，解释编译改动对性能和可维护性的影响。"
+      ]
+    },
+    "chapters": [
+      "performance-model",
+      "coding-kernels",
+      "compiler-real-case"
+    ]
+  },
+  {
+    "title": "Deep Learning Compiler Engineer - CUDA",
+    "company": "NVIDIA",
+    "experience": "2 年及以上相关工作经验",
+    "sourceId": "S11",
+    "checked": "2026-10-25",
+    "url": "https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/China-Shanghai/Deep-Learning-Compiler-Engineer---CUDA_JR2010731",
+    "responsibilities": [
+      "设计 tile-aware GPU 编程模型的 DSL 和核心编译器。",
+      "优化编译器架构，研究下一代 GPU 并提供相应编译支持。",
+      "分析 AI/LLM 工作负载性能，与 AI/ML 框架集成。"
+    ],
+    "requirements": [
+      "相关专业硕士/博士或同等经验，2 年以上相关工作经历。",
+      "C/C++ 与软件工程能力，以及计算机体系结构基础。",
+      "能够抽象问题并形成系统的解决方法。"
+    ],
+    "preferred": [
+      "原文 desired：MLIR/TVM/Triton/LLVM 等编译器背景。",
+      "ACM 背景；GPU 架构与高性能 Kernel 编程。",
+      "LLM 算法或某类 HPC 领域知识；多 GPU 分布式通信。",
+      "英语口头沟通能力。"
+    ],
+    "keywords": [
+      "cuTile",
+      "DSL",
+      "GPU",
+      "AI 编译器",
+      "CUDA",
+      "MLIR",
+      "TVM",
+      "Triton",
+      "LLVM",
+      "LLM",
+      "多 GPU 通信",
+      "C++"
+    ],
+    "jobCode": "JR2010731",
+    "sourceType": "官方招聘页搜索快照",
+    "evidenceUrls": [
+      "https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/China-Shanghai/Deep-Learning-Compiler-Engineer---CUDA_JR2010731?timeType=5509c0b5959810ac0029943377d47364"
+    ],
+    "id": "nvidia-jr2010731",
+    "locations": [
+      "上海",
+      "北京"
+    ],
+    "employment": "全职（未标校招/社招）",
+    "origin": "research",
+    "direction": "编译器与DSL",
+    "status": "unverified",
+    "published": "",
+    "verification": "本轮官方 Workday 搜索快照列出上海与北京；直接页面未返回正文，CXS API 为 HTTP 403，无法确认当前申请状态。",
+    "summary": "面向 tile-aware GPU 编程的 DSL 与核心编译器。",
+    "relevance": {
+      "summary": "以 tile-aware DSL 和 GPU 核心编译器为主，兼顾硬件演进、Kernel 和分布式 AI 性能。",
+      "evidence": [
+        "可用 tile/layout、资源规划、异步同步和后端代码生成来展示可迁移能力。"
+      ],
+      "prepare": [
+        "补齐 GPU/CUDA 执行模型和多 GPU 通信；区分熟悉框架用法与实际修改编译器的经验。"
+      ]
+    },
+    "chapters": [
+      "triton-ir-stack",
+      "mlir-object-model",
+      "llvm-mid-backend",
+      "coding-kernels"
+    ]
+  },
+  {
+    "title": "Senior AI Compiler Engineer, MLIR",
+    "company": "NVIDIA",
+    "experience": "3 年及以上相关工作或研究经验",
+    "sourceId": "S12",
+    "checked": "2026-10-25",
+    "url": "https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/US-CA-Santa-Clara/Senior-AI-Compiler-Engineer--MLIR_JR2016844",
+    "responsibilities": [
+      "开发基于 MLIR 的图表示与优化，支持新模型及新 GPU 架构。",
+      "设计 API/Dialect、编译优化和神经网络 Kernel 生成。",
+      "兼顾推理性能、编译速度、内存占用及 AOT/JIT 易用性。"
+    ],
+    "requirements": [
+      "相关专业本科或以上学位，或同等经验；3 年以上性能分析及编译优化工作/研究经历。",
+      "MLIR、XLA、LLVM 等编译技术经验。",
+      "C/C++、Python 与软件设计能力，涵盖调试、性能分析和测试。",
+      "能够独立界定项目目标与范围、推动研发，并进行团队合作。"
+    ],
+    "preferred": [
+      "了解深度学习模型、算法与 PyTorch/JAX。",
+      "高性能且编译快速的 GPU Kernel 生成经验。",
+      "GPU 架构及 CUDA/OpenCL 编程；指导初级工程师或实习生经历。"
+    ],
+    "keywords": [
+      "MLIR",
+      "图优化",
+      "Dialect",
+      "代码生成",
+      "AI 编译器",
+      "AOT",
+      "JIT",
+      "LLVM",
+      "XLA",
+      "C++",
+      "Python",
+      "CUDA"
+    ],
+    "jobCode": "JR2016844",
+    "sourceType": "承接 S12 官方历史记录，并以 NVIDIA 雇主 LinkedIn 发布搜索快照核对要求",
+    "evidenceUrls": [
+      "https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/US-CA-Santa-Clara/Senior-AI-Compiler-Engineer--MLIR_JR2016844",
+      "https://www.linkedin.com/jobs/view/senior-ai-compiler-engineer-mlir-at-nvidia-4404495566"
+    ],
+    "id": "nvidia-jr2016844",
+    "locations": [
+      "美国（历史快照，城市待复核）"
+    ],
+    "employment": "全职（历史发布）",
+    "origin": "research",
+    "direction": "编译器与DSL",
+    "status": "unverified",
+    "published": "",
+    "verification": "本轮 Workday 未取得正文且 CXS API 为 HTTP 403；对应 JR 编号的 NVIDIA LinkedIn 搜索快照写明不再接受申请，打开后跳转 expired_jd_redirect。只能确认该 LinkedIn 发布已过期，不能据此推断所有官方渠道状态。",
+    "summary": "基于 MLIR 的推理图表示、优化与 Kernel 生成；美国历史岗位参考。",
+    "relevance": {
+      "summary": "覆盖图层 IR/Dialect 到 Kernel 生成的完整推理编译器链路；美国岗位，可作为技能对照。",
+      "evidence": [
+        "可用 IR 合法性、Pass 组合与性能回归案例解释编译器系统设计。"
+      ],
+      "prepare": [
+        "准备 Dialect/API 设计，以及运行性能、编译时间、内存之间的取舍。",
+        "这是美国历史岗位的能力对照；当前可申请状态及工作地点须另行确认。"
+      ]
+    },
+    "chapters": [
+      "mlir-object-model",
+      "rewrite-conversion",
+      "pass-analysis",
+      "compiler-codegen-debug"
+    ]
+  }
+]

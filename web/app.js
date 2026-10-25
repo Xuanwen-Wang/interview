@@ -54,7 +54,7 @@ function save() {
 }
 const questions = CHAPTERS.flatMap(c => c.questions.map(q => ({...q, chapter: c.id, title: c.title, part: c.part, key: c.id + ':' + (q.id || q.q)})));
 const sources = CHAPTERS.flatMap(c => c.sources.map(s => ({...s, chapter: c.id, chapterTitle: c.title})));
-const searchIndex = CHAPTERS.flatMap(c => [{chapter: c.id, title: c.title, subtitle: c.part, body: c.lead + ' ' + c.tags.join(' '), link: '#chapter/' + c.id}, ...c.sections.map(s => ({chapter:c.id,title:s.title,subtitle:c.title,body:plain(s.html),link:'#chapter/'+c.id+'/'+s.id})), ...c.questions.map(q => ({chapter:c.id,title:q.q,subtitle:'面试追问 · '+c.title,body:q.a+' '+q.followup,link:'#chapter/'+c.id+'/questions'}))]);
+const searchIndex = CHAPTERS.flatMap(c => [{chapter: c.id, title: c.title, subtitle: c.part, body: c.lead + ' ' + c.tags.join(' '), link: '#chapter/' + c.id}, ...c.sections.map(s => ({chapter:c.id,title:s.title,subtitle:c.title,body:plain(s.html),link:'#chapter/'+c.id+'/'+s.id})), ...c.questions.map(q => ({chapter:c.id,title:q.q,subtitle:'面试追问 · '+c.title,body:q.a+' '+q.followup,link:'#chapter/'+c.id+'/questions'}))]).concat(jobSearchEntries());
 function progress() {
  const n = CHAPTERS.filter(c => state.read.includes(c.id)).length;
  $('#progress-value').textContent = Math.round(n / CHAPTERS.length * 100) + '%';
@@ -165,28 +165,30 @@ function render(){
  renderedChapterId=null;clearInterval(practiceTimer);practiceTimer=null;sectionObserver?.disconnect();
  setMenu(false);
  renderNavigation(route,id);
- $$('.main-nav a').forEach(a=>a.classList.toggle('active',a.dataset.nav===route));
- const labels={home:'知识地图',catalog:'全站目录',companies:'公司与来源索引',lab:'架构实验室',practice:'面试练习',sources:'证据与来源',glossary:'术语速查',notebook:'个人笔记'};
+ $$('.main-nav a').forEach(a=>a.classList.toggle('active',a.dataset.nav===(route==='job'?'jobs':route)));
+ const labels={home:'知识地图',catalog:'全站目录',jobs:'岗位收藏',companies:'公司与来源索引',lab:'架构实验室',practice:'面试练习',sources:'证据与来源',glossary:'术语速查',notebook:'个人笔记'};
  const context=chapterContext(id), module=MODULES.find(m=>m.id===id), company=COMPANIES.find(c=>c.id===id);
  let title=labels[route]||'页面';
  let trail='<a href="#home">FIELD NOTES</a>';
  if(route==='chapter'&&chapterMap.has(id)){title=chapterMap.get(id).title;if(context.module)trail+=`<span>/</span><a href="#module/${context.module.id}">${esc(context.module.title)}</a>`;}
  if(route==='module')title=module?.title||'主题';
  if(route==='company')title=company?.title||'公司';
+ if(route==='job'){title=JOBS.find(job=>job.id===id)?.title||'岗位';trail+='<span>/</span><a href="#jobs">岗位收藏</a>';}
  $('#breadcrumb').innerHTML=trail+'<span>/</span>'+esc(title);
  document.title=title+' · AI Compiler Field Notes';
  if(route==='chapter')renderChapter(id,section);
  else if(route==='module')renderModule(id,section);
  else if(route==='company')renderCompanies(id);
- else({home:renderHome,catalog:renderCatalog,companies:()=>renderCompanies(),lab:renderLab,practice:renderPractice,sources:renderSources,glossary:renderGlossary,notebook:renderNotebook}[route]||renderNotFound)();
+ else if(route==='job')renderJob(id);
+ else({home:renderHome,catalog:renderCatalog,jobs:renderJobs,companies:()=>renderCompanies(),lab:renderLab,practice:renderPractice,sources:renderSources,glossary:renderGlossary,notebook:renderNotebook}[route]||renderNotFound)();
  if(!section)window.scrollTo({top:0,behavior:'instant'});
  $('#main').focus({preventScroll:true});
 }
 function search(){
  const q=$('#search-input').value.trim().toLowerCase();
- if(!q){$('#search-results').innerHTML='<div class="empty">搜索章节、正文和面试问答。支持多个关键词，例如“FP8 精度”。</div>';return;}
+ if(!q){$('#search-results').innerHTML='<div class="empty">搜索章节、正文、面试问答和岗位要求。支持多个关键词，例如“MLIR 编译器”。</div>';return;}
  const words=q.split(/\s+/);const results=searchIndex.map(x=>({...x,score:words.reduce((n,w)=>n+(x.title.toLowerCase().includes(w)?5:0)+(x.body.toLowerCase().includes(w)?1:0),0)})).filter(x=>words.every(w=>(x.title+' '+x.subtitle+' '+x.body).toLowerCase().includes(w))).sort((a,b)=>b.score-a.score).slice(0,30);
- $('#search-results').innerHTML=results.map(r=>{const at=r.body.toLowerCase().indexOf(words[0]);const excerpt=r.body.slice(Math.max(0,at-35),Math.max(0,at-35)+155);return `<a class="search-result" href="${r.link}"><small>${esc(r.subtitle)}</small><strong>${esc(r.title)}</strong><p>${esc(excerpt)}…</p></a>`;}).join('')||'<div class="empty">没有匹配内容。试试更短的术语，或它的英文名。</div>';
+ $('#search-results').innerHTML=results.map(r=>{const at=r.body.toLowerCase().indexOf(words[0]);const excerpt=r.body.slice(Math.max(0,at-35),Math.max(0,at-35)+155);return `<a class="search-result" href="${esc(r.link)}"><small>${esc(r.subtitle)}</small><strong>${esc(r.title)}</strong><p>${esc(excerpt)}…</p></a>`;}).join('')||'<div class="empty">没有匹配内容。试试更短的术语，或它的英文名。</div>';
  $$('.search-result').forEach(a=>a.onclick=()=>$('#search-dialog').close());
 }
 function openSearch(){$('#search-dialog').showModal();search();$('#search-input').focus();}
