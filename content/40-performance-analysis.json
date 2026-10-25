@@ -1,23 +1,31 @@
 [
   {
     "id": "performance-analysis",
-    "title": "性能分析实战：Nsight、Roofline、通信与模型负载",
+    "title": "性能与推理系统：指标、H200、Nsight 与 Roofline",
     "part": "性能分析方法",
     "order": 39.5,
-    "subtitle": "从一份 trace 走到算子画像、资源预算和端到端证据",
-    "minutes": 150,
+    "subtitle": "从 TPS 和 step time，一直追到 SM、机器指令与可验证的业务收益",
+    "minutes": 260,
     "level": "系统深入",
     "tags": [
+      "TPS",
+      "TTFT",
+      "TPOT",
+      "step time",
+      "H200",
+      "SM",
+      "CUDA stream",
       "Nsight Systems",
       "Nsight Compute",
       "PyTorch Profiler",
       "Roofline",
       "算子画像",
       "NCCL",
-      "负载建模"
+      "负载建模",
+      "Zeus Viewer"
     ],
-    "lead": "把面试要求中的六组关键词连成一条排查路径：先定义慢在哪里，再从时间线锁定关键路径，给算子建立画像，用算力与数据流量解释上界，最后把通信、并行策略和请求分布接回业务指标。配有命令、推导、三个可调实验和逐层追问。",
-    "readingLabel": "沿一次性能调查读完：观测 → 画像 → 建模 → 实验 → 验收",
+    "lead": "先把TPS、请求数、每卡并发、TTFT、TPOT与step time算清，再拆解组内看板的加权和时间口径。沿H200的SM、warp、stream学习Nsight与利用率，深化Roofline、访存、异步流水、通信与负载模型，最后把Zeus Viewer经验接到算子和编译优化。含四个交互实验区、原创图解、命令模板与逐层追问。",
+    "readingLabel": "从推理指标读到优化证据：计数 → 执行 → 观测 → 建模 → 验收",
     "readingStageLabel": "分析阶段",
     "portableReading": {
       "file": "performance.html",
@@ -26,9 +34,35 @@
     },
     "readingStages": [
       {
+        "id": "perf-stage-metrics",
+        "title": "先读懂推理指标",
+        "summary": "建立请求、token、时间与物理卡的账本，区分用户生成节奏和系统产量。",
+        "sections": [
+          "inference-metric-ledger",
+          "inference-tps",
+          "inference-latency-timeline",
+          "inference-concurrency-cards"
+        ]
+      },
+      {
+        "id": "perf-stage-step",
+        "title": "算清 step 与看板口径",
+        "summary": "动态产出、压测统计、交互复算，再拆开组件加权、慢rank与kernel跨度。",
+        "sections": [
+          "inference-step-time",
+          "inference-variable-steps",
+          "inference-window-load",
+          "inference-statistics-goodput",
+          "inference-metrics-lab",
+          "board-reading",
+          "board-aggregation",
+          "kernel-time-algebra"
+        ]
+      },
+      {
         "id": "perf-stage-map",
         "title": "建立分析地图",
-        "summary": "先辨认工具与方法，再约定业务指标、时间边界与证据层级。",
+        "summary": "辨认工具与方法，约定观测边界与证据层级。",
         "sections": [
           "perf-map",
           "perf-evidence",
@@ -36,33 +70,62 @@
         ]
       },
       {
+        "id": "perf-stage-gpu",
+        "title": "理解 H200 执行层级",
+        "summary": "从SM、warp、stream出发，读懂利用率与驻留、发射的不同分母。",
+        "sections": [
+          "h200-spec-boundary",
+          "cuda-execution-map",
+          "cuda-stream-map",
+          "h200-utilization-denominators",
+          "h200-occupancy-scheduler"
+        ]
+      },
+      {
         "id": "perf-stage-tools",
         "title": "从时间线到画像",
-        "summary": "动手计时，依次使用框架 profiler、系统 trace、kernel 指标，形成算子档案。",
+        "summary": "框架Profiler、Systems、Compute逐层定位，并用H200实验方案组织采集。",
         "sections": [
           "cuda-timing",
           "torch-profiler",
           "nsight-systems",
           "nsight-compute",
-          "operator-portrait"
+          "operator-portrait",
+          "h200-profiling-playbook"
         ]
       },
       {
         "id": "perf-stage-roofline",
-        "title": "算出资源上界",
-        "summary": "从 FLOPs 和 bytes 推导 Roofline；手算一个 GEMM，再改变参数观察瓶颈。",
+        "title": "从资源屋顶走到实现",
+        "summary": "手算并调整Roofline，进一步看多级访存、tile、尾波与Hopper异步流水。",
         "sections": [
           "roofline-foundation",
           "roofline-bytes",
           "roofline-example",
           "roofline-lab",
-          "roofline-triage"
+          "roofline-triage",
+          "roofline-movement",
+          "roofline-hierarchy",
+          "h200-memory-forensics",
+          "h200-tiles-waves",
+          "hopper-async-pipeline"
+        ]
+      },
+      {
+        "id": "perf-stage-viewer",
+        "title": "迁移 Zeus Viewer 经验",
+        "summary": "对照已核对版本的能力，把busy、MAC利用率与GPU硬件观测分开。",
+        "sections": [
+          "zeus-to-nsight",
+          "viewer-metric-denominators",
+          "viewer-data-provenance",
+          "viewer-to-gpu-workflow"
         ]
       },
       {
         "id": "perf-stage-communication",
         "title": "解释多卡等待",
-        "summary": "区分 collective、归一化带宽、到达偏斜与传输成本，检验重叠的净收益。",
+        "summary": "区分collective、归一化带宽、到达偏斜与传输成本，检验重叠净收益。",
         "sections": [
           "communication-contract",
           "communication-bandwidth",
@@ -74,7 +137,7 @@
       {
         "id": "perf-stage-workload",
         "title": "建立模型负载表",
-        "summary": "按 prefill/decode 拆 FLOPs、KV 与权重，加入并行、路由和真实请求分布。",
+        "summary": "按prefill/decode拆FLOPs、KV与权重，加入并行、路由和真实请求分布。",
         "sections": [
           "workload-contract",
           "workload-flops",
@@ -86,20 +149,83 @@
       },
       {
         "id": "perf-stage-practice",
-        "title": "实验与面试表达",
-        "summary": "把局部证据还原为端到端收益，用完整实验卡和追问检验理解。",
+        "title": "交付专家级证据",
+        "summary": "连接语义、IR、机器代码与资源证据，用完整实验和面试追问检验判断。",
         "sections": [
+          "compiler-performance-contract",
+          "compiler-performance-evidence",
           "diagnosis-case",
           "perf-experiment",
+          "expert-experiment-ladder",
           "perf-interview"
         ]
       }
     ],
     "sections": [
       {
+        "id": "inference-metric-ledger",
+        "title": "先建一本账：token、request、card 和 time 各数什么",
+        "html": "<p>看到“230 TPS”先别判断快慢。把单位补完整：<strong>是输入还是输出 token，每个请求还是所有请求，每张卡还是整个部署，用哪段时间作分母？</strong>这四件事没有讲清楚，同一个系统就能同时得到很多不同且都算对的数字。</p>\n<table><thead><tr><th>账本</th><th>建议记录</th><th>容易混淆的地方</th></tr></thead><tbody>\n<tr><td>Token</td><td>每请求输入 I<sub>r</sub>、实际输出 O<sub>r</sub>、缓存命中输入、实际新计算输入、接受/拒绝的候选 token</td><td>token 不是汉字或单词；不同 tokenizer、聊天模板、特殊 token、EOS、推理内容的计数策略可能不同</td></tr>\n<tr><td>Request</td><td>唯一业务请求 ID、每次尝试 ID、发送/到达/完成时间、状态、输出长度</td><td>一次用户请求可能重试多次；一次请求也可能产生多个候选序列或多个流式消息</td></tr>\n<tr><td>Card / rank</td><td>参与服务的物理卡数 G、并行组、独立副本数、rank 到设备映射</td><td>一个 rank 是进程组中的身份，不必然是独立请求副本；同一请求可能跨多卡计算</td></tr>\n<tr><td>Time</td><td>明确起点、终点、是否包括排队/prefill/通信/采样/网络、测量窗口 T</td><td>某层 kernel 时间、一次模型前向、一次调度迭代和客户端等待不是同一段时间</td></tr>\n</tbody></table>\n<h3>贯穿例子：先规定一个完整请求集合</h3>\n<p><strong>纯教学构造：</strong>两个请求都成功结束。A 输入 1000 token、输出 20 token；B 输入 3000 token、输出 80 token。计时从这组请求第一次发出，到最后一个响应完成，共 2 秒；没有重试或遗漏请求。此时账本为：2 个成功请求、4000 个输入 token、100 个输出 token、2 秒。下面所有整组吞吐都从这本账算，不从某个局部 kernel 反推。</p>\n<p>最稳妥的报告会同时给出原始计数与比率：<code>successful requests / total input tokens / total output tokens / benchmark duration / GPU count</code>。这样读者能复算，字段换名也不影响理解。实际服务工具还可能区分原始 token 计数与重新 tokenize 后的计数；跨工具比较前应选定同一种计数来源。</p>"
+      },
+      {
+        "id": "inference-tps",
+        "title": "TPS 至少有五种口径：系统产量和一个人的生成速度",
+        "html": "<p>对上节同一完整成功请求集合，T 用秒计，且各项都采用相同边界：</p>\n<pre><code>Input TPS  = Σ I_r / T\nOutput TPS = Σ O_r / T\nTotal TPS  = Σ (I_r + O_r) / T\nRequest throughput = N_success / T                 [request/s]\nOutput TPS per card = Σ O_r / (T × G)              [token/s/card]</code></pre>\n<p>教学例子的结果依次是 <strong>2000 input token/s、50 output token/s、2050 total token/s、1 request/s</strong>。Total TPS 把两种工作量相加，方便描述输入输出规模，但 1 个输入 token 与 1 个输出 token 的成本不同：前者常在 prefill 中批量处理，后者要随上下文持续解码。不能看到 total TPS 较高，就认为用户看到回答的速度同样高。</p>\n<h3>单请求也有两种常见“速度”</h3>\n<pre><code>请求整体输出速度 = O_r / E2E_r\n请求首 token 后的平均生成速度 = (O_r − 1) / (t_last − t_first)\n                              = 1 / TPOT_r         [O_r &gt; 1]</code></pre>\n<p>第一种把等待首 token 的时间也摊进去；第二种更接近已经开始输出后，用户感受到的平均生成节奏。系统 Output TPS 则汇总所有请求的产量。多个人同时生成，即使每个人都变慢，系统每秒总产量仍可能增加；这正是吞吐和交互体验的权衡。</p>\n<p><strong>什么时候可以从 TPS 换成 request/s？</strong>只有在分子来自同一完整请求集合、时间窗口相同、输出长度也用这组请求的实际算术均值时，才有恒等式 <code>Output TPS / mean(O_r) = N_success / T</code>。不能用某个稳态 token 窗口、配置的最大输出长度或另一组请求的均值混算，也不能拿“首 token 后 TPS”直接套这个关系。</p>\n<p><a href=\"https://github.com/vllm-project/vllm/blob/24324ef0f667c633ee9bbb9412343d829f7e6d4e/docs/benchmarking/cli.md\">vLLM benchmark 示例</a>分别报告 request、output 和 total throughput；<a href=\"https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/perf_analyzer/genai-perf/README.html#metrics\">GenAI-Perf 指标表</a>还单列每用户输出速度。名称相近并不代表分母相同。</p>"
+      },
+      {
+        "id": "inference-latency-timeline",
+        "title": "一条请求的时序：TTFT、ITL、TPOT、E2E 怎么对应",
+        "html": "<p>先看一条没有多 token 合包的教学请求：客户端在 0 ms 发出，5 个输出 token 分别于 180、220、280、320、380 ms 到达，最后一个 token 到达也视作请求结束。下图只表示这些客户端事件；首 token 前内部阶段的宽度是示意，没有测量含义。</p>\n<figure class=\"diagram\"><svg viewBox=\"0 0 760 290\" role=\"img\" aria-label=\"教学请求时间线：0毫秒发送，180毫秒首token，随后220、280、320、380毫秒收到token；TTFT为180毫秒，E2E为380毫秒，4个间隔为40、60、40、60毫秒。\">\n<g font-family=\"sans-serif\" font-size=\"15\" fill=\"#234239\"><line x1=\"60\" y1=\"130\" x2=\"710\" y2=\"130\" stroke=\"#426558\" stroke-width=\"2\"/>\n<rect x=\"60\" y=\"55\" width=\"105\" height=\"37\" rx=\"5\" fill=\"#e5e8ed\"/><text x=\"112\" y=\"79\" text-anchor=\"middle\">网络 / 排队</text><rect x=\"170\" y=\"55\" width=\"175\" height=\"37\" rx=\"5\" fill=\"#dce8d5\"/><text x=\"257\" y=\"79\" text-anchor=\"middle\">prefill / 首次采样</text>\n<g stroke=\"#426558\"><line x1=\"60\" y1=\"110\" x2=\"60\" y2=\"145\"/><line x1=\"360\" y1=\"110\" x2=\"360\" y2=\"145\"/><line x1=\"426.7\" y1=\"110\" x2=\"426.7\" y2=\"145\"/><line x1=\"526.7\" y1=\"110\" x2=\"526.7\" y2=\"145\"/><line x1=\"593.3\" y1=\"110\" x2=\"593.3\" y2=\"145\"/><line x1=\"693.3\" y1=\"110\" x2=\"693.3\" y2=\"145\"/></g>\n<g fill=\"#426558\"><circle cx=\"360\" cy=\"130\" r=\"5\"/><circle cx=\"426.7\" cy=\"130\" r=\"5\"/><circle cx=\"526.7\" cy=\"130\" r=\"5\"/><circle cx=\"593.3\" cy=\"130\" r=\"5\"/><circle cx=\"693.3\" cy=\"130\" r=\"5\"/></g>\n<text x=\"60\" y=\"169\" text-anchor=\"middle\">0</text><text x=\"360\" y=\"169\" text-anchor=\"middle\">180</text><text x=\"426.7\" y=\"169\" text-anchor=\"middle\">220</text><text x=\"526.7\" y=\"169\" text-anchor=\"middle\">280</text><text x=\"593.3\" y=\"169\" text-anchor=\"middle\">320</text><text x=\"693.3\" y=\"169\" text-anchor=\"middle\">380 ms</text>\n<text x=\"360\" y=\"105\" text-anchor=\"middle\">首 token</text><text x=\"693.3\" y=\"105\" text-anchor=\"middle\">末 token</text>\n<text x=\"393\" y=\"205\" text-anchor=\"middle\">40</text><text x=\"477\" y=\"205\" text-anchor=\"middle\">60</text><text x=\"560\" y=\"205\" text-anchor=\"middle\">40</text><text x=\"643\" y=\"205\" text-anchor=\"middle\">60 ms</text>\n<line x1=\"60\" y1=\"232\" x2=\"360\" y2=\"232\" stroke=\"#5b7e91\" stroke-width=\"3\"/><text x=\"210\" y=\"256\" text-anchor=\"middle\">TTFT = 180 ms</text><line x1=\"360\" y1=\"232\" x2=\"693.3\" y2=\"232\" stroke=\"#ad784d\" stroke-width=\"3\"/><text x=\"526\" y=\"256\" text-anchor=\"middle\">后续生成 = 200 ms</text></g></svg><figcaption>纯教学时序；横轴事件按时间比例定位，内部首 token 前阶段仅为示意。</figcaption></figure>\n<table><thead><tr><th>指标</th><th>如何算</th><th>这个例子</th></tr></thead><tbody>\n<tr><td>TTFT</td><td>首输出到达 − 请求发送</td><td>180 ms</td></tr>\n<tr><td>E2E / request latency</td><td>最终完成 − 请求发送</td><td>380 ms</td></tr>\n<tr><td>ITL 序列</td><td>逐个相邻输出间隔</td><td>40、60、40、60 ms</td></tr>\n<tr><td>TPOT</td><td>(末 token − 首 token) / (O−1)</td><td>200 / 4 = 50 ms/token</td></tr>\n<tr><td>首 token 后的速度</td><td>(O−1) / 后续生成秒数</td><td>4 / 0.2 = 20 token/s</td></tr>\n<tr><td>请求整体输出速度</td><td>O / E2E 秒数</td><td>5 / 0.38 ≈ 13.16 token/s</td></tr>\n</tbody></table>\n<p>同一请求、同一结束边界下，<code>E2E = TTFT + (O−1)×TPOT</code>。真实接口的结束消息若晚于末 token，应把这段终止尾部另记，或明确工具把它分配进哪个指标。非流式请求只能直接观察最终响应；不能把服务端内部首 token 时间与客户端 TTFT 混用。只有 1 个输出 token 时，没有首 token 后的间隔；数学上 TPOT 无定义，工具可能填 0 或跳过，要保留这个约定。</p>\n<h3>ITL 的工具定义不完全统一</h3>\n<p>核对的 vLLM 版本把 ITL 作为相邻流式输出事件的时间差；投机解码一次返回多个 token 时，同一事件内不会补上多个零间隔。GenAI-Perf 则将相邻响应间隔除以后一个响应所含生成 token 数。因而同一份分块输出，两者 ITL 分布可能不同。TPOT 是每请求摊销量，也不等于所有请求 ITL 样本的统一平均。对比前应记录工具版本与“事件还是 token”的分母。参见 <a href=\"https://github.com/vllm-project/vllm/blob/24324ef0f667c633ee9bbb9412343d829f7e6d4e/docs/benchmarking/cli.md\">vLLM 定义</a>与 <a href=\"https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/perf_analyzer/genai-perf/README.html#metrics\">GenAI-Perf 定义</a>。</p>"
+      },
+      {
+        "id": "inference-concurrency-cards",
+        "title": "“多少请求”不是一个数：并发、batch、active sequences 与每卡归一",
+        "html": "<table><thead><tr><th>名字</th><th>本文的明确含义</th><th>为什么不等价</th></tr></thead><tbody>\n<tr><td>总请求数 N</td><td>这次实验发出多少请求</td><td>1000 个请求可以串行发，也可以同时发</td></tr>\n<tr><td>并发 C(t)</td><td>某个边界内尚未结束的请求数</td><td>可能包含排队和 prefill，不代表这些请求本轮都在 GPU 上运行</td></tr>\n<tr><td>最大并发 C<sub>max</sub></td><td>客户端或服务端允许的上限</td><td>上限是配置；实际平均并发可能远低于它</td></tr>\n<tr><td>Active / running sequences</td><td>按框架定义，目前活跃或驻留的序列</td><td>被抢占、等待资源、分支采样时，与请求数和本轮调度数关系都可改变</td></tr>\n<tr><td>Decode batch B<sub>i</sub></td><td>第 i 轮实际参与普通 decode 的序列数</td><td>continuous batching 让 B 随进入、退出与调度变化</td></tr>\n<tr><td>Scheduled token count</td><td>本轮实际提交的新 token 位置总数</td><td>prefill chunk 和投机验证都可能让它远大于序列数</td></tr>\n<tr><td>c<sub>phys</sub>：物理卡归一并发</td><td>同一模型实例的全局活跃唯一请求数 ÷ 该实例物理卡数</td><td>这是跨设备资源归一量；不能重复计算 TP 各 rank 看见的同一请求</td></tr>\n<tr><td>c<sub>local</sub>：DP rank 局部并发</td><td>某个 DP rank 所承担的业务请求数；项目可能也把它标作 req/card</td><td>与物理卡归一并发是否相等，取决于 rank/GPU 映射、并行组和统计范围</td></tr>\n</tbody></table>\n<h3>TP/EP 的 rank 不是独立产出同一个答案的用户</h3>\n<p>TP 把同一层的计算切到多卡，EP 把专家放到不同 rank；这些卡可以共同服务同一批请求。DP 副本通常处理不同请求，才可以在同一时间窗口把各副本的<strong>唯一输出</strong>相加。物理卡总数以实际部署为准，不能不看进程组共享关系就机械相乘 TP×EP×DP。</p>\n<p><strong>纯教学例子：</strong>两个独立副本，每个副本用 4 张 TP 卡、每轮处理 16 条唯一 decode 序列，均为 20 ms/轮且每序列产出 1 个 token。整个部署有 8 卡、32 条唯一序列，系统 TPS = 32/0.020 = 1600，归一为 200 token/s/card；单序列稳态速度是 50 token/s。每个 TP rank 都看到的 16 条序列不能变成“每卡独立服务 16 请求”，否则吞吐会被重复计算 4 倍。</p>\n<p>为了比较物理资源效率，可以自行定义 <strong>c<sub>phys</sub> = 同一模型实例的全局活跃唯一请求数 / 该实例使用的物理卡数 G</strong>。这是归一量，不表示一个 request 只在一张卡上执行；TP 中同一个请求通常要跨多卡合作。只有报告采用这一全局物理卡归一口径，且满足均匀稳态条件时，才使用 <code>物理卡归一 TPS = c_phys/t_step</code>。若原值是 rank 局部业务并发，转换成物理卡效率前要还原唯一输出与设备拓扑；不能只凭 req/card 这几个字决定乘除 TP 或 DP。这种物理卡归一 TPS 是资源效率指标，不证明单张卡可以独立放下和运行这个模型。弹性扩缩容时，可改用 <code>输出 token / ∫G(t)dt</code>，单位仍是 token/s/card，并说明是否把空闲但已分配的卡计入。</p>\n<p><strong>本页引用的用户旧截图沿用原看板的 DP-local 命名：</strong>其 req/card 表示每个 DP rank 的局部业务并发，不宣称它采用上面的 c<sub>phys</sub> 定义。按原看板口径复算时不额外乘除 DP/TP 数；与其他报告按物理 GPU 归一的 TPS/card 比较前，再核对拓扑与分母。算子张量的 local T 是行数，还可能经过 TP 分片，不能直接改称请求数。</p>\n<p>客户端发压的并发与服务器动态 batch 是不同层级；NVIDIA Perf Analyzer 的并发模式控制在途请求，而非直接设置模型内部 batch。参考 <a href=\"https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/perf_analyzer/docs/inference_load_modes.html\">Inference Load Modes</a>。</p>"
+      },
+      {
+        "id": "inference-step-time",
+        "title": "Step time 到底是哪一步？从模型一轮到客户端一轮",
+        "html": "<p><code>step time</code> 没有跨系统统一的默认含义。读报告时应让作者把“一步做了什么”展开，而不只问单位是不是毫秒。</p>\n<table><thead><tr><th>层级</th><th>一步可能包含什么</th><th>不能直接推断什么</th></tr></thead><tbody>\n<tr><td>Kernel</td><td>一次矩阵乘或一个融合内核</td><td>不是整个模型生成一个 token 的时间</td></tr>\n<tr><td>模型 forward</td><td>选定 token 位置通过相关模型层；是否含 embedding、head、采样要注明</td><td>不自动包括调度、等待、网络</td></tr>\n<tr><td>普通 decode iteration</td><td>一批被调度序列推进一轮，常见情况下各增加一个接受的输出 token</td><td>不自动等于一次请求；请求通常要多轮才结束</td></tr>\n<tr><td>调度 iteration</td><td>选请求、分配 token budget、可能混合 prefill/decode、执行并处理输出</td><td>不一定每条序列都输出一个 token，也不一定只有一次设备调用</td></tr>\n<tr><td>训练 step</td><td>前向、反向、梯度同步、优化器更新等；梯度累积时还包含多个 microbatch</td><td>它的 tokens/s 与在线生成速度不是同一指标</td></tr>\n<tr><td>客户端请求</td><td>发出请求到完成，含 TTFT 和多轮生成</td><td>不等于模型单轮时间乘一个固定输出长度</td></tr>\n</tbody></table>\n<h3>B/t 什么时候成立</h3>\n<p>限定普通 decode：同一批 B 条序列每轮都被执行、每条每轮恰好产出 1 个计入指标的 token、整轮总时间为 t 秒、没有把额外间隙删掉，则一轮产出 B 个 token，<code>系统 decode TPS = B/t</code>，每条序列的轮间稳态速度约为 <code>1/t</code>。其中 t 应覆盖你要报告的那一层；只取设备模型时间，得到的就是模型侧条件吞吐。</p>\n<h3>用户截图记录：230.10 与 28.76 为什么同时成立</h3>\n<p>以下只复算用户提供的<strong>旧截图</strong>，这些数字不代表当前看板快照；<strong>不是本页新增实测，也不据此推断芯片型号、测试日期或服务部署</strong>。截图显示 history = 8192，表内 c 标为 req/card；原看板将其定义为每个 DP rank 的局部业务并发。这里按每路每步 1 个 token 和原始模型步时直接复算，不再乘除 DP/TP 数，也不把 c 替换成全局请求数除以物理卡数。页脚说明模型时间来自 45 层组件的加权合计，并含 Embedding 与 Head/Sampler。因此 t 是该记录的估算模型单步时间，不能直接称作客户端端到端延迟。</p>\n<table><thead><tr><th>截图记录</th><th>按原看板 DP-local req/card 约定复算</th><th>同轮单请求稳态速度</th></tr></thead><tbody>\n<tr><td>c = 8 req/card，t = 34.767 ms</td><td>8 × 1000 / 34.767 = <strong>230.10 token/s/card</strong></td><td>1000 / 34.767 = <strong>28.76 token/s</strong></td></tr>\n<tr><td>c = 1 req/card，t = 11.196 ms</td><td>1 × 1000 / 11.196 = <strong>89.32 token/s/card</strong></td><td>1000 / 11.196 = <strong>89.32 token/s</strong></td></tr>\n</tbody></table>\n<p>第一行是“该 DP-local 口径下 8 路共同产量”与“一路生成节奏”的区别，230.10 不能解释成每个用户都以这个速度出字。增大 c 后模型 step 变长，但每步产出更多 token，因此原看板标记的 TPS/card 可以上升、单请求生成速度却下降。跨部署比较时仍须对齐 DP rank 与物理卡的关系。这里还没有计入真实请求的 prefill、排队、动态 batch、网络或服务间隙；固定 history 的结果也不能证明完整生成过程中步时恒定。</p>"
+      },
+      {
+        "id": "inference-variable-steps",
+        "title": "动态 batch、提前结束与投机解码：用实际产出记每一步",
+        "html": "<p>真实服务里 B 会变化，step 时间也会变化。把第 i 个连续观测区间的持续时间记为 Δt<sub>i</sub>，期间真正接受且计入指标的输出数记为 n<sub>i</sub>。包含区间内空闲和等待后，应计算：</p>\n<pre><code>窗口 Output TPS = Σ n_i / Σ Δt_i\n                 = 按区间时长加权的平均速率\n不能一般替换为 mean(n_i / Δt_i)</code></pre>\n<p><strong>纯教学构造：</strong>观察 3 个连续 decode 轮次；D 的 prefill 早已完成，第三轮才开始被调度。示例的结束标记发生在最后一个已计数 token 后，实际 EOS 是否计数仍须按实验约定处理。</p>\n<table><thead><tr><th>轮次</th><th>执行序列</th><th>本轮时间</th><th>计入输出</th><th>之后变化</th></tr></thead><tbody>\n<tr><td>1</td><td>A、B、C</td><td>20 ms</td><td>3 token</td><td>A 结束</td></tr>\n<tr><td>2</td><td>B、C</td><td>30 ms</td><td>2 token</td><td>C 结束</td></tr>\n<tr><td>3</td><td>B、D</td><td>10 ms</td><td>2 token</td><td>继续运行</td></tr>\n</tbody></table>\n<p>窗口吞吐为 <code>7 / 0.060 = 116.67 token/s</code>。三个局部速率是 150、66.67、200 token/s，直接平均得到 138.89，是错误的整窗吞吐。这个窗口里 A/C 虽完成了请求，但其前半段早于窗口；不能拿本窗 7 个 token 除以“完成请求的完整平均输出长度”来推 request/s。</p>\n<h3>三种“一轮不等于每请求一个 token”的情况</h3>\n<ul><li><strong>Prefill / chunked prefill：</strong>一条请求可以在一次执行中输入数百上千个 prompt token；中间 chunk 通常尚未交付首 token。输入处理量、执行 token 位置数和新增输出数分别记录。</li>\n<li><strong>投机解码：</strong>一次验证可能接受多个候选，并可能产生额外的新 token；只数最终接受、交付的输出，拒绝的草稿不能算 Output TPS。整轮时间应按边界包含草稿、验证和相关调度；接受率高也不保证净收益，因为提案和验证有成本。</li>\n<li><strong>提前 EOS / 停止 / 取消：</strong>实际输出可能短于配置的 max_tokens。记录真实 O<sub>r</sub> 与结束原因；停止后不能继续按原 batch 为它虚增产量。</li></ul>\n<p><strong>前缀缓存又会改输入账本。</strong>用户提交 8192 个 prompt token，若 7168 个已经缓存，逻辑输入仍是 8192，但新 prefill 工作可能只覆盖剩余部分及必要边界处理。报告逻辑 Input TPS、实际新计算 token、命中率及冷/热缓存条件，才能解释加速来源。反复用同一随机种子重放也可能意外命中缓存；<a href=\"https://github.com/vllm-project/vllm/blob/24324ef0f667c633ee9bbb9412343d829f7e6d4e/docs/benchmarking/cli.md\">vLLM benchmark 文档</a>对此明确提示。</p>"
+      },
+      {
+        "id": "inference-window-load",
+        "title": "压测窗口与发压方式：别把排队和失败从分母里消失掉",
+        "html": "<h3>两种窗口都可用，但不能混账</h3>\n<table><thead><tr><th>方式</th><th>做法</th><th>应披露什么</th></tr></thead><tbody>\n<tr><td>完整请求集合</td><td>选一组请求，从首次发出计到最后完成；计这组请求的完整输入输出</td><td>包含启动爬坡与结束排空；预热请求另列；最后超时/取消怎样结束实验</td></tr>\n<tr><td>固定稳态窗口</td><td>取 [a,b) 中实际收到/生成的 token 与完成事件，分母 b−a</td><td>跨边界请求如何处理；不能把窗口外 token 全算进来；延迟样本按何种请求集合收集</td></tr>\n</tbody></table>\n<p>如果先筛选“完全落在窗口内”的请求，再报告延迟，长请求可能更容易被排除，形成选择偏差。若只累计 GPU 忙碌时段作分母，应明确称为设备活跃区间吞吐；服务吞吐应保留窗口内的空闲和等待。对多副本，先使用相同起止时刻，再相加唯一计数；不要把各卡各自最快的窗口拼成整体结果。</p>\n<h3>Closed loop 与 open loop 各自回答什么</h3>\n<p><strong>Closed loop</strong> 常维持固定在途请求数：一个请求结束才补发一个。它适合观察不同并发下的饱和吞吐与延迟，但系统变慢时发出的新请求也会减少。<strong>Open loop</strong> 按外部到达时刻或到达率发请求，不等上一个完成，更适合观察给定流量下排队如何增长。加入最大并发上限后，客户端也可能排队；应同时记录计划发送、实际发送和完成时间，避免把等待移到客户端后从延迟报表里删掉。</p>\n<p>分别报告 <code>offered rate</code>（计划到达率）、实际发出/接纳率、成功完成率，以及拒绝、超时与取消率。请求到达率不是完成吞吐；只写 <code>--request-rate=100</code> 不证明完成了 100 request/s。Triton 官方将并发模式与请求率模式分别定义；SGLang 也分别提供 <code>request-rate</code> 与 <code>max-concurrency</code>，参见 <a href=\"https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/perf_analyzer/docs/inference_load_modes.html\">Triton 负载模式</a>和 <a href=\"https://docs.sglang.io/docs/developer_guide/bench_serving\">SGLang Bench Serving Guide</a>。</p>\n<h3>成功、失败和重试怎么记</h3>\n<p>保留业务请求 ID 与 attempt ID 两层账。一个请求重试两次最终成功，可以是 1 个成功业务请求、3 次服务尝试；不能当成 3 个成功请求。失败或取消前消耗的计算属于资源成本；已返回的部分 token 可单列实际交付量，但不要悄悄并入“成功完整请求 TPS”。输出吞吐、成功请求吞吐、全尝试资源成本和错误率一起给出，才能防止通过更早失败、更多丢弃或更短输出制造吞吐提升。</p>"
+      },
+      {
+        "id": "inference-statistics-goodput",
+        "title": "均值、P99、goodput 与 Little 定律：最后才是“能接多少用户”",
+        "html": "<p>P50/P95/P99 是某个样本集合的分位数，要先注明样本是请求、流式事件还是 step。一个请求给 TPOT 一个样本；长请求却可能贡献很多 ITL 样本。两种统计会对长短请求赋予不同权重，所以“平均 TPOT”和“平均 ITL”不必相同。</p>\n<ul><li><strong>先按请求求完整延迟，再求分位数。</strong><code>P99(TTFT) + P99(后续生成)</code> 一般不等于 <code>P99(E2E)</code>；不同阶段最慢的可能是不同请求。P50 同样不能直接相加。</li>\n<li><strong>先累计量，再求吞吐。</strong>不同长度窗口的 TPS 应按时间加权；不同请求的平均生成速度不是系统吞吐。<code>mean(1/TPOT)</code> 也不等于 <code>1/mean(TPOT)</code>。</li>\n<li><strong>尾延迟需要足够样本和重复实验。</strong>少量请求的 P99 往往只是接近最大值；报告样本数、失败处理、稳态范围和试验间波动。</li></ul>\n<h3>Goodput：每秒真正按要求完成了多少请求</h3>\n<p>先给定 SLO，例如 TTFT、TPOT 和 E2E 的阈值，再逐请求检查是否成功且满足<strong>全部</strong>条件。本文使用 <code>request goodput = 符合条件的完成请求数 / 同一测量时间</code>。达标率的分母需声明：如果面向可靠服务，应同时给出对全部尝试/业务请求的达标率，不能只在幸存成功样本里算。</p>\n<p><strong>纯教学构造：</strong>10 秒内成功完成 100 个请求，其中 80 个满足全部 SLO，则成功吞吐为 10 request/s，goodput 为 8 request/s。如果同一实验还有 20 个失败请求，按总计 120 个尝试计算的达标率是 66.67%，不能仍报告成 80%。更大 batch 即使提高 Output TPS，也可能因为 TTFT 或 TPOT 变差而降低 goodput。SGLang 的 <a href=\"https://docs.sglang.io/docs/developer_guide/bench_serving#goodput\">goodput 定义</a>明确同时检查成功和所列 SLO，并将失败计入达标率分母。</p>\n<h3>Little 定律把并发、完成率和逗留时间连接起来</h3>\n<pre><code>长期平均在系统请求数 C̄ = 稳态到达/离开率 λ × 平均逗留时间 E[W]\n单位：request = (request/s) × s</code></pre>\n<p>前提是系统稳定、统计边界与请求集合一致，并且没有持续增长的积压。C 包括哪段队列，W 就要包括同一段等待；若只数正在执行的请求，就不能乘包含整个外部队列的延迟。存在失败/取消时还要保持到达与离开事件口径一致。这是平均量之间的关系，不给出 P99，也不能证明按同样比例扩容就可保持延迟。</p>\n<p><strong>纯教学构造：</strong>稳定系统平均同时有 40 个请求在内，每个请求平均逗留 2 秒，那么完成率约为 20 request/s。这 2 秒是一整个请求的时间，不是 decode 的 20 ms step time；因此不能算成 40/0.020 = 2000 request/s。先测目标 workload 下的 SLO 曲线，再决定“能服务多少并发和多少到达率”。后文的算子、通信和模型负载分析，就是为了找到这条曲线的资源约束与改善空间。</p>"
+      },
+      {
+        "id": "inference-metrics-lab",
+        "title": "动手算：单路、每卡、整个实例与窗口 goodput",
+        "html": "<p>先固定分子、时间与物理卡数，再观察它们之间的关系。下方可在固定 step 教学模型与完整请求集合的测量窗口之间切换。参数均可修改；改卡数不会自动模拟真实扩容收益。</p><div data-performance-explorer=\"metrics\"></div>"
+      },
+      {
+        "id": "board-reading",
+        "title": "把组内看板读成一份指标契约，而不是一张速度排名",
+        "html": "<p>本节核对的是用户提供的“torch_zeus 开发看板”，读取日 <strong>2026-10-25</strong>，页面版本 <code>6298721218f3</code>，组件基线标注 <code>torch_zeus@3656952bfee8</code>。来源为用户提供并授权阅读的看板；本页保留核对版本与方法摘要。下面提炼统计方法，不复刻原始数据集；这是该看板版本的定义，不是公开 GLM-5 的配置声明。</p>\n<table><thead><tr><th>看板里的名字</th><th>实际含义与计算方法</th><th>阅读时应补上的边界</th></tr></thead><tbody>\n<tr><td>History tokens</td><td>本步面对的已有上下文长度；不是这次请求新生成的 token 数</td><td>已有 KV 长度、模型位置上限、调度器预留位置可能不同；K/M 的十进制与二进制记法需看精确值</td></tr>\n<tr><td>模型计算耗时</td><td>代表性组件的时间乘出现次数后相加，包括起止组件；原始 μs 精度求和后再转 ms</td><td>不同层复用代表 shape，不是用真实权重逐层执行的墙钟计时</td></tr>\n<tr><td>每卡吞吐估算</td><td>沿用看板约定 c × 1000 / t_ms；每路每步 1 个 token</td><td>先确认 c 的定义；不是实际在线窗口产量，也不是每个人的输出速度</td></tr>\n<tr><td>模型级测试</td><td>选定 decode step、rank 和 kernel 集合的采集结果</td><td>本板还混有标明身份的组件估算点；“模型级”不自动代表客户端请求 E2E</td></tr>\n<tr><td>模块占比</td><td>某模块计入的时间 / 相同口径的模块合计</td><td>如果总数排除了通信，百分比之和 100% 也只覆盖非通信集合</td></tr>\n<tr><td>/ 或缺测</td><td>没有满足同源码、工具链、输入档位及口径的结果</td><td>不是 0；不插值、不跨 batch/history 补齐，也不能解释成一定 OOM</td></tr>\n</tbody></table>\n<h3>最值得警惕的是同名 req/card</h3>\n<p>本版 Zeus 说明把 <code>req/card</code> 对应到 <strong>每个 DP rank 的局部业务并发</strong>；例如页面注明 DP4 下 4 req/card 对应全局 16 个请求。H200 表则明确是<strong>全局唯一请求数 ÷ 四张物理卡</strong>。算子报告中的 <code>local T</code> 还可能是分片后的输入行数，不能直接改称并发请求数。</p>\n<div class=\"formula\">通用物理卡归一：R_phys = 全组唯一输出 / (真实窗口秒数 × 物理卡数)<br>看板组件预算：R_board = c_local × 1000 / t_model_est_ms<br>两者只有在请求映射、卡数和时间边界都对齐时，才是同一指标。</div>\n<p><strong>纯教学拓扑：</strong>若有 D 个处理不同请求的 DP 副本、每副本 P 张 TP 卡、每副本 B 条唯一序列，每步 t 秒各产出 1 token，且这些组占用互不重叠的物理卡，则全局产量为 DB/t，物理卡数为 DP，物理卡归一为 B/(Pt)。如果某表把 B 叫 req/card 并报 B/t，它采用另一种归一约定。应保留原始标签，同时单列可比较的物理卡结果；不能根据名称私自补一个或删一个 TP 因子。现实部署还可能共享并行组，需要实际映射，不能机械乘所有并行度。</p>\n<p>旧截图中的 34.767 ms、230.10 与本次读取的滚动看板不同。前面的复算严格针对旧截图，不把它写成“当前性能”，也不把两快照差异直接归因于某项优化。</p>"
+      },
+      {
+        "id": "board-aggregation",
+        "title": "加权、取慢核、取慢 rank：这些运算为什么不能交换",
+        "html": "<h3>从 cycles 到模型预算</h3>\n<p>先选对频率域。若测量周期为 C，频率为 f_MHz，则 <code>t_μs=C/f_MHz</code>、<code>t_ms=C/(1000f_MHz)</code>。该看板的组件数据标注 400 MHz cycle simulator，因而 <code>ms=cycles/400000</code>。不能把这条换算套到 H200：GPU 不同单元可能有不同频率域和动态时钟，GPU 事件时长应按采集工具定义读取。</p>\n<div class=\"formula\">T_model_est = T_embedding + Σ_j n_j × T_component,j + T_head/sampler<br>单位先统一；n_j 表示出现次数或模型权重，不是并发数。<br>组件节省估算 ΔT = n_j × (T_old,j − T_new,j)</div>\n<p>例如纯教学模型里某模块出现 40 次，每次从 0.20 ms 降到 0.15 ms，则线性预算节省 2 ms。只有这 40 次都走同一优化路径、工作量和依赖保持一致，才可据此预测；最终仍要测整个 step。若某个组件结果本身已包含全链或全部层，不能再乘一次层数。对有相依关系的同层 Attention/FFN，计数也不能把“45 层”理解成只有 45 次算子调用。</p>\n<h3>三个常见聚合器，回答三个不同问题</h3>\n<table><thead><tr><th>聚合方式</th><th>表达的量</th><th>适用边界</th></tr></thead><tbody>\n<tr><td>mean_rank Σ_stage t[r,s]</td><td>平均 rank 的总工作时长</td><td>看平均负载；不能说明必须等最慢 rank 的完成时间</td></tr>\n<tr><td>max_rank Σ_stage t[r,s]</td><td>最慢完整 rank/EP 路径的总时长</td><td>各路径内部按阶段串行且同口径时的一种计算汇总；不自动等于并行实跑墙钟</td></tr>\n<tr><td>Σ_stage max_rank t[r,s]</td><td>每个阶段都等最慢 rank，再累加</td><td>每阶段存在全局同步边界时的预算；慢 rank 可以在不同阶段切换</td></tr>\n</tbody></table>\n<p>教学反例：两条路径的 A/B 阶段分别是 <code>r0=(8,2) ms</code>、<code>r1=(2,8) ms</code>。最慢完整路径为 <code>max(10,10)=10 ms</code>，逐阶段最大值之和为 <code>8+8=16 ms</code>。哪种贴近执行取决于依赖与同步，不能为了让数字更好看随意选。一般有 <code>max_r Σ_s t[r,s] ≤ Σ_s max_r t[r,s]</code>，但两者都不能补出尚未测量的通信和 host 时间。</p>\n<p>本版看板实际存在不同聚合器：DSA 采用各阶段最慢核心再相加；MoE 采用最慢完整 EP 的 fixture 口径；模型采集中的非 MoE 与 MoE 又有平均 rank 和逐层最慢 rank 的区别；Head 还有重复 shard 调用的均值。因此“都是 ms”不足以直接拼表。应把<strong>原始样本 → 单次 kernel → 单模块 → 单层 → 模型</strong>每一步的聚合规则列出来。复用次数、最慢路径和均值都写进指标名称或脚注。</p>"
+      },
+      {
+        "id": "kernel-time-algebra",
+        "title": "Kernel sum、busy union、span、step time：用时间轴一次算清",
+        "html": "<p>看板 H200 明细分别列出非通信 kernel、通信 kernel、kernel 合计、kernel span。它们刻意保留不同列，因为<strong>工作量时长之和与墙钟跨度不一样</strong>。设同一设备、同一时钟域、选定集合中第 i 个事件为 [s_i,e_i)：</p>\n<div class=\"formula\">kernel sum = Σ_i (e_i − s_i)<br>busy union = | ∪_i [s_i,e_i) |<br>kernel span = max_i e_i − min_i s_i<br>该集合 span 内未覆盖的时间 = span − union ≥ 0</div>\n<figure class=\"diagram\"><svg viewBox=\"0 0 740 270\" role=\"img\" aria-label=\"教学时间线：stream A的kernel从0到6毫秒，stream B从4到10毫秒，通信kernel从12到14毫秒。sum14、union12、span14毫秒。\"><g font-family=\"sans-serif\" font-size=\"15\" fill=\"#29483c\"><text x=\"20\" y=\"38\">选定的三个事件 · 教学数字</text><text x=\"20\" y=\"86\">stream A</text><text x=\"20\" y=\"131\">stream B</text><text x=\"20\" y=\"176\">comm</text><rect x=\"140\" y=\"64\" width=\"240\" height=\"30\" rx=\"3\" fill=\"#527d90\"/><rect x=\"300\" y=\"109\" width=\"240\" height=\"30\" rx=\"3\" fill=\"#4d7459\"/><rect x=\"620\" y=\"154\" width=\"80\" height=\"30\" rx=\"3\" fill=\"#c88d54\"/><g stroke=\"#91a08e\"><line x1=\"140\" y1=\"205\" x2=\"700\" y2=\"205\"/></g><text x=\"140\" y=\"230\" text-anchor=\"middle\">0</text><text x=\"300\" y=\"230\" text-anchor=\"middle\">4</text><text x=\"380\" y=\"230\" text-anchor=\"middle\">6</text><text x=\"540\" y=\"230\" text-anchor=\"middle\">10</text><text x=\"620\" y=\"230\" text-anchor=\"middle\">12</text><text x=\"700\" y=\"230\" text-anchor=\"end\">14 ms</text><text x=\"370\" y=\"260\" text-anchor=\"middle\">4–6 ms 重叠 2 ms；10–12 ms 空隙 2 ms</text></g></svg><figcaption>条形只描述事件区间；通信能否移到前面，需要先证明输入依赖与资源允许。</figcaption></figure>\n<p>图中 sum=<code>6+6+2=14 ms</code>，union=<code>10+2=12 ms</code>，span=<code>14 ms</code>。sum 恰好等于 span，并不证明没有重叠或空洞。如果两个 6 ms kernel 完全重叠，sum 可以大于 span；如果一个 kernel 结束后 CPU 等待很久再发下一个，sum 可以小于 span。<strong>span−sum 不能普遍解释为 CPU 开销。</strong></p>\n<p>非通信 sum 加通信 sum，只有两个集合不重不漏时才等于总 sum；它不等于 step wall time。剔除通信事件后重算 span，也不是“原 step 减去通信耗时”，因为前后端点和覆盖关系都可能改变。某个 NCCL kernel 自身还可能包含等待其他 rank，不能把整个 kernel duration 都说成网络传输时间。</p>\n<p>step 的应用起止可比首末 GPU kernel 更宽，包含调度、采样或其他等待；客户端请求更宽，又包含网络、队列、prefill 和多个 decode step。本版 H200 表选的是 <code>rank 0 / decode step 1</code> 的采集范围，吞吐再由时间换算；这不是全组端到端服务吞吐，更不能证明所有 rank 都同样快。做跨 rank span 前还必须确认时钟对齐。</p>"
+      },
+      {
         "id": "perf-map",
         "title": "这些岗位要求，实际上在考哪六种能力？",
-        "html": "\n<p>面试官说“熟悉 Nsight、Profiler、Roofline、算子画像、通信性能分析、模型负载建模”，通常期待你能够把<strong>用户看到的慢 → 一段时间线 → 某类工作 → 硬件约束 → 一个可验证的优化</strong>连起来。会打开工具只是起点；更重要的是知道每张图回答什么问题、哪些结论还缺证据。</p>\n<table><thead><tr><th>名词</th><th>它是什么</th><th>你应该交付什么</th></tr></thead><tbody>\n<tr><td>Profiler</td><td>性能观测工具的总称；可以记录事件、采样调用栈或读取硬件计数器</td><td>稳定的采集范围、可追溯的 trace、可信的时间与开销口径</td></tr>\n<tr><td>Nsight Systems / Compute</td><td>NVIDIA 的系统时间线与 GPU kernel 深度分析工具</td><td>先定位关键路径，再解释热点 kernel 为什么慢</td></tr>\n<tr><td>Roofline</td><td>由算力、数据搬运和算术强度构成的条件上界模型</td><td>算出理论瓶颈、离屋顶的距离，以及模型遗漏的约束</td></tr>\n<tr><td>算子画像</td><td>按语义、shape、dtype、布局、频次、资源消耗建立的工作负载档案</td><td>能指导优化优先级的工作量分布，而非只有 kernel 名称的排行榜</td></tr>\n<tr><td>通信性能分析</td><td>解释 collective、拓扑、同步与并行策略的成本</td><td>区分传输、等待、负载偏斜，以及真正暴露在关键路径上的通信</td></tr>\n<tr><td>模型负载建模</td><td>从层结构和请求分布推导 FLOPs、bytes、容量、通信和时间</td><td>能随 batch、上下文长度、并行度变化的预测，并说明校准与误差</td></tr>\n</tbody></table>\n<div class=\"callout\"><strong>本文的证据边界。</strong>官方文档和论文用于核对工具能力与定义，核对日期为 2026-10-25；数字案例和三组交互全部是教学建模，不代表 NVIDIA、518、CycleSim、VCS 或硅上实测。本次只验证网页与公式，没有运行 GPU 性能采集。命令是操作模板，应按实际安装版本检查 <code>--help</code>。</div>\n<p>建议按正文顺序读一遍，第二遍直接练文末面试追问。你应能回答三个不同的问题：<strong>哪里花了时间？为什么必须或不必花这么久？改动后业务是否真的更快？</strong></p>"
+        "html": "\n<p>面试官说“熟悉 Nsight、Profiler、Roofline、算子画像、通信性能分析、模型负载建模”，通常期待你能够把<strong>用户看到的慢 → 一段时间线 → 某类工作 → 硬件约束 → 一个可验证的优化</strong>连起来。会打开工具只是起点；更重要的是知道每张图回答什么问题、哪些结论还缺证据。</p>\n<table><thead><tr><th>名词</th><th>它是什么</th><th>你应该交付什么</th></tr></thead><tbody>\n<tr><td>Profiler</td><td>性能观测工具的总称；可以记录事件、采样调用栈或读取硬件计数器</td><td>稳定的采集范围、可追溯的 trace、可信的时间与开销口径</td></tr>\n<tr><td>Nsight Systems / Compute</td><td>NVIDIA 的系统时间线与 GPU kernel 深度分析工具</td><td>先定位关键路径，再解释热点 kernel 为什么慢</td></tr>\n<tr><td>Roofline</td><td>由算力、数据搬运和算术强度构成的条件上界模型</td><td>算出理论瓶颈、离屋顶的距离，以及模型遗漏的约束</td></tr>\n<tr><td>算子画像</td><td>按语义、shape、dtype、布局、频次、资源消耗建立的工作负载档案</td><td>能指导优化优先级的工作量分布，而非只有 kernel 名称的排行榜</td></tr>\n<tr><td>通信性能分析</td><td>解释 collective、拓扑、同步与并行策略的成本</td><td>区分传输、等待、负载偏斜，以及真正暴露在关键路径上的通信</td></tr>\n<tr><td>模型负载建模</td><td>从层结构和请求分布推导 FLOPs、bytes、容量、通信和时间</td><td>能随 batch、上下文长度、并行度变化的预测，并说明校准与误差</td></tr>\n</tbody></table>\n<div class=\"callout\"><strong>本文的证据边界。</strong>官方文档和论文用于核对工具能力与定义，核对日期为 2026-10-25；用户截图只按原口径复算；看板与Viewer事实注明来源版本。其余数字案例和四个交互区是教学构造或条件模型，不代表 NVIDIA、518、CycleSim、VCS 或硅上新增实测。本次只验证网页与公式，没有运行 GPU 性能采集。命令是操作模板，应按实际安装版本检查 <code>--help</code>。</div>\n<p>建议按正文顺序读一遍，第二遍直接练文末面试追问。你应能回答三个不同的问题：<strong>哪里花了时间？为什么必须或不必花这么久？改动后业务是否真的更快？</strong></p>"
       },
       {
         "id": "perf-evidence",
@@ -110,6 +236,31 @@
         "id": "measurement-contract",
         "title": "测量契约：先决定你到底在测哪段时间",
         "html": "<p>同一个“模型用了 10 ms”，可能指 GPU kernel 之和、一次前向的设备区间、训练 step 的 wall time，也可能指排队后的请求响应时间。<strong>没有起止边界、分母和工作负载，数值不能比较。</strong></p>\n<table><thead><tr><th>口径</th><th>边界</th><th>使用场景与限制</th></tr></thead><tbody>\n<tr><td>单次 kernel duration</td><td>一个 kernel 在设备上的开始到结束</td><td>比较实现；不含它排队等待的全部时间</td></tr>\n<tr><td>kernel 累计时间</td><td>所选 kernel duration 相加</td><td>定位高成本类别；跨 stream 重叠会重复计算</td></tr>\n<tr><td>设备区间时间</td><td>有正确依赖关系的开始与结束 CUDA Event</td><td>测一段设备工作；区间内等待或发射空隙也可能计入</td></tr>\n<tr><td>应用 wall time</td><td>主机时钟起点到目标 GPU 工作完成</td><td>包含选定范围的 CPU 调度与 GPU 工作；边界同步会影响正常流水</td></tr>\n<tr><td>服务指标</td><td>请求到达、首 token、每次 token 输出、请求完成</td><td>TTFT、TPOT、吞吐、p95/p99；需要请求分布和并发到达模型</td></tr>\n</tbody></table>\n<h3>一张最小实验卡</h3>\n<ul><li><strong>代码与环境：</strong>仓库 commit、构建选项、GPU 型号与数量、驱动、CUDA、框架、编译器、工具版本，是否独占设备，功耗/时钟策略。</li>\n<li><strong>语义与输入：</strong>训练或推理、batch、序列长度分布、dtype、布局/stride、精度策略、mask、稀疏/路由分布；固定输入是否具有真实代表性。</li>\n<li><strong>运行方式：</strong>eager、编译模式或 CUDA Graph；是否含编译、autotune、分配、数据读取、H2D、通信；warmup 次数与稳定性判断。</li>\n<li><strong>统计：</strong>测多少轮、独立重复多少次、使用均值还是中位数、怎样报告离散程度；吞吐的分母是 GPU 活跃时间、step 时间还是总服务时间。</li>\n<li><strong>证据：</strong>无 profiler 的计时结果、短 trace、目标 kernel 报告、正确性误差阈值和可复现命令。</li></ul>\n<h3>为什么必须 warmup，但又不能永远把启动成本删掉？</h3>\n<p>第一次执行可能涉及 CUDA 上下文、JIT/编译、库算法选择、内存池、页面映射及缓存状态变化。对稳定吞吐，要在相同输入分布下预热，并检查时间是否进入稳定区间；固定写“预热 10 次”不是稳定性的证明。如果关注冷启动、首请求或动态 shape 触发的重编译，这些成本就是业务成本，应另设实验保留。</p>\n<p>先运行无 profiler 的基线，再采集少量代表性迭代。增加 shape、stack、memory、硬件计数器等信息会改变采集代价；观察到小幅加速时，需用独立重复和基线波动判断是否可信。设备后台负载、温度、功耗限制与共享资源也可能使同一程序产生不同结果。</p>\n<p>可复现不等于只测一个固定 shape。工程验收通常先固定样本隔离原因，再在真实 shape、序列长度、路由负载和并发分布上验证收益能否保留。报告中把“受控微基准结论”与“业务分布结论”分开。</p>"
+      },
+      {
+        "id": "h200-spec-boundary",
+        "title": "先把 H200 的分母选对：SXM、NVL、精度与稀疏峰值",
+        "html": "<p>问“H200 利用率怎么样”，首先要明确是哪一种 H200、哪个工作负载、哪一种利用率。<strong>产品规格给出能力边界；微基准给出当前机器可达到的参考；应用测量回答真实工作完成得多快。</strong>三者不能相互替代。</p>\n<table><thead><tr><th>官方产品规格，单 GPU</th><th>H200 SXM</th><th>H200 NVL</th><th>比较时的边界</th></tr></thead><tbody>\n<tr><td>GPU 内存</td><td>141 GB HBM3e</td><td>141 GB HBM3e</td><td>标称容量，不能视为应用全部可用容量</td></tr>\n<tr><td>内存带宽</td><td>4.8 TB/s</td><td>4.8 TB/s</td><td>官方规格，不是任意 kernel 都能达到的带宽</td></tr>\n<tr><td>FP32</td><td>67 TFLOP/s</td><td>60 TFLOP/s</td><td>不能替代 Tensor Core 的精度口径</td></tr>\n<tr><td>TF32 Tensor Core，带 sparsity</td><td>989 TFLOP/s</td><td>835 TFLOP/s</td><td>官方表中带稀疏脚注</td></tr>\n<tr><td>BF16 / FP16 Tensor Core，带 sparsity</td><td>1,979 TFLOP/s</td><td>1,671 TFLOP/s</td><td>普通 dense BF16 GEMM 不能直接用此作分母</td></tr>\n<tr><td>FP8 Tensor Core，带 sparsity</td><td>3,958 TFLOP/s</td><td>3,341 TFLOP/s</td><td>还要匹配输入格式、累加与缩放方案</td></tr>\n<tr><td>最大 TDP</td><td>最高 700 W，可配置</td><td>最高 600 W，可配置</td><td>实际 power limit、散热和工作时钟影响性能</td></tr>\n<tr><td>形态与互联</td><td>SXM；NVLink 标称 900 GB/s</td><td>PCIe 双槽风冷；2/4 卡 NVLink bridge，单 GPU 标称 900 GB/s</td><td>整机拓扑、链路方向和 collective 不能由单个峰值概括</td></tr>\n</tbody></table>\n<p>上表来自 <a href=\"https://www.nvidia.com/en-us/data-center/h200/\">NVIDIA H200 产品页</a>及其 <a href=\"https://dam-cdn.nvd.orangelogic.com/AssetLink/5o2qgy5d2835ve2pm11i62kv8mphqta8.pdf\">官方 datasheet</a>，于 2026-10-25 核对；产品页仍附 preliminary / may change 说明。这里列出的是规格，不是本页的硬件测试结果。</p>\n<p>稀疏峰值要求满足支持的结构化稀疏格式与相应指令，不能把“权重里恰好有很多零”当成已经利用这种能力。若按同一 Tensor Core 模式的 2:4 稀疏吞吐约为 dense 的两倍做教学换算，SXM BF16 dense 参考约为 <code>1979 / 2 ≈ 989.5 TFLOP/s</code>；这是由规格与模式假设换算的近似值，产品取整、频率和实际内核仍要单独确认，不能把它写成实测峰值。</p>\n<h3>“达到峰值的多少”要写成一个完整等式</h3>\n<p><code>有效计算效率 = 算法有效 FLOPs / 测量时间 / 同精度、同稀疏模式的参考 FLOP/s</code>。对于 dense GEMM，通常按一次 FMA 为 2 FLOPs，主项是 <code>2MNK</code>；若实现做了 padding、重算或附加 epilogue，应分别记有效工作量与执行工作量。用整个 step 的时间作分母时，指标表达的是该范围的有效吞吐，不能称为单个 Tensor Core 管线的利用率。</p>\n<p><strong>不存在“H200 超过 80% 才算好”的统一阈值。</strong>大而规则的 GEMM、M=1 的矩阵向量乘、随机 gather、通信 kernel 和低延迟服务的合理上限不同。一个低 FLOP/s 的小 shape 可能已经接近发射或带宽限制；一个接近带宽峰值的 kernel 也可能读取了太多本可省掉的数据。</p><div class=\"formula\">H200 SXM BF16 dense 教学参考：P≈989.5 TFLOP/s，BW=4.8 TB/s<br>I*≈989.5/4.8≈206.1 FLOP/byte</div><p>这里把标称算力与标称HBM带宽放在一起做条件推导，未计额外瓶颈。BF16 GEMM在N、K远大于M且权重冷读一次时，AI常近似M FLOP/byte；因此小M的decode即使使用Tensor指令，也可能先受权重搬运限制。实际缓存、多级存储、量化与形状会改变判断，不以这条数值阈值直接分类所有kernel。</p>"
+      },
+      {
+        "id": "cuda-execution-map",
+        "title": "SM、thread、warp、block、grid：这些名词分别在哪一层？",
+        "html": "<p><strong>SM（Streaming Multiprocessor）是 GPU 上执行 CUDA 工作的一组硬件资源。</strong>它包含 warp 调度、寄存器、运算与访存管线等。一个 SM 不是一个 CUDA thread，也不是一个 CUDA core。可以把 thread 理解为程序的一份逻辑执行状态，warp 是硬件调度的重要组织单位，block 是协作与资源分配的重要边界。</p>\n<figure><svg viewBox=\"0 0 960 650\" role=\"img\" aria-label=\"CUDA grid 由多个 thread block 组成，block 动态分配到 SM；每个 block 内线程组成 warp，warp scheduler 向不同执行管线发射指令。图中仅画四个示意 SM，不代表 H200 的 SM 数量。\"><defs><marker id=\"h200-map-arrow\" markerWidth=\"8\" markerHeight=\"8\" refX=\"7\" refY=\"4\" orient=\"auto\"><path d=\"M0,0 L8,4 L0,8 Z\" fill=\"#54736b\"/></marker></defs><rect width=\"960\" height=\"650\" rx=\"14\" fill=\"#f5f6ef\"/><g font-family=\"sans-serif\" fill=\"#213c36\"><text x=\"28\" y=\"36\" font-size=\"24\" font-weight=\"700\">软件任务层级 → 硬件执行层级</text><text x=\"28\" y=\"66\" font-size=\"16\">概念示意：只画 4 个 SM；不是 H200 的芯片数量图</text><rect x=\"28\" y=\"90\" width=\"904\" height=\"105\" rx=\"10\" fill=\"#e3ecdf\" stroke=\"#9cae99\"/><text x=\"45\" y=\"116\" font-size=\"18\" font-weight=\"700\">一次 kernel launch 的 grid</text><rect x=\"45\" y=\"130\" width=\"145\" height=\"43\" rx=\"6\" fill=\"#fff\"/><text x=\"64\" y=\"157\" font-size=\"17\">block / CTA 0</text><rect x=\"206\" y=\"130\" width=\"145\" height=\"43\" rx=\"6\" fill=\"#fff\"/><text x=\"224\" y=\"157\" font-size=\"17\">block / CTA 1</text><rect x=\"367\" y=\"130\" width=\"145\" height=\"43\" rx=\"6\" fill=\"#fff\"/><text x=\"385\" y=\"157\" font-size=\"17\">block / CTA 2</text><rect x=\"528\" y=\"130\" width=\"145\" height=\"43\" rx=\"6\" fill=\"#fff\"/><text x=\"546\" y=\"157\" font-size=\"17\">block / CTA 3</text><text x=\"705\" y=\"157\" font-size=\"18\">… 更多 blocks</text><path d=\"M120 195 L120 233 M342 195 L342 233 M564 195 L564 233 M786 195 L786 233\" stroke=\"#54736b\" stroke-width=\"2\" marker-end=\"url(#h200-map-arrow)\"/><rect x=\"28\" y=\"243\" width=\"205\" height=\"102\" rx=\"8\" fill=\"#e2edf2\" stroke=\"#9cb5c1\"/><text x=\"48\" y=\"274\" font-size=\"22\" font-weight=\"700\">SM 0</text><text x=\"48\" y=\"302\" font-size=\"16\">一个或多个驻留 CTA</text><text x=\"48\" y=\"327\" font-size=\"15\">寄存器 / shared 资源约束</text><rect x=\"253\" y=\"243\" width=\"205\" height=\"102\" rx=\"8\" fill=\"#e2edf2\" stroke=\"#9cb5c1\"/><text x=\"273\" y=\"274\" font-size=\"22\" font-weight=\"700\">SM 1</text><text x=\"273\" y=\"305\" font-size=\"16\">动态接收可运行 CTA</text><rect x=\"478\" y=\"243\" width=\"205\" height=\"102\" rx=\"8\" fill=\"#e2edf2\" stroke=\"#9cb5c1\"/><text x=\"498\" y=\"274\" font-size=\"22\" font-weight=\"700\">SM 2</text><text x=\"498\" y=\"305\" font-size=\"16\">完成后接收后续 CTA</text><rect x=\"703\" y=\"243\" width=\"229\" height=\"102\" rx=\"8\" fill=\"#e2edf2\" stroke=\"#9cb5c1\"/><text x=\"723\" y=\"274\" font-size=\"22\" font-weight=\"700\">SM 3</text><text x=\"723\" y=\"305\" font-size=\"16\">分配顺序不由 block ID 保证</text><path d=\"M130 345 L130 383\" stroke=\"#54736b\" stroke-width=\"2\" marker-end=\"url(#h200-map-arrow)\"/><rect x=\"28\" y=\"393\" width=\"904\" height=\"225\" rx=\"10\" fill=\"#fffefa\" stroke=\"#9cae99\"/><text x=\"48\" y=\"425\" font-size=\"21\" font-weight=\"700\">放大一个 SM：block 的线程分成 warp，每 warp 32 个线程</text><rect x=\"48\" y=\"447\" width=\"255\" height=\"74\" rx=\"6\" fill=\"#e3ecdf\"/><text x=\"66\" y=\"475\" font-size=\"17\">驻留 warp 池</text><text x=\"66\" y=\"502\" font-size=\"16\">ready / 等数据 / 等同步</text><path d=\"M310 483 L359 483\" stroke=\"#54736b\" stroke-width=\"2\" marker-end=\"url(#h200-map-arrow)\"/><rect x=\"369\" y=\"447\" width=\"220\" height=\"74\" rx=\"6\" fill=\"#f1e5cc\"/><text x=\"389\" y=\"475\" font-size=\"17\">warp scheduler</text><text x=\"389\" y=\"502\" font-size=\"16\">从 eligible warp 发射</text><path d=\"M596 483 L645 483\" stroke=\"#54736b\" stroke-width=\"2\" marker-end=\"url(#h200-map-arrow)\"/><rect x=\"655\" y=\"447\" width=\"254\" height=\"74\" rx=\"6\" fill=\"#e2edf2\"/><text x=\"673\" y=\"475\" font-size=\"17\">执行与访存管线</text><text x=\"673\" y=\"502\" font-size=\"15\">CUDA / Tensor / LSU 等</text><text x=\"48\" y=\"557\" font-size=\"17\">驻留 ≠ 正在发射；发射 ≠ 指令已完成；thread ≠ 独占一个物理 CUDA core</text><text x=\"48\" y=\"589\" font-size=\"16\">一个普通 block 的线程位于同一 SM；cluster 可协作多个 block，但不把一个 block 拆开</text></g></svg><figcaption>原创概念图。线程与 block 是工作组织方式，SM 是硬件资源；图中分配箭头仅为示意。</figcaption></figure>\n<table><thead><tr><th>名词</th><th>含义</th><th>性能分析时为什么关心</th></tr></thead><tbody>\n<tr><td>thread</td><td>有自己的索引、寄存器状态和控制流的逻辑线程</td><td>每线程工作量、分支、地址、寄存器活跃区间</td></tr>\n<tr><td>warp</td><td>NVIDIA CUDA 中一组 32 个线程</td><td>访存合并、活跃线程掩码、指令发射与延迟隐藏</td></tr>\n<tr><td>block / CTA</td><td>共享一块 shared memory 并可进行 block 内同步的线程组</td><td>驻留资源、同步成本、tile 规模；一般不能假定所有 block 同时在场</td></tr>\n<tr><td>grid</td><td>一次 kernel launch 的所有 blocks</td><td>工作总量、分布、尾波及启动次数</td></tr>\n<tr><td>SM</td><td>承载驻留 blocks 和 warps 的硬件执行单元</td><td>资源容量与调度，解释为什么某个 grid 不足以铺满设备</td></tr>\n<tr><td>Tensor Core</td><td>SM 中面向支持的矩阵运算的执行资源</td><td>指令、形状、dtype、数据供给与流水；不是每种 FLOP 都走这里</td></tr>\n</tbody></table>\n<p>一个包含 256 个线程的 block 有 8 个 warp，但不意味着这 256 个线程在某一时钟周期全部同时执行一次指令。SM 可保留多个 warp 的状态，scheduler 在具备执行条件的 warp 之间选择；某个 warp 等内存时，可以发射另一个 warp 的指令。另一方面，同一个 warp 中线程发生分支或被 mask 掉，会改变有效 lane 工作量；不能仅凭发出了一个 warp 指令就认定 32 个线程都做了有用工作。</p>\n<p>H200 在 <a href=\"https://developer.nvidia.com/cuda/gpus\">NVIDIA Compute Capability 列表</a>中属于 <strong>9.0</strong>。本文用 <a href=\"https://docs.nvidia.com/cuda/cuda-programming-guide/01-introduction/programming-model.html\">CUDA 编程模型</a>解释逻辑层级；Hopper SM 的执行管线结构参照 <a href=\"https://developer.nvidia.com/blog/nvidia-hopper-architecture-in-depth/\">官方 Hopper 架构介绍</a>。Hopper/GH100 SM 可按 4 个 sub-partition 理解，每个有自己的 warp scheduler；每 SM 有 4 个第四代 Tensor Core。这些是 SM 内部结构，不是软件可以一一绑定的 4 条 stream；不要把整颗 H100 的开启 SM 数、功耗或带宽直接转写为某台 H200 的实测环境。</p>\n<p>对于实际机器，SM 数应由运行时设备属性记录；MIG 或其他资源分区下看到的资源可与整卡不同。图里只画 4 个示意 SM，是为了讲调度关系，绝不是 H200 产品规格。</p>"
+      },
+      {
+        "id": "cuda-stream-map",
+        "title": "CUDA stream 不是 SM：顺序、依赖与真正的并发",
+        "html": "<p><strong>stream 是提交工作时使用的有序队列抽象。</strong>同一 stream 的普通操作按其顺序执行；不同 stream 的工作在依赖允许时可以并行，但不保证并行。SM 则是这些工作最终竞争的硬件资源。一个 stream 的 kernel 可以使用许多 SM；一个 SM 在资源与调度允许时也可承载来自不同 kernel 的 blocks。</p>\n<figure><svg viewBox=\"0 0 960 535\" role=\"img\" aria-label=\"两个CUDA stream各自提交有序工作，kernel的blocks进入共享SM资源池；跨stream等待由事件显式建立，stream不固定拥有某个SM。\"><defs><marker id=\"h200-stream-arrow\" markerWidth=\"8\" markerHeight=\"8\" refX=\"7\" refY=\"4\" orient=\"auto\"><path d=\"M0,0 L8,4 L0,8 Z\" fill=\"#4c6c62\"/></marker></defs><rect width=\"960\" height=\"535\" rx=\"14\" fill=\"#f5f6ef\"/><g font-family=\"sans-serif\" fill=\"#213c36\"><text x=\"28\" y=\"37\" font-size=\"24\" font-weight=\"700\">Stream 是工作队列；SM 是共享硬件</text><text x=\"28\" y=\"68\" font-size=\"16\">没有依赖只表示允许并行，资源和实际调度仍决定能否重叠</text><text x=\"28\" y=\"126\" font-size=\"19\" font-weight=\"700\">Stream A</text><rect x=\"166\" y=\"94\" width=\"184\" height=\"53\" rx=\"7\" fill=\"#cfe0d1\"/><text x=\"199\" y=\"127\" font-size=\"18\">kernel A</text><path d=\"M358 120 L402 120\" stroke=\"#4c6c62\" stroke-width=\"2\" marker-end=\"url(#h200-stream-arrow)\"/><rect x=\"413\" y=\"94\" width=\"173\" height=\"53\" rx=\"7\" fill=\"#e9e1ca\"/><text x=\"434\" y=\"127\" font-size=\"17\">record event E</text><path d=\"M594 120 L638 120\" stroke=\"#4c6c62\" stroke-width=\"2\" marker-end=\"url(#h200-stream-arrow)\"/><rect x=\"649\" y=\"94\" width=\"256\" height=\"53\" rx=\"7\" fill=\"#cfe0d1\"/><text x=\"678\" y=\"127\" font-size=\"17\">A 的后续工作</text><text x=\"28\" y=\"226\" font-size=\"19\" font-weight=\"700\">Stream B</text><rect x=\"166\" y=\"194\" width=\"184\" height=\"53\" rx=\"7\" fill=\"#d8e5ee\"/><text x=\"199\" y=\"227\" font-size=\"18\">kernel B</text><path d=\"M358 220 L402 220\" stroke=\"#4c6c62\" stroke-width=\"2\" marker-end=\"url(#h200-stream-arrow)\"/><rect x=\"413\" y=\"194\" width=\"173\" height=\"53\" rx=\"7\" fill=\"#e9e1ca\"/><text x=\"435\" y=\"227\" font-size=\"17\">wait event E</text><path d=\"M500 150 L500 185\" stroke=\"#b56d39\" stroke-width=\"2\" stroke-dasharray=\"5 4\" marker-end=\"url(#h200-stream-arrow)\"/><path d=\"M594 220 L638 220\" stroke=\"#4c6c62\" stroke-width=\"2\" marker-end=\"url(#h200-stream-arrow)\"/><rect x=\"649\" y=\"194\" width=\"256\" height=\"53\" rx=\"7\" fill=\"#d8e5ee\"/><text x=\"672\" y=\"227\" font-size=\"17\">依赖 A 完成的 kernel C</text><path d=\"M259 155 L259 294 M285 255 L285 294\" stroke=\"#4c6c62\" stroke-width=\"2\" marker-end=\"url(#h200-stream-arrow)\"/><rect x=\"28\" y=\"308\" width=\"904\" height=\"150\" rx=\"10\" fill=\"#fffefa\" stroke=\"#9cae99\"/><text x=\"47\" y=\"339\" font-size=\"20\" font-weight=\"700\">共享 SM 池：A 和 B 的 blocks 可能并发，也可能排队</text><rect x=\"48\" y=\"357\" width=\"195\" height=\"72\" rx=\"6\" fill=\"#e2edf2\"/><text x=\"65\" y=\"383\" font-size=\"17\">SM 0</text><rect x=\"63\" y=\"394\" width=\"69\" height=\"22\" fill=\"#cfe0d1\"/><text x=\"78\" y=\"411\" font-size=\"14\">A CTA</text><rect x=\"141\" y=\"394\" width=\"84\" height=\"22\" fill=\"#d8e5ee\"/><text x=\"158\" y=\"411\" font-size=\"14\">B CTA</text><rect x=\"261\" y=\"357\" width=\"195\" height=\"72\" rx=\"6\" fill=\"#e2edf2\"/><text x=\"279\" y=\"385\" font-size=\"17\">SM 1：A CTA</text><rect x=\"474\" y=\"357\" width=\"195\" height=\"72\" rx=\"6\" fill=\"#e2edf2\"/><text x=\"492\" y=\"385\" font-size=\"17\">SM 2：B CTA</text><rect x=\"687\" y=\"357\" width=\"224\" height=\"72\" rx=\"6\" fill=\"#e2edf2\"/><text x=\"705\" y=\"385\" font-size=\"17\">SM 3：后续可用资源</text><text x=\"28\" y=\"491\" font-size=\"17\">图中分配只是可能情况；stream 数量既不是 SM 数量，也不是并发 kernel 数保证。</text></g></svg><figcaption>原创概念图。这里的 event 是依赖边；不是把 Stream A 和 Stream B 切成两个固定硬件分区。</figcaption></figure>\n<p>因此，“创建 132 个 stream 就使用 132 个 SM”没有这种对应关系。增加 stream 不能自动把一个缺少并行度的 kernel 分散开；若每个 kernel 已经占满所需 SM、寄存器或带宽，更多并发可能只增加竞争与尾延迟。CUDA Graph 减少某些提交开销，也不是新增算力。</p>\n<h3>分析重叠前，先画依赖</h3>\n<ul><li><strong>同一 stream：</strong>前一项先完成，后一项才能按该顺序推进；特殊程序化依赖机制另有明确 API 条件，不能当成默认行为。</li><li><strong>不同 stream：</strong>需要显式 event 或其他同步确保生产者的数据可被消费者读取。没有依赖时误读尚未写完的数据，是正确性错误，不是优化。</li><li><strong>默认 stream：</strong>legacy default stream 与 per-thread default stream 的同步语义有区别；应记录构建/运行方式及所用 stream 类型，不能把“默认”当作所有线程共享的普通队列。</li><li><strong>H2D 与计算：</strong>异步 API、主机内存类型、copy engine 能力及依赖都会影响重叠。看到了 async 字样，并不证明传输已经与 kernel 同时运行。</li></ul>\n<p>Nsight Systems 的 stream 行展示工作归属，CUDA API 行展示主机调用。看到两条 stream 不能直接宣称双倍吞吐；要量实际重叠区间、双方并发耗时和最终完成时刻。要给多 stream 工作计时，终点必须等待纳入范围的所有分支，否则只测到其中一条。</p>\n<p>相关语义以 <a href=\"https://docs.nvidia.com/cuda/cuda-programming-guide/02-basics/asynchronous-execution.html\">CUDA Asynchronous Execution</a> 为依据。一个很好的面试回答是：“我会先确认依赖是否允许重叠，再确认资源是否足够，最后用时间线和正常执行计时证明净收益。”</p>"
+      },
+      {
+        "id": "h200-utilization-denominators",
+        "title": "利用率有多种分母：GPU busy、SM Active、Tensor 与 SOL",
+        "html": "<p>一个 H200 实验可能同时出现 GPU utilization 100%、SM Active 50%、achieved occupancy 25%、Tensor Active 15%。这些数字不一定矛盾：它们在问不同问题。看到百分比时先写出四项：<strong>哪个硬件单元、哪段时间、怎样跨实例聚合、用什么能力作分母</strong>。</p>\n<table><thead><tr><th>指标</th><th>实际在回答什么</th><th>不能推出什么</th></tr></thead><tbody>\n<tr><td><code>nvidia-smi utilization.gpu</code></td><td>采样窗中，有至少一个 kernel 执行的时间比例</td><td>不能推出所有 SM 满载，也不等于已获得同等比例的峰值 FLOP/s</td></tr>\n<tr><td>Nsight Systems SMs Active</td><td>SM 上至少有一个 warp 在场的周期，相对所选窗口 elapsed cycles 的比例，再按单元聚合</td><td>驻留不等于有 ready 指令；50% 可以来自半数 SM 一直忙，也可以来自所有 SM 只忙半段</td></tr>\n<tr><td>Achieved occupancy</td><td>实测驻留 warp 数相对硬件可驻留上限；常见 ncu 指标以 active cycles 归一</td><td>不是活跃 lane 比例，不是 Tensor Core 吞吐，也不能反映所有空闲区间</td></tr>\n<tr><td>Tensor Active / Tensor pipe 指标</td><td>指定 Tensor 管线在特定周期口径下的活动或吞吐比例</td><td>不能不看指令形状、精度、mask/padding 就等同有效 TFLOP/s</td></tr>\n<tr><td>DRAM throughput / bytes</td><td>DRAM 接口的活动/吞吐，或字节计数；具体取决于 metric</td><td>不是内存容量占用率；也不等于算法最少有用字节数</td></tr>\n<tr><td>Compute / Memory SOL</td><td>相关硬件单元吞吐相对工具定义的 sustained peak，需展开 breakdown</td><td>不是“整个 GPU 总算力使用率”；最繁忙子管线可以主导聚合结果</td></tr>\n<tr><td>有效 FLOP/s</td><td>明确定义的有效工作量除以同范围时间</td><td>不是硬件计数器必然直接提供的值；融合、padding、稀疏和重算会影响定义</td></tr>\n</tbody></table>\n<p>GPU busy 的定义来自 <a href=\"https://docs.nvidia.com/deploy/nvidia-smi/index.html\">nvidia-smi 文档</a>；SMs Active 与 Tensor Active 的采样含义来自 <a href=\"https://docs.nvidia.com/nsight-systems/UserGuide/index.html#gpu-metrics\">Nsight Systems GPU Metrics</a>。MIG、权限及工具支持可能使部分指标不可用；<code>N/A</code> 不应写成 0% 利用率。</p>\n<h3>看懂 ncu 指标名，比背一个百分比更有用</h3>\n<p>以 <code>sm__cycles_active.avg.pct_of_peak_sustained_elapsed</code> 为例：<code>sm</code> 是单元，<code>cycles_active</code> 是基础计数，<code>avg</code> 是跨实例的聚合，后缀说明相对 elapsed-cycle sustained peak 的归一方式。<code>.sum</code>、<code>.avg</code>、<code>.min</code>、<code>.max</code> 不能随意互换；<code>smsp</code> 与 <code>sm</code> 也不是相同粒度。</p>\n<p><code>.pct_of_peak_sustained_active</code> 以该单元 active cycles 为时间口径，<code>.pct_of_peak_sustained_elapsed</code> 以 elapsed cycles 为口径。<code>peak_sustained</code> 是工具对这类事件定义的持续峰值速率，不是你刚刚跑出的最佳微基准，也不自动等于宣传页的稀疏 Tensor FLOP/s。确切公式和单位应查本机 metric description 与 <a href=\"https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-structure\">官方 Metrics Structure</a>。</p>\n<p><strong>教学例：</strong>某虚构单元共经历 100 个周期，其中 50 个 active，完成 100 次操作；假设峰值为每周期 4 次操作，则按 elapsed 算是 <code>100/(100×4)=25%</code>，按 active 算是 <code>100/(50×4)=50%</code>。两者都对，但后者隐藏了未 active 的一半时间。再例如只有一个 SM 承载持续 kernel，也可能让 GPU busy 接近 100%；这不证明其他 SM 获得了足够工作。</p>\n<h3>实际报告可怎样记字段？</h3><p>在目标架构与工具查询确认可用后，可把 <code>sm__cycles_active.avg.pct_of_peak_sustained_elapsed</code> 记为 SM 活动的 elapsed 口径，把 <code>sm__warps_active.avg.pct_of_peak_sustained_active</code> 记为 achieved occupancy 的 active 口径；Tensor 管线关注相应 <code>sm__pipe_tensor_cycles_active*</code>，DRAM 关注 <code>dram__throughput.avg.pct_of_peak_sustained_elapsed</code> 及读写字节。不要把同名 UI 标签下不同版本的 metric 默认为同一公式。</p><p>另行定义的经验带宽效率可以写成 <code>(实测 DRAM 读写字节 / 同范围时间) / 同机器同访问条件参考带宽</code>。这个手算指标与 ncu 的硬件吞吐归一值要分列；前者的分母由你的参考实验选择，后者的分母由 metric 定义。二者都不能用“分配了多少显存”代替。</p><p>对照报告要固定采集范围和后缀。不同持续时长的 kernel 的百分比通常不能做简单算术平均代替应用指标；应按匹配的原始计数、时间和单元范围重建所需口径。</p>"
+      },
+      {
+        "id": "h200-occupancy-scheduler",
+        "title": "Occupancy、eligible、issued 与 stall：驻留以后发生了什么？",
+        "html": "<p>理论 occupancy 先回答“资源最多允许同时放多少 warp”；achieved occupancy 再回答“采集时实际驻留了多少”。驻留只是第一步：warp 还可能等待操作数、同步或流水线；只有符合发射条件才是 <strong>eligible</strong>，被 scheduler 选中发出指令才是 <strong>issued</strong>。</p>\n<p>对 CC 9.0，官方架构资料给出每 SM 最多 64 个驻留 warp、64K 个 32-bit 寄存器、最多 32 个驻留 block，以及 shared memory 的配置上限。它们是资源约束，不是每个 kernel 都能用满的承诺；动态 shared memory 配置、分配粒度和 cluster 条件也要算入。依据见 <a href=\"https://docs.nvidia.com/cuda/cuda-programming-guide/05-appendices/compute-capabilities.html\">Compute Capabilities 技术表</a>及 <a href=\"https://docs.nvidia.com/cuda/hopper-tuning-guide/index.html\">Hopper Tuning Guide</a>。</p>\n<h3>算一个有条件的 occupancy 例子</h3>\n<p>假设某个 256-thread block 有 8 个 warp。由于它的寄存器和 shared memory 需求，occupancy calculator 判断每 SM 最多驻留 2 个这样的 block，则理论上限是 <code>2×8/64=25%</code>。若实测 active-cycle 平均只驻留 10 个 warp，按同一 64-warp 上限算约为 <code>15.625%</code>。这是教学条件，不是某个 H200 kernel 的测量。</p>\n<p>理论上限低，应先看限制来自寄存器、shared memory、warp 数还是 block slot；实测低于理论上限，还要看 grid 太小、block 执行时间不均、尾波和工作分配。<strong>强行降低寄存器上限可能让 occupancy 上升，却因 spill 和复用减少而更慢。</strong>正确目标是足够的有效并行与吞吐，而非百分比最大。</p>\n<table><thead><tr><th>观察组合</th><th>优先假设</th><th>下一步证据</th></tr></thead><tbody>\n<tr><td>驻留少，eligible 少，发射有空洞</td><td>资源上限或并行工作不足导致延迟暴露</td><td>LaunchStats、occupancy calculator、grid/wave、每 block 资源</td></tr>\n<tr><td>驻留多，eligible 少</td><td>warp 在等数据、依赖或同步</td><td>依赖链、内存并发、barrier 到达差异、流水深度</td></tr>\n<tr><td>eligible 充足，某执行管线很忙</td><td>该管线可能接近吞吐限制</td><td>ComputeWorkloadAnalysis；减少工作量或改变指令组合</td></tr>\n<tr><td>Tensor 管线很忙，有效 FLOP/s 不理想</td><td>padding、无效元素、形状或有效工作量口径</td><td>真实 tile 与 mask、指令工作量、算法有用 FLOPs</td></tr>\n</tbody></table>\n<p>stall 名称首先是一条诊断线索。<code>long_scoreboard</code> 通常涉及等待 L1TEX 路径相关结果，可能来自 global/local/texture 等访问；它不独立证明 HBM 带宽饱和。<code>barrier</code> 应追到慢到达的工作，而不只是删同步。<code>not_selected</code> 表示有 eligible warp 未被选中，本身不等于“可消除的浪费”。采样可能归到等待结果的消费指令，需向前找生产者。</p>\n<p>计数器族可关注 <code>smsp__warps_active.*</code>、<code>smsp__warps_eligible.*</code>、<code>smsp__warps_issued.*</code>、<code>smsp__warps_issue_stalled_*.*</code> 或对应 PC sampling 指标，具体名称以架构查询为准。先确认发射或进度受限，再解释 stall；不能把跨 warp 的 stall 比例当作一份互斥的 wall-time 饼图。参见 <a href=\"https://docs.nvidia.com/nsight-compute/ComputeTriage/index.html\">Nsight Compute Triage Guide</a>。</p>"
       },
       {
         "id": "cuda-timing",
@@ -137,6 +288,11 @@
         "html": "<p>算子画像不是按名字排序的一张排行榜，而是“<strong>谁在什么输入、什么执行环境下，贡献了多少成本，证据指向什么瓶颈</strong>”。它既能决定优化顺序，也能为编译器选型、算子库覆盖和模型容量规划提供输入。</p>\n<h3>建议至少记录六组字段</h3>\n<table><thead><tr><th>字段组</th><th>例子</th><th>为什么需要</th></tr></thead><tbody>\n<tr><td>语义身份</td><td>阶段、层、op、融合范围、实现版本、对应 kernel</td><td>避免把相似名称误认为同一语义</td></tr>\n<tr><td>输入族</td><td>shape、stride、dtype、padding、mask、稀疏度、路由分布</td><td>决定工作量、访存与算法分支</td></tr>\n<tr><td>出现分布</td><td>调用次数、shape 直方图、token 数、专家 token 负载分位数</td><td>判断局部优化能覆盖多少真实请求</td></tr>\n<tr><td>耗时与位置</td><td>每次分布、累计时间、所在 stream/rank、关键路径贡献</td><td>区分频繁小算子、偶发长尾与已被隐藏的工作</td></tr>\n<tr><td>成本与硬件</td><td>有效 FLOPs、理论字节、实测分层流量、occupancy、调度指标</td><td>将建模假设与测量证据配对</td></tr>\n<tr><td>结论与置信度</td><td>候选瓶颈、排除的假设、对照实验、误差与适用范围</td><td>防止“看到一个指标就下结论”</td></tr>\n</tbody></table>\n<p>同为 <code>matmul</code>，prefill 大 M 和 decode 小 M 的性能机制可能不同；同为 MoE expert GEMM，每个专家收到的 token 数分布可能改变填充浪费、并行度和尾部延迟。统计时至少按阶段和输入族分桶，必要时保留原始样本而不是只留平均值。</p>\n<h3>把画像转成优化动作</h3>\n<table><thead><tr><th>画像组合</th><th>值得尝试的方向</th><th>必须复验的副作用</th></tr></thead><tbody>\n<tr><td>小 kernel 很多；应用有发射空隙</td><td>算子融合、批处理、减少主机工作、Graph</td><td>寄存器膨胀、shape 灵活性、编译成本、关键路径是否真的缩短</td></tr>\n<tr><td>低算术强度；重复中间张量读写</td><td>融合生产者消费者、复用数据、减少转换</td><td>融合后资源约束、数值语义、实际 HBM 流量</td></tr>\n<tr><td>小 M；不足的 grid 并行度</td><td>跨样本/专家聚合、合适分块或并行策略</td><td>额外通信、调度成本、尾部形状</td></tr>\n<tr><td>高流量且访存事务利用差</td><td>布局、合并访问、向量化、减少无用字节</td><td>布局转换成本是否被转移到上下游</td></tr>\n<tr><td>个别专家或 rank 形成长尾</td><td>负载均衡、路由/调度策略、并行切分</td><td>语义约束、跨卡流量、平均值改善但 p99 变差</td></tr>\n</tbody></table>\n<p>优先级可用“出现频率 × 当前成本 × 可实现改善比例”做初筛，但必须再用关键路径修正。只占端到端 5% 的串行部分，即使无限加速，整体上限也只有 <code>1 / 0.95 ≈ 1.053×</code>；若它本来就在被其他工作遮蔽的区间，收益可能更低。加速比的分母必须写清楚。</p>\n<p>对编译器岗位，回答还应连到可修改的原因：调度、融合、布局传播、tile、流水深度、寄存器压力、边界掩码、向量化或通信拆分。一个完整结论应是“这个输入族上，某项 lowering 决策造成某种可观测行为；对照修改消除了它，并在业务负载上保留了收益”。</p>"
       },
       {
+        "id": "h200-profiling-playbook",
+        "title": "给一台 H200 做评估：环境卡、对照基准与两轮 Nsight",
+        "html": "<p>此处提供实验方案，<strong>本页没有连接 H200，也没有执行这些命令</strong>。模板依据 2026-10-25 核对的官方在线文档；实际使用必须记录工具、驱动、CUDA 和框架版本，先查本机帮助与 metric 可用性。</p>\n<h3>第一张表是环境与负载，不是性能数字</h3>\n<ul><li><strong>硬件边界：</strong>SXM/NVL、GPU 数、MIG profile/可见资源、是否共享、互联拓扑、power limit、实际时钟与温度状态。只读取并记录环境；改变系统策略需有对应运维授权。</li><li><strong>数值合同：</strong>输入/输出/累加 dtype、TF32 是否允许、FP8 格式与 scale、dense 或支持的 structured sparsity、误差容限、算法变化。</li><li><strong>输入族：</strong>M/N/K、batch、布局/stride、对齐、tail、prefill/decode、MoE 专家 token 分布、实际并发和缓存冷热策略。</li><li><strong>执行边界：</strong>eager/compiled/Graph、预热与 autotune、是否含分配/转置/拷贝/通信，kernel 时延或业务 wall time。</li><li><strong>统计：</strong>多轮独立重复、中心值与波动、完整样本；A/B 交错运行减轻温度和环境漂移影响。</li></ul>\n<pre><code># Read-only identity checks on the target machine; examples were not run here.\nnvidia-smi --version\nnvidia-smi --query-gpu=name,driver_version --format=csv\nnvidia-smi -q -d MEMORY,POWER,CLOCK,PERFORMANCE,COMPUTE\nnsys --version\nncu --version\nnvcc --version\n\npython - &lt;&lt;&#x27;DEVICE&#x27;\nimport torch\np = torch.cuda.get_device_properties(0)\nprint(&quot;torch:&quot;, torch.__version__, &quot;CUDA:&quot;, torch.version.cuda)\nprint(&quot;device:&quot;, p.name, &quot;CC:&quot;, (p.major, p.minor))\nprint(&quot;visible SMs:&quot;, p.multi_processor_count)\nprint(&quot;visible memory bytes:&quot;, p.total_memory)\nDEVICE</code></pre>\n<h3>先建三种对照，不急着把 ncu 全开</h3>\n<p><strong>算法对照：</strong>同语义、同精度的成熟库实现，例如匹配 epilogue 的 cuBLASLt；<strong>输入对照：</strong>足够大的规则 shape 与真实小/尾部 shape；<strong>路径对照：</strong>独立 kernel、真实前序缓存状态和完整业务链。对内存实验，分别报告算法字节、实测 DRAM 字节与时间；对计算实验，分别报告有效 FLOPs 与 padding/额外工作。</p>\n<p>带宽微基准可帮助估计本机的经验带宽上限，但其读写比例、工作集是否超出缓存、并发访问方式与目标 kernel 必须说明。不能把缓存内重复读取的速度标成 HBM 带宽，也不能把 GEMM 和 gather 要求达到同一个带宽比例。</p>\n<h3>第一轮 nsys：业务是否真的把 GPU 喂满？</h3>\n<pre><code># Use a writable data-volume directory and inspect local option support.\nexport TMPDIR=/data/profiling-work\nexport TMP=&quot;$TMPDIR&quot;\nexport TEMP=&quot;$TMPDIR&quot;\nmkdir -p &quot;$TMPDIR&quot; ./profile-output\nnsys profile --help\n\n# app.py must call cudaProfilerStart/Stop around a short warmed-up range.\nnsys profile --trace=cuda,nvtx --sample=none --cpuctxsw=none \\\n  --capture-range=cudaProfilerApi --capture-range-end=stop \\\n  -o ./profile-output/h200-system python app.py</code></pre>\n<p>先看 kernel 空隙、CUDA API、跨 stream 依赖、通信到达偏斜与关键路径。若该环境支持 GPU Metrics，可在独立一轮加入 <code>--gpu-metrics-devices=0</code> 观察 SM/Tensor 活动；不要与争用同一计数器的其他 profiler 同时采。采样曲线不能代替精确的短 kernel 归因，而且普通 CUDA/NVTX trace 本身不保证包含这些硬件指标。</p>\n<h3>第二轮 ncu：仅检查代表性调用</h3>\n<pre><code>ncu --list-sections\nncu --query-metrics\n\n# Replace my_kernel and skip count using the verified trace.\nncu --kernel-name-base demangled --kernel-name &#x27;regex:my_kernel&#x27; \\\n  --launch-skip 20 --launch-count 1 \\\n  --section SpeedOfLight --section LaunchStats --section Occupancy \\\n  --section SchedulerStats --section MemoryWorkloadAnalysis \\\n  -o ./profile-output/h200-kernel python kernel_bench.py\n\n# Optional second pass, only after these exact names are confirmed available.\nncu --kernel-name &#x27;regex:my_kernel&#x27; --launch-skip 20 --launch-count 1 \\\n  --metrics gpu__time_duration.sum,sm__cycles_active.avg.pct_of_peak_sustained_elapsed,dram__bytes_read.sum,dram__bytes_write.sum \\\n  -o ./profile-output/h200-basic-counters python kernel_bench.py</code></pre>\n<p><code>launch-skip</code> 统计匹配过滤器的 launch，不是模型 step。不要一开始对所有 kernel 使用全量指标；多 pass replay、cache/clock policy 与序列化可能改变缓存和并发条件。可重放且依赖真实前序缓存的场景，应评估 application/range replay 与 cache 策略，并在报告记录选择；分布式通信还要保留必须并发的进度条件。命令定义见 <a href=\"https://docs.nvidia.com/nsight-compute/NsightComputeCli/index.html\">ncu CLI</a>；正常运行的绝对耗时仍由独立无 profiler 测量验收。</p>"
+      },
+      {
         "id": "roofline-foundation",
         "title": "Roofline：把“算不动”和“喂不饱”写成公式",
         "html": "\n<p>设一次 kernel 的有效工作量为 <code>F</code> FLOP，选定存储层级上搬运的总数据为 <code>Q</code> byte，算力上限为 <code>P</code> FLOP/s，该层级带宽为 <code>Bw</code> byte/s。FMA 按乘法加加法计 2 FLOP。不要把 FLOP（工作量）和 FLOP/s（速率）混用。</p>\n<div class=\"formula\">算术强度 I = F / Q &nbsp; [FLOP/byte]<br>理想计算时间 t_compute = F / P<br>理想搬运时间 t_memory = Q / Bw<br>时间下界 t ≥ max(F/P, Q/Bw)<br>性能上界 R ≤ min(P, I × Bw)<br>拐点 I* = P / Bw</div>\n<p>横轴是算术强度，纵轴是 FLOP/s，通常用双对数坐标。低强度时每搬一个 byte 做不了几次计算，斜线由带宽决定；强度足够大以后，上界变成水平的算力线。<strong>这个屋顶回答“在这些假设下最多多快”，不是保证你能达到。</strong></p>\n<p>为什么取 max？一次执行既要完成算术又要搬完数据；即便能完全重叠，也不能比其中更慢的一项还快。若取 <code>F/P + Q/Bw</code>，那是另一种完全串行的条件估计，不是同一个下界。流水填充、启动、同步、依赖和片上访存会让实际耗时进一步增长。</p>\n<p>图中实测点应使用一致范围的 <code>(F/Q, F/t)</code>。若 F 使用算法的“有效 FLOPs”，峰值也要说明所选精度与执行路径；若 F 来自执行指令计数，可能包含 padding 或重复运算。两种口径都能有用，但必须说清楚。基础定义参考 <a href=\"https://www2.eecs.berkeley.edu/Pubs/TechRpts/2008/EECS-2008-134.html\">Williams、Waterman、Patterson 的 Roofline 技术报告</a>。</p>"
@@ -160,6 +316,51 @@
         "id": "roofline-triage",
         "title": "离屋顶很远：下一步到底该查什么？",
         "html": "\n<p>Roofline 给出候选瓶颈，硬件计数器、时间线和消融实验负责验证原因。尤其当两个主要吞吐都很低时，不能简单归类为“算力不够”。</p>\n<table><thead><tr><th>现象</th><th>候选解释</th><th>下一份证据 / 实验</th></tr></thead><tbody>\n<tr><td>DRAM 吞吐高，计算低</td><td>大规模流式读写、复用少</td><td>确认真实 Q、读写比例；融合或复用后 Q 是否下降，耗时是否下降</td></tr>\n<tr><td>强度高，计算仍低</td><td>矩阵太小、tile 尾部、指令路径或调度效率问题</td><td>检查 grid/waves、Tensor 指令、对齐、寄存器与实际活跃 warp</td></tr>\n<tr><td>计算与 DRAM 都低</td><td>依赖链、长延迟、小工作量、同步或片上瓶颈</td><td>看 eligible/issued warps、stall、L2/shared 吞吐，并做规模扫描</td></tr>\n<tr><td>单 kernel 快，业务仍慢</td><td>优化不在关键路径；CPU、通信、布局转换或其他阶段抵消收益</td><td>回到系统时间线与业务 P50/P99，核对实际选择的 kernel</td></tr>\n<tr><td>融合后访存少但变慢</td><td>寄存器增加、spill、occupancy 降低、并行度损失</td><td>比较总流量、local memory、发射效率和完整生产者/消费者范围</td></tr>\n</tbody></table>\n<p><strong>occupancy 是驻留能力指标，不是算术利用率。</strong>高 occupancy 可能有很多 warp 一起等内存；较低 occupancy 也可能已有足够独立指令撑满执行管线。提高 occupancy 是手段，缩短目标时间才是结果。</p>\n<p>对单 kernel 报 <code>F/t</code>；对整个模型报模型有效 FLOPs / 端到端时间时，要明确是否包含重计算、padding、稀疏跳过、通信与空闲。MFU 通常强调模型有效工作量，HFU 等名称在不同系统中的计数边界可能不同；必须写下自己的分子与分母，不要仅报一个百分比。<code>nvidia-smi</code> 的 GPU busy 指标也不能替代 FLOPs 利用率。</p>"
+      },
+      {
+        "id": "roofline-movement",
+        "title": "优化在 Roofline 图上怎样移动：右移、上移和换屋顶",
+        "html": "<p>固定同一个语义任务，横轴 I=F/Q，纵轴 R=F/t。每次修改后都问“分子、字节、时间哪一项变了”，就能把一条图上的移动还原成可验证假设。</p>\n<table><thead><tr><th>改动</th><th>理想情况下的图上变化</th><th>必须验证的代价</th></tr></thead><tbody>\n<tr><td>融合去掉中间落盘；tiling 增加复用</td><td>同 F、Q 降低，点右移；若时间下降则也上移</td><td>是否增加寄存器、shared、spill、同步、代码量，是否损失并行度</td></tr>\n<tr><td>更好的指令调度、软件流水、独立运算</td><td>F/Q 近似不变，时间缩短，主要向上移动</td><td>确认真实字节和算法工作量没变；等待是否从内核转到其他范围</td></tr>\n<tr><td>权重量化、压缩 KV</td><td>字节减少；同时可能换用另一条精度屋顶</td><td>scale/zero point、解包、反量化、转换、误差与带宽放大都要记账</td></tr>\n<tr><td>增大 batch 或更换 tile</td><td>可能提高权重复用和计算强度</td><td>它改变任务形状；还要画单请求延迟、KV容量和SLO曲线，不能只比总FLOP/s</td></tr>\n<tr><td>算法减少运算</td><td>F 也会变，不能只看纵轴高低</td><td>少算却更快时，FLOP/s 可能下降；完成同一语义任务的时间才是目标</td></tr>\n</tbody></table>\n<h3>一个独立手算案例</h3>\n<p>以下全部是虚构教学参数：F=2 GFLOP，设备相同，版本 A 的 Q=40 MB、t=40 μs，版本 B 的 Q=20 MB、t=25 μs。则 A 的 I=50 FLOP/B、R=50 TFLOP/s；B 的 I=100 FLOP/B、R=80 TFLOP/s。观察是<strong>字节减半，耗时降低 37.5%，加速 1.6×</strong>；并不能仅从字节减半就声称 2× 加速，因为其他成本仍然存在。</p>\n<p>还要同时给出有效带宽：A 为 1 TB/s，B 为 0.8 TB/s。B 更快却“带宽利用率更低”完全可能，因为它减少了必要流量。降低资源需求本身就是优化，不能把所有百分比最大化当成目标。</p>"
+      },
+      {
+        "id": "roofline-hierarchy",
+        "title": "专家要会算的扩展：多级存储、真实事务与有用工作量",
+        "html": "<h3>每一层存储各有自己的分母</h3>\n<p>对同一 kernel 记录 Q_HBM、Q_L2、Q_shared，分别建立 <code>I_l=F/Q_l</code>，使用该层匹配的带宽 B_l。最基本的资源约束是 <code>t ≥ max(F/P, Q_HBM/B_HBM, Q_L2/B_L2, Q_shared/B_shared)</code>。它仍然只是条件下界：资源阶段依赖、调度、启动等可能迫使部分时间串行。</p>\n<p>教学例子：F=2 GFLOP，Q_HBM=20 MB、Q_L2=200 MB；假设这两层的带宽上限分别为 2 TB/s、10 TB/s，则两个搬运下界是 10 μs 和 20 μs。只看 HBM 会错过更紧的 L2 条件。Q_L2 大于 Q_HBM 并不矛盾，同一批数据可以从 L2 被重复请求。不能把两层 byte 相加后再除以 HBM 带宽。</p>\n<h3>布局、事务与缓存为什么是编译器问题</h3>\n<p>同一条语义 load 可能被硬件分成多个事务；线程访问地址的连续性、对齐、向量化宽度与共享内存 bank 映射影响实际流量或服务次数。用计数器观察请求与 sector/transaction 的关系，并结合对应架构的事务大小解释。高 cache hit rate 也不够：需要知道 hit 的请求量、片上带宽及 miss 的绝对字节。只优化命中率而不缩短目标时间，可能没有业务收益。</p>\n<h3>至少保留两种 FLOP 账本</h3>\n<pre><code>F_useful   = 算法需要的有效工作量\nF_executed = 实际指令对应的运算量（可能含padding、重算等）\nUseful efficiency = F_useful / (P_matched × t)\nExecution ratio   = F_executed / (P_matched × t)\n若口径和指令类型可比：Useful efficiency\n = (F_useful / F_executed) × Execution ratio</code></pre>\n<p>教学例子：实际做了 2 倍于有效需求的 padding 运算，即使执行量占匹配峰值的 80%，有用工作量也只有峰值的 40%。但不要将这条分解直接套给混合精度或不同类型 pipeline；先分别计数。整数运算以整数 ops 记，FMA 按 2 FLOP，MAC 按 1 次乘累加；更换单位时峰值也一起换。</p>\n<p>量化同样不能只写“INT4 是 BF16 的 1/4 字节”：实际权重流量还含分组 scale、zero point、padding、布局描述及重复加载，执行过程中还可能产生展开后的中间量。稀疏注意力也要计索引、gather、top-k与规约；总耗时不只是“保留 token 比例 × dense 时间”。这类方法的价值在于给出可反驳的假设，再用同范围计数和消融证据修正。</p>"
+      },
+      {
+        "id": "h200-memory-forensics",
+        "title": "访存取证：合并访问、sector、L1/L2/HBM 与 spill",
+        "html": "<p>“访存慢”至少可能是四件不同的事：有用数据本来就多；访问模式把请求放大成更多事务；并发请求不足而暴露延迟；某一层缓存/管线受到压力。只看 HBM 百分比，无法区分它们。</p>\n<h3>从一个 warp 的地址开始</h3>\n<p>假设 32 个活跃线程各读取一个 4-byte 数值，地址连续且起点恰好落在合适的 32-byte sector 边界，128 byte 的有用数据可覆盖 4 个 sector；若每个线程的地址落在不同 sector，则会涉及 32 个 sector。后者仍只拿走 128 byte 有用数据，却触达更多存储事务。这里是条件化地址模型；缓存命中、请求拆分与相邻 warp 复用会继续影响到 HBM 的实际流量。</p>\n<p><code>sectors / requests</code> 高不自动代表错误。每线程向量读取更多字节、活跃线程数不同、不同访问宽度都会改变理想值。“4 sectors/request”只适用于上面的完整 warp、4-byte、连续对齐条件，不能做所有 kernel 的万能阈值。可对照 <a href=\"https://developer.nvidia.com/blog/unlock-gpu-performance-global-memory-access-in-cuda/\">NVIDIA 全局访存讲解</a>。</p>\n<table><thead><tr><th>层级</th><th>要区分的量</th><th>典型可改原因</th></tr></thead><tbody>\n<tr><td>源码逻辑量</td><td>每个有效元素需要多少读写</td><td>消除中间张量、融合、复用；不能当作实测流量</td></tr>\n<tr><td>L1TEX 请求 / sectors</td><td>请求数、访问宽度、sector 扩张</td><td>warp 地址映射、stride、对齐、mask、向量化</td></tr>\n<tr><td>L2</td><td>命中、字节、重复请求、来自其他单元的竞争</td><td>CTA 排序、工作集局部性、上下游缓存复用</td></tr>\n<tr><td>DRAM / HBM</td><td>最终读写字节与该范围时间</td><td>必要流量、缓存未命中、重复搬运、并发请求量</td></tr>\n<tr><td>shared memory</td><td>访问模式、bank conflict、读写与同步</td><td>tile layout/swizzle、广播、warp 协作方式</td></tr>\n<tr><td>local memory</td><td>线程私有地址空间的实际访问</td><td>spill、动态索引数组等；local 不表示一定在片上寄存器</td></tr>\n</tbody></table>\n<p>计数器可从 <code>l1tex__t_requests_pipe_lsu_mem_global_op_ld.sum</code> 和 <code>l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum</code> 入手，再看 <code>lts__*</code>、<code>dram__bytes_read.sum</code>、<code>dram__bytes_write.sum</code> 与 local/shared 路径。名字可用性要在该工具版本及目标 GPU 上确认；把某层 sector 乘 32 得到的是该层口径，不能直接宣称全都穿透 HBM。</p>\n<h3>为什么降低寄存器可能制造“伪带宽瓶颈”？</h3>\n<p>假设融合前两个小 kernel 各自的临时值生命期较短；融合后更多中间值同时活跃，分配器无法全部放进寄存器，于是使用 local memory。新增的 load/store 带来缓存压力与等待。画像上它看起来更“memory bound”，根因却可能是融合扩大了活跃区间。应联合检查编译器资源报告、SASS 的 local load/store、实际 local 路径计数，以及相同输入的时间。</p>\n<p>也不要把所有 local memory 访问都叫 spill：源码中的线程私有数组等也可能放到该地址空间。减少 live range、重算便宜表达式、缩短展开、改变 tile 或拆分 kernel 都可作为对照；优化是否值得取决于减少的 spill 成本是否抵得上新增的计算或启动成本。</p>\n<p><strong>一个常见反例：</strong>随机 gather 的 DRAM 带宽很低，却因独立请求不足与长依赖链受内存延迟限制。此时“再提高带宽峰值”未必有用；而增加独立工作、调整布局或预取可能改善。这就是带宽上界与实际延迟机制必须分开分析的原因。</p>"
+      },
+      {
+        "id": "h200-tiles-waves",
+        "title": "Tile、wave 与尾部浪费：大芯片为什么会被小问题闲住？",
+        "html": "<p>Roofline 只按 FLOPs 和 bytes 看潜在资源上界；它没有自动保证任务能均匀铺满 SM。GEMM 的 tile 决定每个 CTA 负责多少输出、需要多少数据与寄存器，也决定整个 grid 有多少 CTA。这些因素一起决定是否能发挥 H200 的规模。</p>\n<h3>先看 tile 内的有效比例，再看 tile 之间的并行度</h3>\n<p>设一个普通输出 tile 为 <code>BM×BN</code>，问题输出为 <code>M×N</code>，grid 近似含 <code>ceil(M/BM)×ceil(N/BN)</code> 个 tile。若尾部按完整 tile 执行，输出位置的有效比例可估为 <code>MN / (ceil(M/BM)BM × ceil(N/BN)BN)</code>。这只是输出位置模型；真实 MMA padding、K 方向循环、掩码优化和调度可能改变实际执行 FLOPs。</p>\n<p><strong>教学例：</strong>M=129、N=128，若 BM=BN=128，将形成 2 个输出 tile，但第二个 tile 只有一行有效，位置比例约为 50.4%。Tensor 管线可能仍然很忙，却在处理大量不能算进算法有效工作的元素。换更小 tile 可减少浪费，也可能增加重复搬运和调度开销，所以不能只追求这个比例。</p>\n<h3>Wave 是容量模型，不是所有 SM 同时跨过的一道栅栏</h3>\n<p>设可见 SM 数为 S，每 SM 在资源条件下能同时驻留 b 个 CTA，则一批理论驻留容量是 <code>S×b</code>。对执行时间相近、无 persistent/cluster 等特殊调度的 CTA，可以用 <code>ceil(G/(S×b))</code> 估算批次数，用 <code>G/[ceil(G/(S×b))×S×b]</code> 看尾批填充。运行时其实会在 CTA 完成后继续投递，不存在必须等整波完成的通用全局 barrier。</p>\n<p><strong>教学例：</strong>虚构设备有 8 个 SM、每 SM 可驻留 2 个 CTA，共 17 个等时 CTA。按此简化模型要两批，容量填充为 <code>17/32≈53.1%</code>。这不是 H200 的 SM 数，更不是时延预测；它说明刚超过整批容量时，最后一个 CTA 可能拉长收尾。若 CTA 工作量差异大，这个模型还会低估不均衡问题。</p>\n<table><thead><tr><th>调整</th><th>潜在好处</th><th>需要付出的成本</th></tr></thead><tbody>\n<tr><td>扩大 tile</td><td>增强复用，减少某些地址/循环开销</td><td>寄存器/shared 增加，驻留减少，尾部无效位置增加</td></tr>\n<tr><td>缩小 tile</td><td>更多 CTA，更细的负载分布</td><td>重复加载、调度与 epilogue 成本可能上升</td></tr>\n<tr><td>Split-K</td><td>从 K 维增加并行度</td><td>部分和存储、归约、额外 kernel 或同步、数值顺序变化</td></tr>\n<tr><td>Grouped / persistent GEMM</td><td>把多个小问题组织成更充足的任务池</td><td>调度复杂性、负载估计、尾部与实现约束</td></tr>\n<tr><td>增加 batch</td><td>可能提高权重复用与 M 维并行度</td><td>请求等待、容量和尾延迟改变，不能只看吞吐</td></tr>\n</tbody></table>\n<p>MoE 尤其要按每个专家的 token 分布统计 tile，而不能把全局 token 数直接当成每个 GEMM 的 M。只有一个大 shape 的性能记录，无法证明真实路由分布下的收益。关于 tile 与 wave 的基础机制，可参见 <a href=\"https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html\">NVIDIA 矩阵乘性能指南</a>；其中旧产品实验不作为本页 H200 实测。</p>"
+      },
+      {
+        "id": "hopper-async-pipeline",
+        "title": "Hopper 专项：async copy、TMA、WGMMA 与 warp specialization",
+        "html": "<p>Hopper 的高效 GEMM 不只是“调用 Tensor Core”。数据何时进入 shared memory、何时允许 MMA 消费、何时可以复用缓冲区，往往决定 Tensor Core 是否能持续工作。要把<strong>数据生产、同步、矩阵计算和结果消费</strong>作为一条流水线理解。</p>\n<h3>从普通搬运到 TMA</h3>\n<p>传统的 global → register → shared 路径需要线程执行相应 load/store。Ampere 开始提供硬件加速的 async copy 路径；Hopper 的 TMA 进一步支持张量描述驱动的数据移动，适合由少量线程发起、多线程随后消费。它能减少某些地址计算、指令与寄存器搬运负担，但不会消除 HBM 字节、shared 容量或同步的实际成本。背景见 <a href=\"https://docs.nvidia.com/cuda/cuda-programming-guide/03-advanced/advanced-kernel-programming.html\">CUDA Advanced Kernel Programming</a>和 <a href=\"https://docs.nvidia.com/cuda/hopper-tuning-guide/index.html#tensor-memory-accelerator\">Hopper TMA 说明</a>。</p>\n<p>一个双缓冲思路是：在 stage 0 的 tile 被计算时，提前装载 stage 1；等待 stage 1 真正完成后再消费它，同时确认 stage 0 的所有消费者结束后才覆盖 stage 0。<strong>“已发起”不等于“数据已到”，“MMA 已提交”也不等于“读操作或累加已结束”。</strong>barrier phase、事务完成计数及 buffer lifetime 是正确性的组成部分。</p>\n<h3>WGMMA 和 warpgroup 是什么？</h3>\n<p>Hopper 的 <code>wgmma.mma_async</code> 面向 warpgroup，即 4 个 warp、128 个线程共同参与的矩阵运算。它与单 warp 级别的 MMA 不是同一个协作范围；支持的输入布局、描述符、操作数与累加类型受到指令约束。异步结果需要按规定的 fence、commit、wait 与内存可见性规则使用，不能仅看到 async 就随意交错。精确合同以 <a href=\"https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#asynchronous-warpgroup-level-matrix-instructions\">PTX ISA 的异步 warpgroup 矩阵指令</a>为准。</p>\n<p><code>wgmma.mma_async</code> 的目标条件包含 <code>sm_90a</code>。这不是把 compute capability 9.0 改成另一块芯片，而是涉及架构专用功能的代码目标。Hopper 专用指令与普通 PTX 的兼容承诺不同，构建时应结合 <a href=\"https://docs.nvidia.com/cuda/hopper-compatibility-guide/index.html\">Hopper Compatibility Guide</a>与 <a href=\"https://docs.nvidia.com/cuda/cuda-programming-guide/05-appendices/compute-capabilities.html\">架构专用功能的目标规则</a>固定目标和部署范围，不能默认带 <code>a</code> 的二进制能跨后续架构通用。</p>\n<h3>为什么要让不同 warp 分工？</h3>\n<p>Warp specialization 可以让部分 warp 负责装载/准备，另一部分负责矩阵计算或 epilogue。它可能提高生产消费重叠，却也改变 warp 数、寄存器分配和同步结构。流水深度增加可隐藏延迟，同时会扩大 shared memory 与活跃状态，降低驻留上限。最佳深度取决于问题 shape、资源和实际依赖，不能固定“stage 越多越快”。</p>\n<table><thead><tr><th>现象</th><th>需要问的问题</th></tr></thead><tbody>\n<tr><td>Tensor Active 呈现明显空洞</td><td>生产者是否来不及供给？等待放得太早？stage 深度不足？还是尾部本来无任务？</td></tr>\n<tr><td>增加 stage 后更慢</td><td>shared/寄存器是否跨过驻留阈值？额外同步或无用预取是否增加？</td></tr>\n<tr><td>TMA 出现但时间不变</td><td>原瓶颈是否真在搬运指令/寄存器？可隐藏的延迟有多少？任务是否太小？</td></tr>\n<tr><td>仅某些形状正确</td><td>描述符、对齐、尾部 mask、barrier phase、buffer 复用是否覆盖所有合法输入？</td></tr>\n</tbody></table>\n<p>面试中不必死背一段 WGMMA 汇编，但应能画出生产者、缓冲区、完成事件、消费者与复用边界；并解释怎样在编译产物和 trace 里证明所期待的异步路径确实出现。</p>"
+      },
+      {
+        "id": "zeus-to-nsight",
+        "title": "从 Zeus Viewer 迁移：Nsight 多出来的复杂性在哪里？",
+        "html": "\n<p><strong>你在 Zeus Viewer 中积累的时间线、指令归因、单元重叠分析经验可以直接迁移；新增的学习量主要是 GPU 执行层级、指标语义，以及跨 CPU、GPU、通信的关联。</strong>不能把 Nsight 理解成“换个 UI”，也不能把 Zeus Viewer 简化成“只画几个时间条”。</p>\n<div class=\"callout\"><strong>本节具体检查了什么：</strong>2026-10-25 只读核对 PolarSight 仓库 <code>3e403ade1925bb8651b49709da90b661335efcc0</code> 的 Viewer 与统计代码，以及 Zeus3Simulator <code>d7ff3de469f8e4bfe571f4c86e127e6446ed56b0</code> 的时间线导出。未连接或确认你正在看的部署实例，也没有新跑 GPU、CycleSim 或 VCS。两个源仓库需要访问权限；下面只给工具功能与方法摘要。</div>\n<p>这个版本的 PolarSight 会把 zbin 反汇编与本次 Report 的动态时间线关联，提供逐核指令次数、耗时、寄存器和 L2 信息；有匹配 debug 信息才显示源码归因。采集了前端事件时，还能展示 accept / parse / issue / start / complete，区分执行关键路径和派发关键路径。<a href=\"https://github.com/CaptainShiHB/polarsight/blob/3e403ade1925bb8651b49709da90b661335efcc0/polarsight/polarcompute/ui/README.md#L3-L14\" target=\"_blank\" rel=\"noopener\">Viewer 数据来源</a>，<a href=\"https://github.com/CaptainShiHB/polarsight/blob/3e403ade1925bb8651b49709da90b661335efcc0/polarsight/polarcompute/ui/README.md#L183-L231\" target=\"_blank\" rel=\"noopener\">前端阶段与关键路径</a></p>\n<div class=\"table-wrap\"><table><thead><tr><th>你想回答的问题</th><th>本次检查的 Zeus / PolarSight</th><th>Nsight 中对应的分析入口</th></tr></thead><tbody>\n<tr><td>哪段工作把完成时间拖长？</td><td>逐核指令时间线、CT / PE / VP / DT / LD / ST / LW 泳道、依赖与关键路径。</td><td>Systems 先看 CPU 线程、CUDA API、GPU kernel / memcpy 和 NVTX 范围的关联；这一级通常比单条设备指令更宏观。</td></tr>\n<tr><td>活动之间有没有重叠？</td><td>窗口内单元 busy 并集、两两交集、同时活动单元数量分布。</td><td>Systems 看 streams、计算与拷贝、通信活动的时序；仍需确认数据依赖，不能仅凭条形重叠证明净收益。</td></tr>\n<tr><td>计算单元为什么没有充分产出？</td><td>Viewer 已有 PE MAC 利用率与 weight 供数派生统计；依赖形状、模式、容量和时间口径。</td><td>Compute 的 SM、指令流水线、内存、scheduler 与 warp-state sections 提供更细的 GPU 指标维度。</td></tr>\n<tr><td>源码和底层执行如何对应？</td><td>需 zbin / trace 一致；debug 信息匹配时恢复源码位置。</td><td>Compute 使用 kernel 的源码 / SASS 关联；仍要检查符号、编译优化与实际执行版本。</td></tr>\n<tr><td>整模或多卡为什么慢？</td><td>本次检查的 Viewer 以 kernel 的指令视图为中心，不能仅据此覆盖主机调度和整个分布式服务。</td><td>Systems 可把应用范围与 GPU 活动放进时间轴；NCCL 等采集能力取决于版本和采集选项。</td></tr>\n</tbody></table></div>\n<p>这是<strong>分析问题的对应关系，不是硬件实体的一一映射</strong>。PE 不应直接改名成 Tensor Core，VP 不应直接改名成 CUDA Core，LD/ST 泳道占比也不等于 GPU DRAM 带宽利用率。<a href=\"https://docs.nvidia.com/nsight-systems/UserGuide/index.html\" target=\"_blank\" rel=\"noopener\">Nsight Systems 官方指南</a>；<a href=\"https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#sections-and-rules\" target=\"_blank\" rel=\"noopener\">Nsight Compute sections 定义</a></p>\n"
+      },
+      {
+        "id": "viewer-metric-denominators",
+        "title": "busy share、unit occupancy、MAC 利用率：先问分母",
+        "html": "\n<p>最容易混淆的三个“利用率”，实际上回答不同问题：<strong>忙了多久、驻留了多少、单位时间完成了多少有用运算</strong>。一个面板名字里出现 occupancy，不足以判定其含义。</p>\n<div class=\"table-wrap\"><table><thead><tr><th>名称</th><th>分子 / 分母</th><th>能说明什么</th></tr></thead><tbody>\n<tr><td>单元 busy share</td><td>该单元事件区间的并集长度 / 所选时间窗口长度。</td><td>有记录活动覆盖了多少时间；不说明每拍激活多少算术 lane，也不说明字节吞吐。</td></tr>\n<tr><td>区间统计工具中的 unit occupancy</td><td>若它按事件求 union，这里就是时间占用；若统计实例或通道，要再看是否按容量归一化。</td><td>不能仅因名字相同就和 CUDA occupancy 比较。先读输出字段和实现。</td></tr>\n<tr><td>GPU warp occupancy</td><td>每 SM 的 active warps / 可支持的最大 active warps，另有 theoretical 与 achieved 等口径。</td><td>描述驻留并行性。active 不等于每个 warp 当拍都在发射指令，高 occupancy 也不保证高性能。</td></tr>\n<tr><td>PE MAC 利用率</td><td>Σ(MACᵢ / 对应模式的每拍容量ᵢ) / 指定时间分母。</td><td>把有用计算量换成理想最少周期，再看实际时间预算中的占比；不是直接读取所有 MAC cell 的逐拍活跃位。</td></tr>\n</tbody></table></div>\n<p>当前检查的 Viewer 先对同单元重叠指令求并集，排除 MAIL 等待；CT 单列，但不计入数据通路并发。它还给出至少两个数据通路单元同时活动的时间，以及两两交集。<a href=\"https://github.com/CaptainShiHB/polarsight/blob/3e403ade1925bb8651b49709da90b661335efcc0/polarsight/polarcompute/ui/assets/timeline_export.js#L86-L145\" target=\"_blank\" rel=\"noopener\">固定版本区间统计实现</a>。GPU occupancy 的具体定义以 <a href=\"https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#sections-and-rules\" target=\"_blank\" rel=\"noopener\">NVIDIA Occupancy section</a> 为准。</p>\n<h3>用一组教学数字，把三个百分比拆开</h3>\n<p>假设所选窗口为 1000 cycles，其中 PE 的区间并集为 600，VP 为 500，两者交集为 300，没有其他活动：</p>\n<div class=\"formula\">PE busy = 600 / 1000 = 60%<br>VP busy = 500 / 1000 = 50%<br>至少一个单元忙 = (600 + 500 − 300) / 1000 = 80%<br>空闲 = 20%；两单元重叠 = 30%</div>\n<p>60% + 50% = 110% 并不矛盾：两个单元能同时工作。<strong>Σbusy 是按单元累计的时间，不能冒充墙钟时长。</strong>若有三种单元同时工作 100 cycles，<code>Σbusy − ANY</code> 会计 200 cycles，而“至少两个单元同时活动”只计 100 cycles。二者都可有用，但不能同名替换，更不能直接当作优化后可回收的延迟。</p>\n<p>再假设这些 PE 运算在相同精度、容量与时钟域下的理想时间为 300 cycles，PE 首末跨度为 800 cycles，则：</p>\n<div class=\"formula\">pure PE MAC 利用率 = 300 / 600 = 50%<br>PE span 口径 = 300 / 800 = 37.5%<br>整个窗口口径 = 300 / 1000 = 30%</div>\n<p>三种数都成立。前者偏向说明 PE 活动期间的效率；后两者逐步把指令间气泡、前后处理等包含进来。Viewer 的实现确实分别保留这三种分母；混合运算模式时逐条换算理想周期，窗口截断时会对计算量作时间比例估计并标记。<a href=\"https://github.com/CaptainShiHB/polarsight/blob/3e403ade1925bb8651b49709da90b661335efcc0/polarsight/polarcompute/ui/assets/timeline_export.js#L45-L83\" target=\"_blank\" rel=\"noopener\">模式、覆盖和截断处理</a>，<a href=\"https://github.com/CaptainShiHB/polarsight/blob/3e403ade1925bb8651b49709da90b661335efcc0/polarsight/polarcompute/ui/assets/timeline_export.js#L112-L123\" target=\"_blank\" rel=\"noopener\">三个时间分母</a></p>\n<div class=\"callout\">以上 1000 / 600 / 500 / 300 cycles 全是教学数字，不是 Zeus 或 NVIDIA 测量。浮点乘加按 1 MAC=2 FLOP 计数时，分子和峰值必须同步换单位；整数运算应使用对应的操作数口径，不能改名为 FLOP。</div>\n"
+      },
+      {
+        "id": "viewer-data-provenance",
+        "title": "时间条来自哪里：trace、硬件计数器与推导不是同一种证据",
+        "html": "\n<p><strong>从 Viewer 迁移到 Nsight 时，最值得保留的习惯是追问：这个数字是采到的，还是算出来的？</strong>看起来一样的百分比，可能来自不同证据链。</p>\n<ol><li><strong>事件时间：</strong>某个边界被记录了 start / end。先确认边界指入队、开始服务，还是有序退休。Zeus3Simulator 的时间线工具就同时保存 <code>service</code> 与 <code>trace</code> 两组端点：前者是 engine 服务区间，后者对齐 queue-to-retire 语义。后者可能包含等待，因此不能把它和前者相减后直接判成模型误差。<a href=\"https://github.com/DarronTam/Zeus3Simulator/blob/d7ff3de469f8e4bfe571f4c86e127e6446ed56b0/tools/src/timeline.cpp#L20-L40\" target=\"_blank\" rel=\"noopener\">两类端点定义</a></li>\n<li><strong>推导工作量：</strong>从指令、shape、精度和执行次数推 MAC 或字节数，再除以时间。PolarSight 的相关汇总把 MAC 总量和容量标为编译侧推导，并检查数据覆盖；信息不完整时不输出完整利用率。这里的“动态总 MAC”包含动态执行次数，仍不等于读取到了每个算术单元的独立硬件计数器。<a href=\"https://github.com/CaptainShiHB/polarsight/blob/3e403ade1925bb8651b49709da90b661335efcc0/polarsight/polarcompute/sections/utilization.py#L1923-L2013\" target=\"_blank\" rel=\"noopener\">统计来源与覆盖检查</a></li>\n<li><strong>硬件计数器与采样：</strong>Nsight Compute 收集 GPU 指标；可同时采集的指标有限，可能需要 replay。Nsight Systems 也有可选 GPU Metrics 采样，因此“Systems 只有时间条、Compute 才有任何硬件数据”同样不准确。采集方式、采样粒度和关联范围要随数字一起解释。<a href=\"https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#replay\" target=\"_blank\" rel=\"noopener\">Compute replay</a>，<a href=\"https://docs.nvidia.com/nsight-systems/UserGuide/index.html#gpu-metrics\" target=\"_blank\" rel=\"noopener\">Systems GPU Metrics</a></li></ol>\n<h3>跨核时钟也要先对齐，再讨论先后关系</h3>\n<p>检查的 Viewer 支持利用对齐元数据把各核映射到共同时间轴；缺少该信息时可以退回各核各自归零。此时，两个核页面上的 cycle 100 不足以证明发生在同一全局时刻。<a href=\"https://github.com/CaptainShiHB/polarsight/blob/3e403ade1925bb8651b49709da90b661335efcc0/polarsight/polarcompute/ui/README.md#L233-L247\" target=\"_blank\" rel=\"noopener\">跨核时间零点</a></p>\n<p>比较一次 kernel 的慢核自身耗时，可明确写 <code>max(end₀−start₀, end₁−start₁)</code>；另保留启动偏斜和 <code>max(end)−min(start)</code> 原始跨核跨度。两者不是同一个指标，也不自动包含 host、通信或整个模型请求。CycleSim、VCS/RTL 与硅上采集的数字必须分别标注。</p>\n<div class=\"callout\"><strong>同一份漂亮报表也可能混有不同来源：</strong>trace 给时间，编译分析给 shape，部署元数据给频率，模型给峰值或估计流量。只有每一项的版本、覆盖和单位一致，派生出来的利用率才有可解释性。固定 SHA 表示核对过哪版实现，不代表确认了你当前部署的报表版本。</div>\n"
+      },
+      {
+        "id": "viewer-to-gpu-workflow",
+        "title": "把熟悉的 Viewer 方法，变成一套 GPU 面试回答",
+        "html": "\n<p>面试官问“熟悉 Nsight 吗”，比较有说服力的回答应包括<strong>问题、所需证据、验证动作</strong>，而不是背几个面板名称。你可以用已有的设备时间线经验搭桥：</p>\n<div class=\"table-wrap\"><table><thead><tr><th>观察</th><th>下一步问题</th><th>验证动作</th></tr></thead><tbody>\n<tr><td>设备有明显空档。</td><td>是 host 尚未提交、依赖未就绪，还是设备内部等待？</td><td>先把应用范围、API、提交与设备执行关联起来；若范围只覆盖 kernel 内部，先补全上层范围，再解释原因。</td></tr>\n<tr><td>某个 kernel 时间很长。</td><td>它在整步关键路径上吗？同名调用的 shape、dtype、batch 是否相同？</td><td>先在 Systems 的实际流程中定位调用，再用 Compute 对代表性实例补充 SM、内存与调度指标；对比相同输入和配置。</td></tr>\n<tr><td>某单元或某 pipeline 活跃。</td><td>活跃时间、吞吐、容量利用率分别是多少？还有哪些资源限制？</td><td>把“活动占比”和“有用工作 / 时间 / 匹配峰值”分开；用工作量账本和必要的计数器交叉检查，避免把高百分比直接解释为高效率。</td></tr>\n<tr><td>通信条很长，且和计算重叠。</td><td>它何时具备输入？哪些 rank 到得晚？重叠是否抢占资源？</td><td>对齐 rank 的准备、调用与完成时刻，比较有 / 无重叠的整步时间；通信耗时下降或条形重叠增加都不能单独作为最终收益。</td></tr>\n<tr><td>优化后某局部指标变好。</td><td>收益有没有沿关键路径传到实际目标？</td><td>在正常执行条件下重新验证 kernel / step / request 指标及数值正确性，别把 profile 中的一次计时当成最终基准。</td></tr>\n</tbody></table></div>\n<p>这套流程是方法迁移。GPU 特有的新知识主要包括 grid / block / warp / SM 的映射、驻留资源限制、缓存与内存事务、指令流水线，以及多卡互连和软件通信栈。不要用 Zeus 的单元名称硬套这些实体，也不要因为两边都叫 utilization 就横向比数值。</p>\n<div class=\"qa\"><details open><summary>可以怎样诚实地描述自己的经验？</summary><div><p>“我已有基于设备 trace 的逐单元时间线、并发和关键路径分析经验，会区分 busy union 与算术容量利用率，也会核对时间端点和来源。迁移到 GPU 时，我先用 Nsight Systems 定位整步中的 host、kernel、拷贝和通信关系，再用 Nsight Compute 验证热点的算术、内存和调度假设，最后回到正常运行验证收益。没有实际采集过的 GPU 场景，我会明确说是文档学习与方法迁移。”</p></div></details></div>\n<p>检查的 PolarSight 文档还提醒：trace 与二进制不匹配、指令归属自检失败时，时间线可能仍能画出来，但跨单元依赖与关键路径不可信。这正是一个很好的面试例子：<strong>会用 profiler，也要会判断 profiler 产物何时不能支持结论。</strong><a href=\"https://github.com/CaptainShiHB/polarsight/blob/3e403ade1925bb8651b49709da90b661335efcc0/polarsight/polarcompute/ui/README.md#L409-L421\" target=\"_blank\" rel=\"noopener\">指令归属自检边界</a></p>\n"
       },
       {
         "id": "communication-contract",
@@ -214,7 +415,17 @@
       {
         "id": "workload-slo",
         "title": "从负载模型走到服务指标：校准、排队与面试表述",
-        "html": "<p>先用算量和字节得到下界，再用真实 shape 的算子与通信微基准校准，最后按依赖图与调度过程组合。可以给每个形状区间拟合可达吞吐、有效带宽和固定启动开销；用没有参与拟合的长度、batch 和路由分布验证误差。一个全局“效率系数”很容易在训练样本上好看、换 workload 就失效。</p>\n<pre><code>t_op ≈ max(F / P_effective, D / BW_effective) + launch/scheduling terms\n          [筛选用近似；依赖、不同阶段与额外资源瓶颈需单列]\nTTFT = t_first_token − t_request_start\nTPOT_request = (t_last_token − t_first_token) / (output_tokens − 1)\nITL_j = t_token_j − t_token_(j−1)</code></pre>\n<p>以上把请求起点定义为所选测量边界中的请求发出/到达时刻，报告时明确是客户端还是服务端。TTFT 可能包含网络、排队、tokenize、prefill 与首 token 采样。TPOT 对输出大于 1 的请求定义，表示该请求首 token 后的平均间隔；它会掩盖某个特别慢的 token，所以还应看 ITL 的分位数。端到端时间等于 TTFT + (输出数−1)×该请求 TPOT。</p>\n<h3>吞吐高，不等于用户体验好</h3>\n<p>离线持续喂满设备得到的 token/s 是容量参考；在线服务需同时约束 TTFT 和 token 间隔。本文把 request goodput 定义为“在测量窗口内，完成且同时满足所定 TTFT/TPOT 条件的请求数 ÷ 窗口时间”；如果使用 token goodput，应另外明确分子。<a href=\"https://arxiv.org/abs/2401.09670v3\">DistServe</a>也是以满足阶段延迟约束的服务能力作为优化目标。</p>\n<p>在稳定且测量边界一致的队列系统中，Little 定律给出平均在系统请求数 N = 到达率 λ × 平均逗留时间 W。它连接平均量，不能直接推出 p99，也不能把“并发 100”当成“每秒 100 请求”。负载接近容量时，波动和长请求更容易形成排队；测试应保存到达分布、长度分布、突发程度以及是否开放式发压。只让上一批完成后再发下一批，可能掩盖真实排队。</p>\n<h3>一个足够扎实的面试回答</h3>\n<p>“我先固定请求长度、并发和 SLO，按 prefill/decode 拆开估算每层 FLOPs、权重与 KV 字节；用算子画像找到占关键路径的 shape。系统时间线若显示通信等待，我对齐所有 rank 的输入就绪点，区分 arrival skew 与传输瓶颈，再用匹配尺寸的 nccl-tests 和拓扑测试验证。最后只把完整请求或迭代的改善计入收益，同时报告正确性、尾延迟、版本和适用负载。”</p>\n<p>这段话表达的是可执行的方法。若你尚未亲自完成实验，应说“我会这样分析”或“我已做过教学建模”，再展示模型和待验证假设；不要把公式推导、论文结果、模拟器数字描述成自己的 GPU 实测。</p>"
+        "html": "<p>先用算量和字节得到下界，再用真实 shape 的算子与通信微基准校准，最后按依赖图与调度过程组合。可以给每个形状区间拟合可达吞吐、有效带宽和固定启动开销；用没有参与拟合的长度、batch 和路由分布验证误差。一个全局“效率系数”很容易在训练样本上好看、换 workload 就失效。</p>\n<div class=\"formula\">t_op ≈ max(F/P_effective, Q/BW_effective) + 启动与调度项<br>这是筛选近似；依赖、额外资源和不同执行阶段需单列。</div>\n<p>业务验收回到前文的 <a href=\"#chapter/performance-analysis/inference-latency-timeline\">TTFT / TPOT / ITL</a>、<a href=\"#chapter/performance-analysis/inference-window-load\">窗口与发压方式</a>及<a href=\"#chapter/performance-analysis/inference-statistics-goodput\">goodput / Little 定律</a>。负载模型要预测的不只有最快单个kernel，还包括目标请求分布下的SLO容量边界。不能用一个最佳shape的效率系数解释全部上下文和batch。</p>\n<h3>一个足够扎实的面试回答</h3>\n<p>“我先固定请求长度、并发和 SLO，按 prefill/decode 拆开估算每层 FLOPs、权重与 KV 字节；用算子画像找到占关键路径的 shape。系统时间线若显示通信等待，我对齐所有 rank 的输入就绪点，区分 arrival skew 与传输瓶颈，再用匹配尺寸的 nccl-tests 和拓扑测试验证。最后只把完整请求或迭代的改善计入收益，同时报告正确性、尾延迟、版本和适用负载。”</p>\n<p>这段话表达的是可执行的方法。若你尚未亲自完成实验，应说“我会这样分析”或“我已做过教学建模”，再展示模型和待验证假设；不要把公式推导、论文结果、模拟器数字描述成自己的 GPU 实测。</p>"
+      },
+      {
+        "id": "compiler-performance-contract",
+        "title": "算子优化专家与编译器优化专家，分别要交付什么证据",
+        "html": "<p>算子专家决定“怎样做这份计算更好”，编译器专家还要证明“转换在一类合法输入上保持语义，并稳定生成更好的执行”。共同起点是一个能重放的业务形状，而不是某条指令看起来更少。</p>\n<table><thead><tr><th>层级</th><th>需要看懂并产出的材料</th><th>典型失败</th></tr></thead><tbody>\n<tr><td>算子语义</td><td>shape、stride、dtype、累加/舍入、mask、alias、原地写、layout、动态维、数值容差</td><td>去掉一条cast却改变中间舍入；只测整齐shape漏掉尾块和NaN/Inf边界</td></tr>\n<tr><td>图与调度</td><td>生产者消费者、fusion边界、布局变换、分配与生命周期、同步、launch数量</td><td>本算子更快，但额外转换和数据搬运抵消收益</td></tr>\n<tr><td>Tile与流水</td><td>block/warp布局、K切分、stage数、寄存器/shared预算、mask、并行波次</td><td>tile变大减少读取，却减少驻留并导致尾波或spill</td></tr>\n<tr><td>IR与机器代码</td><td>转换前后IR、pass条件、合法性、实际选中kernel、生成PTX/SASS或设备指令</td><td>源码想用Tensor Core，但lowering走了其他路径；优化被后续pass抵消</td></tr>\n<tr><td>性能证据</td><td>正常计时+代表性profile+负载分布+正确性；相同版本与输入的A/B</td><td>把单次profile时间当性能，用一个最佳点掩盖常见shape回退</td></tr>\n</tbody></table>\n<h3>把“少了指令”改写成一条可验证的因果链</h3>\n<p>一个合格结论可以是：“这类 stride/layout 下，转换消除了中间张量的写回和重读；IR 与产物确认走了新路径，实际 DRAM 字节下降；寄存器和 spill 没有引入更大代价；代表 shape 的正常计时改善，完整生产者消费者范围仍改善，误差满足原契约。”这比“融合了所以更快”多的是可复核证据。</p>\n<p>针对编译器 pass，要同时展示适用和不适用输入：前置条件为什么充分、何时必须保留原路径、动态值无法证明时如何回退。性能矩阵至少覆盖小/中/大形状、对齐/非对齐、连续/目标stride、典型batch与上下文，而不是穷举所有无关组合。收益与回退都给频次权重；最终以业务shape分布判断价值。</p>"
+      },
+      {
+        "id": "compiler-performance-evidence",
+        "title": "算子与编译专家的闭环：从指标追到 SASS，再回到业务",
+        "html": "<p>会解释一个指标，还不等于能做编译优化。专家需要把证据跨过四层连接起来：<strong>语义与输入 → IR/布局/调度决策 → 实际机器指令及资源 → 可重复性能变化</strong>。每跨一层都要防止“我以为编译器会这样生成”取代真实产物。</p>\n<table><thead><tr><th>性能假设</th><th>编译层要检查</th><th>硬件/执行证据</th><th>容易被忽略的代价</th></tr></thead><tbody>\n<tr><td>融合能减少流量</td><td>中间值是否真被消除，layout conversion 是否仍存在</td><td>kernel 数、DRAM/local 流量、资源和时延</td><td>live range、spill、代码体积、shape 特化</td></tr>\n<tr><td>向量化能改善访存</td><td>对齐与别名证明、实际访问宽度、尾部处理</td><td>load/store 形态、sector/request、有效 lane</td><td>更高寄存器压力、非连续输入退化</td></tr>\n<tr><td>软件流水能隐藏延迟</td><td>prefetch 与消费者距离、stage 数、barrier/异步合同</td><td>eligible/issue、Tensor 空洞、shared 使用、时延</td><td>缓冲增大导致驻留阈值下降</td></tr>\n<tr><td>改变 tile 能提高计算效率</td><td>CTA/warp/MMA tile、K 循环、mask/padding</td><td>wave、占用、管线、有效 FLOP/s</td><td>重复搬运、尾部形状、归约或 epilogue</td></tr>\n<tr><td>减少寄存器能提高 occupancy</td><td>寄存器分配、live range、限制选项、展开决策</td><td>驻留变化、local load/store 与总时间</td><td>spill、重算与 ILP 下降</td></tr>\n</tbody></table>\n<h3>保存实际二进制，而不只保存源码</h3>\n<p>相同源码在不同编译器、ptxas、驱动 JIT、autotune 与 shape 特化下可以生成不同机器码。记录源码 commit、编译器版本与参数、目标架构、实际 kernel 名、输入签名及编译产物 hash。对框架/DSL，还要保留与目标调用对应的 IR、生成代码和 kernel cache 身份；不要拿另一次编译的汇编解释当前 trace。</p>\n<pre><code># Teaching example for a CUDA source with a verified sm_90 target.\n# Architecture-specific WGMMA code may require sm_90a and its compatibility contract.\nnvcc -O3 -lineinfo -arch=sm_90 -Xptxas=-v kernel.cu -o kernel_bench\ncuobjdump --dump-resource-usage ./kernel_bench\ncuobjdump --dump-sass ./kernel_bench\n# For an actual cubin artifact, nvdisasm provides another disassembly view:\nnvdisasm kernel.cubin</code></pre>\n<p><code>-lineinfo</code> 用于保留源码行映射；不要为了行号把性能实验改成完整 debug 生成方式。工具与编译选项参见 <a href=\"https://docs.nvidia.com/cuda/cuda-compiler-driver-nvcc/index.html\">NVCC 文档</a>和 <a href=\"https://docs.nvidia.com/cuda/cuda-binary-utilities/index.html\">CUDA Binary Utilities</a>。以上只是语法模板，未在本页编译或运行。</p>\n<p>Nsight Compute 的 Source 页可以把 SASS 与有对应信息的源码/PTX 对齐，见 <a href=\"https://docs.nvidia.com/nsight-compute/NsightCompute/index.html#source-page\">官方 Source Page</a>。优化后源码行与指令常常不是一一对应；采样落在哪行并不自动等于那行制造了根因。要结合生产者消费者依赖、地址与存储路径，区分“等待发生的位置”和“等待来源”。</p>\n<h3>如何让一个性能结论经得起追问？</h3>\n<p>例如：“对这个尾部 shape，原实现的 tile 导致大量无效矩阵工作；我调整 tile 后，实际 grid/寄存器占用与有效工作比例符合预期，正确性在这些边界输入上通过，无 profiler 时延稳定下降；在真实 shape 分布下仍有收益，但另一类小 K 输入无收益。”这比“Tensor 利用率从 60% 到 80%”更完整，也更能体现判断力。</p>\n<p>每次修改保留可证伪假设和对照。如果 static instruction count 下降但总时间不变，应接受资源瓶颈或关键路径未改变的事实；如果局部更快但业务更慢，应计入新增转换、同步、通信与排队。专家优化的终点是合法语义和真实目标改善，而不是让某一个工具面板更好看。</p>"
       },
       {
         "id": "diagnosis-case",
@@ -225,6 +436,11 @@
         "id": "perf-experiment",
         "title": "从假设到结论：一份可复现的性能实验怎么写？",
         "html": "\n<ol><li><strong>冻结目标与环境：</strong>模型/代码提交、GPU与节点数、驱动/CUDA/库/编译器版本、dtype、并行策略、shape与请求分布、计时范围、预热、统计方法。</li>\n<li><strong>建立无重型采集的基线：</strong>先检查结果正确性，再采端到端 P50/P95/P99、吞吐和波动。kernel 优化还应记录误差容限，不能用错误计算换速度。</li>\n<li><strong>逐层缩小范围：</strong>系统 trace 找关键路径；框架 profiler 找 shape/调用栈；热点 kernel 用计数器检验 Roofline 和资源假设；多卡检查所有 rank。</li>\n<li><strong>一次主要改变一个因素：</strong>如融合、tile、batch、并行方式或通信调度。记录预测：它应该减少什么工作量、哪一段时间、代价是什么。</li>\n<li><strong>做匹配的 A/B 与消融：</strong>同一 workload，交替运行或重复采样控制漂移；比较分布。再扫邻近 shape、长短请求和并发，避免只优化一个幸运点。</li>\n<li><strong>回到业务验收：</strong>去掉高开销 profiler，确认端到端收益、显存、精度和 SLO。kernel、模型 step、服务请求是三种证据，分别报告。</li></ol>\n<pre><code># Example report fields, not a measurement result\nrevision / environment / topology:\nworkload: shapes, dtypes, request lengths, concurrency, seed\nmetric: start boundary, end boundary, denominator, samples\nbaseline: p50, p95, p99, throughput, memory\nhypothesis: expected reduction and expected side effects\nchange: one primary factor\nevidence: trace interval, operator group, counters, model residual\nvalidation: correctness, A/B distribution, neighboring shapes\nresult: kernel / model step / service metrics separately</code></pre>\n<p>基线 10 ms，某个串行热点占 30%，即使把它优化到 2 倍，整段也只是 <code>1 / (0.7 + 0.3/2) ≈ 1.176</code> 倍。这个 Amdahl 估计假设其余工作和重叠关系不变；对并行 DAG，要重新计算关键路径，不能直接拿 kernel 累计时间占比套公式。</p>"
+      },
+      {
+        "id": "expert-experiment-ladder",
+        "title": "从会看图到能独立优化：六个可交付的练习",
+        "html": "<p>每个练习都要留下“问题 → 预测 → 观测 → 改动 → 验收”五项，先用普通计时确认现象，再按需要增加采集。以下是建议执行的实验设计，本文没有代你在 H200 上运行它们。</p>\n<ol><li><strong>同一 GEMM 扫 M。</strong>固定 N/K/dtype，扫小 M 到大 M；手算 F/Q，观察 tile 数、尾波、Tensor/DRAM 指标和耗时。交付：为什么某个 M 区间换了瓶颈，是否达到同shape库实现的水平。</li>\n<li><strong>融合与反融合。</strong>对 bias/activation 或 norm 邻接算子做完整范围 A/B，记录launch、字节、寄存器与spill。交付：减少流量是否真的改善了消费者完成时间。</li>\n<li><strong>流水参数扫描。</strong>只改一个 tile/stage/warp 参数族，冻结其他条件。交付：延迟隐藏收益与资源占用代价；解释最优点为何不是最大occupancy。</li>\n<li><strong>通信与到达偏斜。</strong>固定collective与消息量，对比独立微基准、模型内同步与异步路径。交付：输入就绪偏斜、传输、暴露在关键路径上的通信，以及重叠后的整步净收益。</li>\n<li><strong>服务压测。</strong>固定输入输出长度分布，扫请求率与并发，记录TTFT/TPOT/P99、错误率与goodput。交付：达到SLO的容量边界，说明prefix cache、prefill混入与长上下文的影响。</li>\n<li><strong>编译器转换闭环。</strong>同一业务kernel固定源码与工具链，只替换目标pass；保留IR和二进制身份，验证数值、实际选路及shape矩阵。交付：语义为何成立，收益来自哪种资源变化，何种输入应回退。</li></ol>\n<div class=\"callout\"><strong>每份报告的最小卡片：</strong>硬件/SKU/数量、dtype与并行映射、源码/编译器/驱动版本、输入与seed、冷/热状态、计时端点、采样数与分位数、原始计数、公式、正确性、收益与回退、未覆盖范围。性能结果必须能追溯到最终产物，而不是只有一个截图。</div>\n<p>面试回答可以按三个深度准备：一分钟讲指标和定位顺序；五分钟讲一个因果链完整的case；继续追问时拿出工作量账本、IR/指令、计数器和反例。真正的专业性是能解释“这个证据支持到哪一步”，也知道下一份证据应该怎样采。</p>"
       },
       {
         "id": "perf-interview",
@@ -322,6 +538,78 @@
         "q": "一个算子加速2倍，为什么模型只有1.18倍？",
         "a": "若它在串行总时间中占30%，其他项不变，Amdahl给出1/(0.7+0.3/2)=1.176倍。若有重叠和瓶颈转移，必须重新计算实际关键路径，不能套累计时间占比。",
         "followup": "哪些证据能证明收益来自预期改动，而非缓存、shape或精度变化？"
+      },
+      {
+        "id": "performance-analysis-q16",
+        "q": "230 TPS 是每个用户每秒生成230个token吗？",
+        "a": "先区分系统输出TPS、每卡归一TPS和单路速度。截图8路、34.767ms的公式得到230.10，单路条件速度约28.76；该时间还是组件估算，不是端到端客户端计时。",
+        "followup": "若batch动态变化或投机一次接受多个token，还能直接用B/t吗？"
+      },
+      {
+        "id": "performance-analysis-q17",
+        "q": "TP4下每个rank都看到16条序列，可以算64个请求吗？",
+        "a": "不能；同一个业务请求跨TP rank协作，唯一输出要去重。只有独立处理不同请求的副本才可按相同窗口相加。每卡归一再除实际物理卡数。",
+        "followup": "如果报告里的req/card指DP局部并发，应怎样转换？"
+      },
+      {
+        "id": "performance-analysis-q18",
+        "q": "Step time、TPOT和RPS有什么关系？",
+        "a": "普通decode稳态每路每步一个token时，单路生成节奏约1/t_step，系统产量约B/t_step。TPOT来自完整请求的首token后平均间隔，可能还含调度/网络；RPS数完成请求，不能把一步当一个请求。",
+        "followup": "平均40个在途请求、E2E均值2秒时，Little定律给什么？"
+      },
+      {
+        "id": "performance-analysis-q19",
+        "q": "同一个系统两个工具的ITL为什么不同？",
+        "a": "流式传输可能一次携带多个token。有的工具记事件间隔，有的按响应token数摊分；还需核对token计数、首事件和结束消息。先固定工具版本与样本单位。",
+        "followup": "一个请求只有一个输出token时，TPOT应该怎样报告？"
+      },
+      {
+        "id": "performance-analysis-q20",
+        "q": "kernel span减去kernel sum就是CPU开销吗？",
+        "a": "不成立。sum会重复累计并发事件，span包含空隙。先计算同窗口busy union；span减union只代表该事件集合未覆盖的时间，还要检查其他设备工作、CPU提交和依赖。",
+        "followup": "为什么sum恰好等于span仍可能同时有重叠与空隙？"
+      },
+      {
+        "id": "performance-analysis-q21",
+        "q": "H200 GPU utilization为100%，为什么仍然慢？",
+        "a": "GPU busy只说明采样窗有kernel执行，可能只有少量SM有warp驻留。继续看SM Active、occupancy、eligible/issued、Tensor或DRAM吞吐、真实工作量和系统关键路径；不同分母不能互相替代。",
+        "followup": "一个等待通信的kernel能否让busy看起来很高？"
+      },
+      {
+        "id": "performance-analysis-q22",
+        "q": "多开stream能把SM利用率拉满吗？",
+        "a": "stream是有序工作队列，SM是共享硬件。并行还需要任务独立和资源允许；一条stream的kernel可占很多SM，多stream也可能争抢寄存器、shared或带宽而变慢。",
+        "followup": "跨stream消费者如何知道生产者数据已经可用？"
+      },
+      {
+        "id": "performance-analysis-q23",
+        "q": "为什么occupancy提高，kernel却变慢？",
+        "a": "提高驻留可能付出spill、重复搬运或ILP下降代价；驻留warp也可能都等同一依赖。要看eligible/issue、实际字节与无profiler计时，不追单一百分比。",
+        "followup": "限制寄存器数后应该优先核对哪些指标？"
+      },
+      {
+        "id": "performance-analysis-q24",
+        "q": "Dense BF16能直接除以H200的1979 TFLOP/s吗？",
+        "a": "该产品表数值带结构化稀疏脚注，普通dense路径不匹配。需要同SKU、精度、指令模式与稀疏口径的参考；还区分标称峰值和同环境微基准。",
+        "followup": "算法有很多零是否足以使用稀疏峰值？"
+      },
+      {
+        "id": "performance-analysis-q25",
+        "q": "融合后DRAM带宽降低，是退步吗？",
+        "a": "不一定。若减少了中间流量，Q下降可超过t的下降幅度，因此Q/t更低但任务更快。应同时报告字节、时间、有效工作量和正确性。",
+        "followup": "如果Q下降但t上升，下一步看寄存器还是继续追带宽峰值？"
+      },
+      {
+        "id": "performance-analysis-q26",
+        "q": "max再sum与sum再max有什么不同？",
+        "a": "逐阶段max再sum允许每阶段更换慢rank，适合有相应同步边界的预算；先sum再max统计最慢完整路径。二者不能互换，都还需要明确通信、时间端点与实际并行范围。",
+        "followup": "两rank分别(8,2)与(2,8)ms，两种结果是多少？"
+      },
+      {
+        "id": "performance-analysis-q27",
+        "q": "一个编译器性能pass应该怎样验收？",
+        "a": "先证明合法性与回退条件，再确认IR和实际产物走新路径；同输入工具链A/B验证正确性、资源变化与正常计时，覆盖代表shape及完整上下游成本。",
+        "followup": "指令数下降但没有时延收益时，怎样说明优化价值？"
       }
     ],
     "sources": [
@@ -471,9 +759,200 @@
         "url": "https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html",
         "note": "2026-10-25 核对；采用GEMM工作量、复用、tile/wave解释，不引用原页面硬件测试作为本地结果。",
         "kind": "官方资料"
+      },
+      {
+        "id": "perf-expanded-source-22",
+        "label": "vLLM Benchmark CLI：吞吐、延迟、缓存与负载模式",
+        "url": "https://github.com/vllm-project/vllm/blob/24324ef0f667c633ee9bbb9412343d829f7e6d4e/docs/benchmarking/cli.md",
+        "note": "2026-10-25 核对并固定源码 SHA 24324ef0f667c633ee9bbb9412343d829f7e6d4e；包含客户端 TTFT/ITL/TPOT、分块输出区别、prefix cache 影响与请求率/并发。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-expanded-source-23",
+        "label": "vLLM Metrics：服务器与请求层指标",
+        "url": "https://github.com/vllm-project/vllm/blob/24324ef0f667c633ee9bbb9412343d829f7e6d4e/docs/design/metrics.md",
+        "note": "同一固定 SHA；服务器 gauges/counters 与请求直方图的分层，不能把客户端和服务端边界混用。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-expanded-source-24",
+        "label": "NVIDIA GenAI-Perf Metrics",
+        "url": "https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/perf_analyzer/genai-perf/README.html#metrics",
+        "note": "2026-10-25 核对；每用户输出速度、整体输出/请求吞吐及按响应token数归一的 ITL。官方此时已将新功能开发转向 AIPerf；这里只用于核对既有指标定义。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-expanded-source-25",
+        "label": "NVIDIA Triton Perf Analyzer：Inference Load Modes",
+        "url": "https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/perf_analyzer/docs/inference_load_modes.html",
+        "note": "2026-10-25 核对；concurrency mode 与 request rate mode 的区别。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-expanded-source-26",
+        "label": "SGLang Bench Serving Guide",
+        "url": "https://docs.sglang.io/docs/developer_guide/bench_serving",
+        "note": "2026-10-25 核对；request-rate/max-concurrency、实际与retokenized计数、goodput及失败请求分母。在线文档后续可能变化。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-expanded-source-27",
+        "label": "NVIDIA H200 product specifications",
+        "url": "https://www.nvidia.com/en-us/data-center/h200/",
+        "note": "官方H200 SXM/NVL产品规格；Tensor行带sparsity脚注；2026-10-25核对，规格不是实测。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-expanded-source-28",
+        "label": "NVIDIA H200 official datasheet",
+        "url": "https://dam-cdn.nvd.orangelogic.com/AssetLink/5o2qgy5d2835ve2pm11i62kv8mphqta8.pdf",
+        "note": "由NVIDIA产品页直接链接的4页datasheet；第4页规格表；2026-10-25核对。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-expanded-source-29",
+        "label": "NVIDIA CUDA GPU Compute Capability",
+        "url": "https://developer.nvidia.com/cuda/gpus",
+        "note": "官方列表将H200列为CC9.0；不据此推断具体机器SM启用数量。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-expanded-source-30",
+        "label": "CUDA Programming Model",
+        "url": "https://docs.nvidia.com/cuda/cuda-programming-guide/01-introduction/programming-model.html",
+        "note": "线程、block、grid与SM映射；滚动官方文档，2026-10-25核对。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-expanded-source-31",
+        "label": "CUDA Asynchronous Execution",
+        "url": "https://docs.nvidia.com/cuda/cuda-programming-guide/02-basics/asynchronous-execution.html",
+        "note": "stream、event与异步依赖；滚动官方文档，2026-10-25核对。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-expanded-source-32",
+        "label": "CUDA Compute Capabilities technical tables",
+        "url": "https://docs.nvidia.com/cuda/cuda-programming-guide/05-appendices/compute-capabilities.html",
+        "note": "CC9.0资源与shared memory配置；架构上限不等于某kernel驻留。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-expanded-source-33",
+        "label": "NVIDIA Hopper Architecture In-Depth",
+        "url": "https://developer.nvidia.com/blog/nvidia-hopper-architecture-in-depth/",
+        "note": "官方2022-03-22架构文章；本文仅使用Hopper SM机制，不把H100整卡规格当H200。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-expanded-source-34",
+        "label": "NVIDIA Hopper Tuning Guide",
+        "url": "https://docs.nvidia.com/cuda/hopper-tuning-guide/index.html",
+        "note": "occupancy、TMA与资源约束；滚动官方文档，2026-10-25核对。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-expanded-source-35",
+        "label": "nvidia-smi documentation",
+        "url": "https://docs.nvidia.com/deploy/nvidia-smi/index.html",
+        "note": "GPU utilization采样时间定义及MIG/环境边界；2026-10-25核对。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-expanded-source-36",
+        "label": "Nsight Compute Triage Guide",
+        "url": "https://docs.nvidia.com/nsight-compute/ComputeTriage/index.html",
+        "note": "occupancy/issue/stall/local路径诊断；本文不引用通用百分比阈值。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-expanded-source-37",
+        "label": "NVIDIA Global Memory Access in CUDA",
+        "url": "https://developer.nvidia.com/blog/unlock-gpu-performance-global-memory-access-in-cuda/",
+        "note": "官方2025-09-29文章；warp地址与sector/request分析，不外推文章速度为H200实测。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-expanded-source-38",
+        "label": "CUDA Advanced Kernel Programming",
+        "url": "https://docs.nvidia.com/cuda/cuda-programming-guide/03-advanced/advanced-kernel-programming.html",
+        "note": "寄存器/shared搬运与异步路径；滚动官方文档。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-expanded-source-39",
+        "label": "NVIDIA PTX ISA",
+        "url": "https://docs.nvidia.com/cuda/parallel-thread-execution/index.html",
+        "note": "wgmma.mma_async、warpgroup与sm_90a合同；精确指令条件应查部署工具链对应ISA。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-expanded-source-40",
+        "label": "Hopper Compatibility Guide",
+        "url": "https://docs.nvidia.com/cuda/hopper-compatibility-guide/index.html",
+        "note": "cubin/PTX及架构专用代码的兼容边界。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-expanded-source-41",
+        "label": "NVIDIA CUDA Compiler Driver",
+        "url": "https://docs.nvidia.com/cuda/cuda-compiler-driver-nvcc/index.html",
+        "note": "优化、lineinfo、架构和ptxas参数；示例未编译。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-expanded-source-42",
+        "label": "CUDA Binary Utilities",
+        "url": "https://docs.nvidia.com/cuda/cuda-binary-utilities/index.html",
+        "note": "cuobjdump与nvdisasm用于实际产物的资源与SASS检查。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-expanded-source-43",
+        "label": "Nsight Compute Source Page",
+        "url": "https://docs.nvidia.com/nsight-compute/NsightCompute/index.html#source-page",
+        "note": "源码/SASS映射及lineinfo条件；映射不代表一行对应一条指令。",
+        "kind": "官方资料"
+      },
+      {
+        "id": "perf-expanded-source-44",
+        "label": "PolarSight Viewer：数据来源、可选前端阶段与跨核时间零点（固定源码）",
+        "url": "https://github.com/CaptainShiHB/polarsight/blob/3e403ade1925bb8651b49709da90b661335efcc0/polarsight/polarcompute/ui/README.md#L3-L14",
+        "note": "需仓库权限。本次只读核对仓库 CaptainShiHB/polarsight，SHA 3e403ade1925bb8651b49709da90b661335efcc0；相对路径 polarsight/polarcompute/ui/README.md，另参 L183-L247、L409-L421。未确认用户正在使用的部署实例。",
+        "kind": "源码证据"
+      },
+      {
+        "id": "perf-expanded-source-45",
+        "label": "PolarSight：busy 并集、并发分布、两两交集（固定源码）",
+        "url": "https://github.com/CaptainShiHB/polarsight/blob/3e403ade1925bb8651b49709da90b661335efcc0/polarsight/polarcompute/ui/assets/timeline_export.js#L86-L145",
+        "note": "需仓库权限。同一固定 SHA；相对路径 polarsight/polarcompute/ui/assets/timeline_export.js L86-L145。排除 MAIL；CT 不加入数据通路并发；百分比依赖选定时间窗口。",
+        "kind": "源码证据"
+      },
+      {
+        "id": "perf-expanded-source-46",
+        "label": "PolarSight：MAC 三种时间分母与窗口截断（固定源码）",
+        "url": "https://github.com/CaptainShiHB/polarsight/blob/3e403ade1925bb8651b49709da90b661335efcc0/polarsight/polarcompute/ui/assets/timeline_export.js#L45-L123",
+        "note": "需仓库权限。同一固定 SHA；L45-L83 按模式换算、标记窗口切分与上界；L112-L123 使用 PE_CONV 并集、PE span、窗口长度三种分母。仅说明实现，不把派生数据当直接硬件计数。",
+        "kind": "源码证据"
+      },
+      {
+        "id": "perf-expanded-source-47",
+        "label": "PolarSight：MAC 工作量来源与覆盖检查（固定源码）",
+        "url": "https://github.com/CaptainShiHB/polarsight/blob/3e403ade1925bb8651b49709da90b661335efcc0/polarsight/polarcompute/sections/utilization.py#L1923-L2013",
+        "note": "需仓库权限。同一固定 SHA；相对路径 polarsight/polarcompute/sections/utilization.py L1923-L2013。逐条模式容量换算；缺失信息和估计上界需要显式标识。",
+        "kind": "源码证据"
+      },
+      {
+        "id": "perf-expanded-source-48",
+        "label": "Zeus3Simulator：service 与 queue-to-retire 的区别（固定源码）",
+        "url": "https://github.com/DarronTam/Zeus3Simulator/blob/d7ff3de469f8e4bfe571f4c86e127e6446ed56b0/tools/src/timeline.cpp#L20-L40",
+        "note": "需仓库权限。本次只读核对仓库 DarronTam/Zeus3Simulator，SHA d7ff3de469f8e4bfe571f4c86e127e6446ed56b0；相对路径 tools/src/timeline.cpp L20-L40、L92-L105。只说明模型导出端点语义，没有新增仿真或 RTL 测量。",
+        "kind": "源码证据"
       }
     ],
     "takeaways": [
+      "能从原始计数计算TPS、RPS、TTFT/TPOT/ITL、goodput，区分单路生成节奏、DP局部并发与物理卡归一。",
+      "能解释H200的SM/warp/block/stream，并逐项写出busy、occupancy、Tensor/DRAM与SOL的分母。",
       "能按业务指标、系统时间线、算子画像、kernel计数器四层解释证据，分清Profiler、benchmark与性能模型。",
       "会设计预热、CUDA异步计时、采集范围与A/B统计；知道采集自身会扰动执行。",
       "能手算FLOPs、分层bytes、Roofline拐点和时间下界，不把理论屋顶当实测速度。",

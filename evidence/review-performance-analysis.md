@@ -6,11 +6,11 @@
 
 - 正文：`content/40-performance-analysis.json`，章节 `performance-analysis`。
 - 独立入口：运行 `python3 scripts/build.py` 生成 `dist/performance.html`；正文、样式、脚本均内嵌，可通过 `file://` 离线打开。
-- 27节、6个阅读阶段、15道追问、21条来源、2张正文示意图、3个交互实验。
-- 沿业务目标与测量契约 → PyTorch Profiler / Nsight Systems / Nsight Compute → 算子画像 → Roofline → 通信 → 模型负载 → 实验与面试表达组织。
+- 57节、10个阅读阶段、27道追问、48条来源、6张正文示意图、4个交互实验区（吞吐区含固定step与窗口两种模式）。
+- 沿推理指标 → step与看板口径 → H200执行层级 → Profiler / Nsight → Roofline与实现 → Zeus Viewer方法迁移 → 通信 → 模型负载 → 算子/编译优化证据组织。
 - 纳入现有“性能与推理系统”目录、全文搜索、打印与个人笔记功能。
 
-本次没有采集 CUDA / NVIDIA 硬件计数器，没有运行 NCCL 基准，也没有运行 518、CycleSim、VCS 或硅上测试。命令是教学操作模板，Python/Bash 示例只检查语法。所有示意时间、算力、带宽和模型参数均是教学构造；不冒充真实部署、公开 GLM-5 或内部 GLM5Next。
+本次没有采集 CUDA / NVIDIA 硬件计数器，没有运行 NCCL 基准，也没有运行 518、CycleSim、VCS 或硅上测试。命令是教学操作模板，Python/Bash 示例只检查语法。数字教学案例与交互参数明确标为构造；H200规格与固定版本工具行为各自注明来源。用户截图只复算两行，组内看板只提炼当前版本的指标定义；不把组件估算或原始采集解释成新实测，不把组内配置当成公开GLM-5。
 
 ## 来源边界
 
@@ -22,17 +22,30 @@
 - Roofline 引用 UCB/EECS-2008-134 原始技术报告；GEMM 复用/分块解释参照 NVIDIA 官方指南，不搬用其中旧硬件性能作为当前结果。
 - GQA、FlashAttention、PagedAttention、Megatron-LM、DistServe 引用原论文；只使用结构与方法，不外推论文的测试加速比。
 
+新增核对：
+
+- vLLM 指标依据固定 SHA `24324ef0f667c633ee9bbb9412343d829f7e6d4e`；GenAI-Perf、SGLang 与 Triton 文档核对不同 ITL/TPOT、请求率和 goodput 的口径。
+- H200 SXM/NVL 使用 NVIDIA 产品页及 datasheet；Tensor峰值保留sparsity脚注。BF16 dense约989.5 TFLOP/s与拐点约206.1 FLOP/B是标称值条件推导，不是采集结果。
+- 通过此前已授权的浏览器状态读取用户提供的妙搭看板，页面版本 `6298721218f3`，组件基线 `torch_zeus@3656952bfee88b1d5f7b68d0e724e54a7a5353d7`。正文区分DP-local req/card与物理卡归一、组件加权、各阶段max与完整路径max、kernel sum/union/span；没有发布原始看板文件、私有页面链接或浏览器状态。
+- 用户旧截图的34.767 ms与230.10只用于按原公式复算；滚动看板已变化，不将旧图标为当前结果，也不把快照间差异当成受控优化收益。
+- PolarSight固定 `3e403ade1925bb8651b49709da90b661335efcc0`、Zeus3Simulator固定 `d7ff3de469f8e4bfe571f4c86e127e6446ed56b0`。源码需权限；仅摘要功能及统计公式，未确认用户正在使用的部署实例。
+
 ## 交互模型审查
 
 数学实现位于 `web/performance-explorer.js`，样式位于 `web/performance-explorer.css`。
 
 | 实验 | 默认条件 | 独立复算 |
 | --- | --- | --- |
+| 固定step吞吐 | c=8、物理卡C=4、t=40 ms、每路每步平均接受a=1 | 活跃唯一请求32；单路25、物理卡归一200、实例800 token/s |
+| 封闭窗口吞吐 | 成功120、输出30720、60秒、4卡、SLO合格80 | 2 request/s、512 token/s、128 token/s/card、1.3333 request/s goodput |
 | Roofline | M=64，N=K=4096，BF16 A/W/C，β=0；200 TFLOP/s、2 TB/s、5 μs串行附加开销 | F=2,147,483,648 FLOP；Q=34,603,008 B；AI≈62.0606 FLOP/B；条件时间22.301504 μs |
 | 通信重叠 | C=8 ms、D=6 ms、可重叠比例50%、额外罚时0 | 重叠3 ms；总时间11 ms；相对14 ms串行基线缩短21.4286% |
 | Decode负载 | B=8、S=2048；32层、H=4096、Q/KV heads=32/8、d=128、FFN=11008、BF16 | 估算参数5,670,699,008；已有KV为2 GiB；本步流量13.48993024 GB；总资源下界6.74496512 ms |
 
 明确保留的限制：
+
+- 固定step计算器约定c=N/C，不复用看板DP-local定义；4卡与40ms是独立教学假设，不代表截图部署。
+- 窗口模型对同一个完整成功请求集合计数，不包含跨窗请求；SLO合格必须是成功子集。输入无效时清除结果并隐藏旧图，拒绝零时间、非整数卡数、溢出或不一致计数。
 
 - Roofline 的 Q 是冷读与理想复用下的最小逻辑流量，不是实际 DRAM 字节；预算点不是测量点。
 - 计算/搬运取 max 是资源下界；固定开销串行相加是附加假设。
@@ -57,18 +70,19 @@ node scripts/check_performance_model.js
 git diff --check
 ```
 
-`check_performance_model.js` 已加入现有工作流，检查独立手算值、Roofline瓶颈切换、重叠端点/负收益、batch/context缩放与GQA的KV/attention关系。
+`check_performance_model.js` 已加入现有工作流，检查独立手算值、Roofline瓶颈切换、重叠端点/负收益、batch/context缩放与GQA的KV/attention关系，以及吞吐换算、卡数归一、窗口计数和非法输入边界。
 
 使用独立 Playwright 浏览器会话验证：
 
-- 直接打开独立页面默认进入本章，27个正文锚点和6个阶段锚点可解析。
-- 搜索 `Nsight` 能找到新章节。
+- 直接打开独立页面默认进入本章，57个正文锚点和10个阶段锚点可解析。
+- 搜索 `H200` 能找到新章节。
 - Roofline 的 M=1/64/1024 能切换预算与主导项；改变参数后放大图使用当前数据。
-- 通信重叠比例100%得到8 ms；附加8 ms罚时得到16 ms。
-- B=128、S=32768显示已有KV为512 GiB，并明确没有设备容量保证。
-- 桌面1440px、手机390px正常阅读；手机横向页面无溢出，菜单导航可跳至通信阶段。
+- 原有通信重叠端点/负收益与decode容量缩放由模型检查覆盖。
+- 固定step修改为34.767 ms后显示28.76/230.10，放大图同步更新；零时间隐藏旧图；恢复有效值后恢复结果。
+- 窗口模式显示2 RPS、512/128 token/s、1.333 goodput；SLO合格数超过成功数时拒绝计算。
+- 桌面1440px、手机390px正常阅读；手机横向页面无溢出，章节路由可跳至stream解释。
 - 浏览器离线且以 `file://` 打开时，全文、图表、参数切换均正常；没有外部脚本依赖。
-- 打印生成A4 PDF；图表、问答答案与来源保留，导航隐藏。
+- 打印生成A4 PDF；图表与来源保留，当前计算模式保留，站点侧栏隐藏。
 - 浏览器控制台0 error、0 warning。
 
 浏览器状态、截图与检查用PDF仅放在任务临时目录，不纳入仓库。网页通过不意味着上述GPU示例已执行。

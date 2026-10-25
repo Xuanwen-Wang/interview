@@ -35,8 +35,46 @@ var PerformanceModel = Object.freeze({
       linearFlops,attentionFlops,flops,bytes,intensity:flops/bytes,
       computeMs,transferMs,lowerMs:Math.max(computeMs,transferMs),
       dominant:computeMs>=transferMs?'compute':'transfer'};
+  },
+  stepMetrics({concurrencyPerCard=8,stepMs=40,cards=4,acceptedPerSequence=1}={}) {
+    performanceRequireNumber(concurrencyPerCard,'每卡归一并发',{positive:true});
+    performanceRequireNumber(stepMs,'step 时长',{positive:true});
+    performanceRequireNumber(cards,'实例物理 GPU 数',{positive:true,integer:true});
+    performanceRequireNumber(acceptedPerSequence,'每路每步最终接受 token 数');
+    const rawSequences=concurrencyPerCard*cards, sequences=Math.round(rawSequences);
+    // The fixed-step picture represents a whole number of simultaneous requests.
+    if(!Number.isSafeInteger(sequences) || sequences<1 || Math.abs(rawSequences-sequences)>1e-9)
+      throw new RangeError('固定 step 模型要求 c × C 是正的安全整数，请调整归一并发或物理 GPU 数。');
+    const perSequenceTps=acceptedPerSequence*1000/stepMs;
+    const perCardTps=concurrencyPerCard*perSequenceTps, instanceTps=cards*perCardTps;
+    const tokensPerStep=sequences*acceptedPerSequence;
+    if(![perSequenceTps,perCardTps,instanceTps,tokensPerStep].every(Number.isFinite))
+      throw new RangeError('参数产生了超出数值范围的结果，请缩小数值或增大 step 时长。');
+    return {sequences,perSequenceTps,perCardTps,instanceTps,tokensPerStep};
+  },
+  windowMetrics({successes=120,outputTokens=30720,seconds=60,cards=4,sloSuccesses=80}={}) {
+    performanceRequireNumber(successes,'成功请求数',{integer:true});
+    performanceRequireNumber(outputTokens,'成功请求最终输出 token 总数',{integer:true});
+    performanceRequireNumber(seconds,'窗口时长',{positive:true});
+    performanceRequireNumber(cards,'实例物理 GPU 数',{positive:true,integer:true});
+    performanceRequireNumber(sloSuccesses,'满足 SLO 的成功请求数',{integer:true});
+    if(sloSuccesses>successes) throw new RangeError('满足 SLO 的成功请求数不能超过成功请求总数。');
+    if(successes===0 && outputTokens!==0) throw new RangeError('成功请求数为 0 时，本口径的成功请求输出 token 总数也必须为 0。');
+    const rps=successes/seconds, instanceTps=outputTokens/seconds;
+    const perCardTps=instanceTps/cards, goodputRps=sloSuccesses/seconds;
+    if(![rps,instanceTps,perCardTps,goodputRps].every(Number.isFinite))
+      throw new RangeError('参数产生了超出数值范围的结果，请缩小数值或增大窗口时长。');
+    return {rps,instanceTps,perCardTps,goodputRps,
+      averageOutputTokens:successes>0?outputTokens/successes:null,
+      sloFraction:successes>0?sloSuccesses/successes:null};
   }
 });
+
+function performanceRequireNumber(value,label,{positive=false,integer=false}={}) {
+  if(typeof value!=='number' || !Number.isFinite(value) || (positive?value<=0:value<0)
+    || (integer && !Number.isSafeInteger(value)))
+    throw new RangeError(label+'必须是'+(positive?'正':'非负')+(integer?'安全整数':'有限数值')+'。');
+}
 
 if(typeof module!=='undefined' && module.exports) module.exports=PerformanceModel;
 
@@ -44,6 +82,7 @@ function initPerformanceExplorers() {
   document.querySelectorAll('[data-performance-explorer="roofline"]').forEach(renderPerformanceRoofline);
   document.querySelectorAll('[data-performance-explorer="overlap"]').forEach(renderPerformanceOverlap);
   document.querySelectorAll('[data-performance-explorer="workload"]').forEach(renderPerformanceWorkload);
+  document.querySelectorAll('[data-performance-explorer="metrics"]').forEach(renderPerformanceMetrics);
 }
 
 function performanceNumber(value,digits=2) {
@@ -161,5 +200,99 @@ function renderPerformanceWorkload(root) {
     view('verdict').innerHTML=`<strong>当前资源下界由${r.dominant==='compute'?'算术':'搬运'}主导。</strong> F/P=${performanceNumber(r.computeMs,3)} ms，Q/BW=${performanceNumber(r.transferMs,3)} ms。增加 B 让权重读取被更多 token 分摊；已有 KV 容量和每步读取则随 B×S 增长。`;
     view('ledger').innerHTML=`<dt>估算参数量（不计词表等）</dt><dd>${performanceNumber(r.parameters,0)}，每层 ${performanceNumber(r.layerParameters,0)}</dd><dt>权重容量 / 每步冷读</dt><dd>${gib(r.weightBytes)} GiB / ${gb(r.weightBytes)} GB</dd><dt>已有 KV 容量 / 每步读取</dt><dd>${gib(r.kvBytes)} GiB / ${gb(r.kvBytes)} GB</dd><dt>本步新增 KV / 每步写入</dt><dd>${performanceNumber(r.kvWriteBytes/2**20,3)} MiB / ${gb(r.kvWriteBytes)} GB</dd><dt>线性层 / attention 算术</dt><dd>${performanceNumber(r.linearFlops/1e9,3)} / ${performanceNumber(r.attentionFlops/1e9,3)} GFLOP</dd><dt>总算术 / 本步 token 数</dt><dd>${performanceNumber(r.flops,0)} FLOP / ${input.batch} tokens</dd>`;
     view('formula').innerHTML=`P<sub>layer</sub> = 2H² + 2H·H<sub>kv</sub>·d + 3H·FFN<br>W = 2 × layers × P<sub>layer</sub> byte<br>KV = 2(K,V) × layers × B × S × H<sub>kv</sub> × d × 2 byte<br>KV<sub>write</sub> = 2(K,V) × layers × B × H<sub>kv</sub> × d × 2 byte<br>F = 2B × layers × P<sub>layer</sub> + 4 × layers × B × S × H<br>Q = W + KV + KV<sub>write</sub>；T ≥ max(F/P, Q/BW)<br><span>本例采用 S 个 attention 位置的近似；忽略新 token 自注意的 +1 差别。1 GiB=2³⁰ byte；1 GB=10⁹ byte。</span>`;
+  });
+}
+
+function renderPerformanceMetrics(root) {
+  root.classList.add('performance-explorer','performance-metrics');
+  root.innerHTML=`<header class="performance-widget-head"><span class="eyebrow">THROUGHPUT LAB</span><h3>同一批请求：单路、每卡、实例的吞吐差在哪里？</h3><p>先固定计数范围，再做除法。下面两种模式分别练习稳态 step 换算和完整测量窗口统计，都是独立教学示例。</p></header>
+    <label class="performance-mode">选择计数方式<select data-metrics-mode aria-label="选择吞吐计算模式"><option value="step">固定 decode step：单路 / 每卡 / 实例</option><option value="window">封闭测量窗口：RPS / token throughput / goodput</option></select></label>
+    <div class="performance-metrics-panel" data-metrics-panel="step">
+      <p class="performance-definition"><strong>先约定 c = N / C：</strong>N 是实例中同时活跃的请求数，C 是整个实例的物理 GPU 数，c 才是这里的“每卡归一并发”。若看板把 req/card 定义为 DP rank 局部并发，必须先换算 N 与 C。示例 4 卡是教学假设，不是截图设备数。</p>
+      <div class="performance-controls">
+        <label>每卡归一并发 c（req/card）<input data-control="concurrencyPerCard" type="number" min="0.001" step="any" value="8" inputmode="decimal"></label>
+        <label>共同 step 时长 t（ms/step）<input data-control="stepMs" type="number" min="0.001" step="any" value="40" inputmode="decimal"></label>
+        <label>实例物理 GPU 数 C（card）<input data-control="cards" type="number" min="1" step="1" value="4" inputmode="numeric"></label>
+        <label>每路每步最终接受 a（token/req/step）<input data-control="acceptedPerSequence" type="number" min="0" step="any" value="1" inputmode="decimal"></label>
+      </div><p class="performance-input-error" data-view="error" aria-live="polite" hidden></p>
+      <div class="performance-stats" data-view="stats" aria-live="polite"></div>
+      <div class="performance-chart performance-metrics-chart" data-view="chart"></div>
+      <div class="performance-verdict" data-view="verdict" aria-live="polite"></div><div class="performance-formula" data-view="formula"></div>
+      <p class="performance-model-note">每个共同 step 都假设同一批请求持续活跃、每路平均最终接受 a 个 token；a 可用于平均接受数教学，不计被拒绝的草稿 token。归一到物理卡只是在实例总量上做除法，不表示每条请求独占一张卡，也不推断 TP / PP / DP 拓扑。这个 step 模型不包含排队、首 token、prefill 和完整请求时间，不能当作 E2E 速率或完整服务基准。改变并发时，真实 step 时长通常也会变化；保持 t 不变只练习换算，不是扩容预测。</p>
+    </div>
+    <div class="performance-metrics-panel" data-metrics-panel="window" hidden>
+      <p class="performance-definition"><strong>本例使用封闭窗口：</strong>同一请求集合全部在窗口内发起并结束，没有跨窗口请求或期末未完成请求。O 只累计 N 个成功请求最终输出的 token；窗口 T 包含这批请求的运行时间与窗口内空闲，C 在窗口内固定。SLO 合格请求必须是成功请求的子集。</p>
+      <div class="performance-controls">
+        <label>成功请求 N（request）<input data-control="successes" type="number" min="0" step="1" value="120" inputmode="numeric"></label>
+        <label>成功请求输出 O（token）<input data-control="outputTokens" type="number" min="0" step="1" value="30720" inputmode="numeric"></label>
+        <label>完整窗口 T（s）<input data-control="seconds" type="number" min="0.001" step="any" value="60" inputmode="decimal"></label>
+        <label>实例物理 GPU 数 C（card）<input data-control="cards" type="number" min="1" step="1" value="4" inputmode="numeric"></label>
+        <label>SLO 合格的成功请求 G（request）<input data-control="sloSuccesses" type="number" min="0" step="1" value="80" inputmode="numeric"></label>
+      </div><p class="performance-input-error" data-view="error" aria-live="polite" hidden></p>
+      <div class="performance-stats" data-view="stats" aria-live="polite"></div>
+      <div class="performance-chart performance-metrics-chart" data-view="chart"></div>
+      <div class="performance-verdict" data-view="verdict" aria-live="polite"></div><div class="performance-formula" data-view="formula"></div>
+      <p class="performance-model-note">这里只演示 request goodput = 满足既定 SLO 的成功请求数 / 窗口时间；SLO 阈值应在采集前定义，不能仅凭 token 总数推断。O 不含输入 token、失败请求产物或未接受的草稿。连续服务的开放窗口还要规定跨窗口请求、到达与完成计数规则；不能直接照搬本例的封闭集合。窗口聚合吞吐不能反推每个请求的输出速率或延迟分布。</p>
+    </div>`;
+  const mode=root.querySelector('[data-metrics-mode]');
+  mode.addEventListener('change',()=>root.querySelectorAll('[data-metrics-panel]').forEach(panel=>{
+    panel.hidden=panel.dataset.metricsPanel!==mode.value;
+  }));
+  const bindPanel=(name,model,render)=>{
+    const panel=root.querySelector(`[data-metrics-panel="${name}"]`);
+    const view=key=>panel.querySelector(`[data-view="${key}"]`);
+    panel.dataset.performanceExplorer='metrics-'+name;
+    performanceBind(panel,()=>{
+      const input=Object.fromEntries(Array.from(panel.querySelectorAll('[data-control]'),el=>[el.dataset.control,el.valueAsNumber]));
+      let result;
+      try {
+        result=model(input);
+        panel.querySelectorAll('[data-control]').forEach(el=>el.removeAttribute('aria-invalid'));
+        view('error').hidden=true;
+      } catch(error) {
+        view('error').textContent=error.message;
+        view('error').hidden=false;
+        view('stats').textContent='参数有效后显示结果。';
+        view('verdict').textContent='';view('formula').textContent='';
+        view('chart').hidden=true;
+        const zoom=panel.querySelector('.performance-zoom');
+        if(zoom) zoom.hidden=true;
+        panel.querySelectorAll('[data-control]').forEach(el=>{
+          if(!el.validity.valid || !Number.isFinite(el.valueAsNumber)) el.setAttribute('aria-invalid','true');
+          else el.removeAttribute('aria-invalid');
+        });
+        return;
+      }
+      view('chart').hidden=false;
+      const zoom=panel.querySelector('.performance-zoom');
+      if(zoom) zoom.hidden=false;
+      render(input,result,view);
+    });
+  };
+  bindPanel('step',PerformanceModel.stepMetrics,(input,r,view)=>{
+    const a=performanceNumber(input.acceptedPerSequence,2), t=performanceNumber(input.stepMs,3);
+    view('stats').innerHTML=performanceStat('单路最终输出速率',performanceNumber(r.perSequenceTps),'token/s/request · step 模型')+
+      performanceStat('按物理卡归一吞吐',performanceNumber(r.perCardTps),'token/s/card · 实例总量 ÷ C')+
+      performanceStat('实例最终输出总吞吐',performanceNumber(r.instanceTps),'token/s · 所有请求合计')+
+      performanceStat('实例同时活跃请求 N',performanceNumber(r.sequences,0),'request · c × C');
+    const rows=r.sequences<=3?Array.from({length:r.sequences},(_,i)=>i+1):[1,2,r.sequences];
+    const lanes=rows.map((request,i)=>{
+      const y=75+i*47, name=i===2 && r.sequences>3?'… 路 '+performanceNumber(request,0):'路 '+request;
+      return `<text x="110" y="${y+22}" text-anchor="end" class="performance-tick">${name}</text><rect x="130" y="${y}" width="210" height="33" rx="3" fill="${i===0?'#dbe9ee':'#e2eadf'}"/><rect x="350" y="${y}" width="210" height="33" rx="3" fill="${i===0?'#dbe9ee':'#e2eadf'}"/><text x="235" y="${y+22}" text-anchor="middle" class="performance-tick">接受 ${a} token</text><text x="455" y="${y+22}" text-anchor="middle" class="performance-tick">接受 ${a} token</text>`;
+    }).join('');
+    view('chart').innerHTML=`<svg viewBox="0 0 640 290" role="img" aria-label="同一实例的${r.sequences}路请求在连续两个共同step中并行推进，每个step为${input.stepMs}毫秒，每路最终接受${input.acceptedPerSequence}个token。图按请求分行，不按GPU分行。"><text x="30" y="26" class="performance-svg-title">同一批请求，连续推进两个 step（图中行代表请求）</text><text x="235" y="60" text-anchor="middle" class="performance-tick">step 1 · ${t} ms</text><text x="455" y="60" text-anchor="middle" class="performance-tick">step 2 · ${t} ms</text>${lanes}<line x1="130" y1="224" x2="560" y2="224" class="performance-axis"/><text x="130" y="245" class="performance-tick">0</text><text x="345" y="245" text-anchor="middle" class="performance-tick">t</text><text x="560" y="245" text-anchor="end" class="performance-tick">2t</text><text x="30" y="277" class="performance-tick">每 step 全实例合计 N × a = ${performanceNumber(r.tokensPerStep,2)} token</text></svg>`;
+    view('verdict').innerHTML=`<strong>每路只跟随自己的 token；实例把 ${performanceNumber(r.sequences,0)} 路相加。</strong> 本例单路 ${performanceNumber(r.perSequenceTps)} token/s，实例 ${performanceNumber(r.instanceTps)} token/s。再除以 ${input.cards} 张物理 GPU，得到 ${performanceNumber(r.perCardTps)} token/s/card；这不改变单路速率。`;
+    view('formula').innerHTML=`N = c × C = ${performanceNumber(r.sequences,0)} request<br>单路速率 = a × 1000 / t = ${performanceNumber(r.perSequenceTps)} token/s/request<br>每卡归一吞吐 = c × a × 1000 / t = ${performanceNumber(r.perCardTps)} token/s/card<br>实例吞吐 = N × a × 1000 / t = ${performanceNumber(r.instanceTps)} token/s<br><span>t 输入为 ms；1000 将 ms 换成 s。未在本模型中计算完整请求 RPS。</span>`;
+  });
+  bindPanel('window',PerformanceModel.windowMetrics,(input,r,view)=>{
+    view('stats').innerHTML=performanceStat('成功请求吞吐 RPS',performanceNumber(r.rps,3),'request/s')+
+      performanceStat('实例输出 token 吞吐',performanceNumber(r.instanceTps),'token/s')+
+      performanceStat('按物理卡归一吞吐',performanceNumber(r.perCardTps),'token/s/card')+
+      performanceStat('满足 SLO 的 goodput',performanceNumber(r.goodputRps,3),'request/s · 成功且合格');
+    const qualified=r.sloFraction===null?0:r.sloFraction, x=46, width=548;
+    view('chart').innerHTML=`<svg viewBox="0 0 640 205" role="img" aria-label="封闭窗口长${input.seconds}秒，共完成${input.successes}个成功请求，其中${input.sloSuccesses}个符合SLO；成功请求输出总计${input.outputTokens}个token。"><text x="46" y="26" class="performance-svg-title">同一个 ${performanceNumber(input.seconds,2)} s 封闭窗口</text><text x="46" y="54" class="performance-tick">成功请求集合 N = ${performanceNumber(input.successes,0)}</text><rect x="${x}" y="68" width="${width}" height="34" fill="#ece9df"/><rect x="${x}" y="68" width="${width*qualified}" height="34" fill="#527d90"/><text x="46" y="128" class="performance-tick">SLO 合格 ${performanceNumber(input.sloSuccesses,0)} · 未达 SLO ${performanceNumber(input.successes-input.sloSuccesses,0)}</text><text x="46" y="156" class="performance-tick">该集合输出 O = ${performanceNumber(input.outputTokens,0)} token</text><text x="46" y="184" class="performance-tick">请求 / 秒与 token / 秒，各用自己的分子</text></svg>`;
+    const average=r.averageOutputTokens===null?'没有成功请求，平均输出长度与 SLO 合格率不定义。':`成功请求平均输出 ${performanceNumber(r.averageOutputTokens,2)} token/request，SLO 合格率 ${performanceNumber(100*r.sloFraction,2)}%。`;
+    view('verdict').innerHTML=`<strong>RPS 和 token throughput 共享窗口时间，分子不同。</strong> ${average} 合格率也不是 goodput：goodput 的分母是窗口秒数。`;
+    view('formula').innerHTML=`RPS = N / T = ${performanceNumber(r.rps,3)} request/s<br>实例输出吞吐 = O / T = ${performanceNumber(r.instanceTps)} token/s<br>每卡归一吞吐 = O / (T × C) = ${performanceNumber(r.perCardTps)} token/s/card<br>request goodput = G / T = ${performanceNumber(r.goodputRps,3)} request/s<br><span>只对同一个成功请求集合，O/T = (N/T) × (O/N)；N=0 时不计算 O/N。</span>`;
   });
 }

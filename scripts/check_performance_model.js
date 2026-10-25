@@ -64,4 +64,63 @@ for (const batch of [1,8,32,128]) {
     assert.ok(r.lowerMs >= r.computeMs && r.lowerMs >= r.transferMs);
   }
 }
-console.log('PASS: performance teaching models; hand calculations, bottleneck changes, overlap endpoints, KV scaling and GQA invariants.');
+const stepMetrics = model.stepMetrics();
+assert.equal(stepMetrics.sequences,32);
+assert.equal(stepMetrics.perSequenceTps,25);
+assert.equal(stepMetrics.perCardTps,200);
+assert.equal(stepMetrics.instanceTps,800);
+assert.equal(stepMetrics.tokensPerStep,32);
+const fractionalNormalization = model.stepMetrics({concurrencyPerCard:2.5});
+assert.equal(fractionalNormalization.sequences,10);
+// This checks arithmetic only; it does not identify a dashboard's topology.
+const alternativeStep = model.stepMetrics({stepMs:34.767});
+assert.equal(alternativeStep.perSequenceTps.toFixed(2),'28.76');
+assert.equal(alternativeStep.perCardTps.toFixed(2),'230.10');
+for (const cards of [1,4,8]) {
+  for (const acceptedPerSequence of [0,0.5,1,3]) {
+    const r = model.stepMetrics({cards,acceptedPerSequence});
+    close(r.instanceTps,cards*r.perCardTps);
+    close(r.instanceTps,r.sequences*r.perSequenceTps);
+    close(r.instanceTps,r.tokensPerStep/0.04);
+  }
+}
+const windowMetrics = model.windowMetrics();
+assert.equal(windowMetrics.rps,2);
+assert.equal(windowMetrics.instanceTps,512);
+assert.equal(windowMetrics.perCardTps,128);
+close(windowMetrics.goodputRps,4/3);
+assert.equal(windowMetrics.averageOutputTokens,256);
+close(windowMetrics.sloFraction,2/3);
+close(windowMetrics.instanceTps,windowMetrics.rps*windowMetrics.averageOutputTokens);
+const emptyWindow = model.windowMetrics({successes:0,outputTokens:0,sloSuccesses:0});
+assert.equal(emptyWindow.rps,0);
+assert.equal(emptyWindow.instanceTps,0);
+assert.equal(emptyWindow.goodputRps,0);
+assert.equal(emptyWindow.averageOutputTokens,null);
+assert.equal(emptyWindow.sloFraction,null);
+assert.equal(model.windowMetrics({sloSuccesses:0}).goodputRps,0);
+assert.equal(model.windowMetrics({sloSuccesses:120}).goodputRps,2);
+assert.equal(model.windowMetrics({cards:8}).instanceTps,512);
+assert.equal(model.windowMetrics({cards:8}).perCardTps,64);
+for (const invalid of [0,-1,NaN,Infinity,-Infinity,'40',null]) {
+  assert.throws(()=>model.stepMetrics({stepMs:invalid}),RangeError);
+  assert.throws(()=>model.windowMetrics({seconds:invalid}),RangeError);
+}
+for (const invalid of [0,-1,1.5,NaN,Infinity,Number.MAX_SAFE_INTEGER+1]) {
+  assert.throws(()=>model.stepMetrics({cards:invalid}),RangeError);
+  assert.throws(()=>model.windowMetrics({cards:invalid}),RangeError);
+}
+for (const invalid of [-1,NaN,Infinity]) {
+  assert.throws(()=>model.stepMetrics({acceptedPerSequence:invalid}),RangeError);
+  assert.throws(()=>model.windowMetrics({outputTokens:invalid}),RangeError);
+}
+assert.throws(()=>model.stepMetrics({concurrencyPerCard:0}),RangeError);
+assert.throws(()=>model.stepMetrics({concurrencyPerCard:0.3,cards:4}),RangeError);
+assert.throws(()=>model.stepMetrics({stepMs:Number.MIN_VALUE}),RangeError);
+assert.throws(()=>model.stepMetrics({acceptedPerSequence:Number.MAX_VALUE}),RangeError);
+assert.throws(()=>model.windowMetrics({seconds:Number.MIN_VALUE}),RangeError);
+assert.throws(()=>model.windowMetrics({sloSuccesses:121}),RangeError);
+assert.throws(()=>model.windowMetrics({successes:0,outputTokens:1,sloSuccesses:0}),RangeError);
+assert.throws(()=>model.windowMetrics({outputTokens:1.5}),RangeError);
+assert.throws(()=>model.windowMetrics({successes:-1}),RangeError);
+console.log('PASS: performance teaching models; roofline, overlap, KV/GQA, step/window throughput and invalid-input boundaries.');
