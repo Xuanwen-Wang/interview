@@ -17,6 +17,8 @@ function normalizeState(raw) {
  let read=oldRead.filter(id=>known.has(id));
  const notes=dict(value.notes,(k,v)=>(noteKeys.has(k)||legacyIds.has(k))&&typeof v==='string');
  let legacyRead=(Array.isArray(value.legacyRead)?value.legacyRead:[]).filter(id=>legacyIds.has(id));
+ // Newly consolidated chapters must migrate even after an earlier consolidation.
+ legacyRead=[...new Set([...legacyRead,...oldRead.filter(id=>legacyIds.has(id)&&!known.has(id))])];
  if (value.readingVersion!==2) {
    legacyRead=[...new Set([...legacyRead,...oldRead.filter(id=>legacyIds.has(id))])];
    read=read.filter(id=>!legacyIds.has(id));
@@ -89,6 +91,7 @@ function renderChapter(id, section) {
  $('#read-toggle').onclick=toggleRead;$('#read-main').onclick=toggleRead;
  if('IntersectionObserver' in window){sectionObserver=new IntersectionObserver(entries=>{entries.filter(e=>e.isIntersecting).forEach(e=>{highlightReadingSection(e.target.id);});},{rootMargin:'-90px 0px -65% 0px'});$$('section[data-section]').forEach(s=>sectionObserver.observe(s));}
  initPeExplorers();
+ initMoeExplorers();
  enableFigureZoom();
  if(section)scrollChapterAnchor(section);
 }

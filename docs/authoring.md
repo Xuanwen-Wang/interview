@@ -15,15 +15,19 @@
 
 ## 连续长文与旧链接
 
-PE 与 VP 各使用一个 chapter、一个完整 HTML；PE 按六个阅读层次组织，VP 按十个阅读层次组织（架构六层、算子与对照四层）。`readingStages` 的每项包含 `id/title/summary/sections`；所有 `sections` 展平后必须与章内 section 顺序完全相同。侧边栏、页首路径和右侧目录都跳到同一篇文章的锚点，页面不拆载、不重新初始化交互。阶段标题用 h2，小节用 h3，小节内部标题从 h3 转为 h4。
+PE、VP 与 MoE 部署分别使用一个 chapter、一个完整 HTML。`readingStages` 的每项包含 `id/title/summary/sections`；所有 `sections` 展平后必须与章内 section 顺序完全相同。侧边栏、页首路径和右侧目录都跳到同一篇文章的锚点，页面不拆载、不重新初始化交互。阶段标题用 h2，小节用 h3，小节内部标题从 h3 转为 h4。可用 `readingLabel` 定义页首路径说明、`readingStageLabel` 定义阶段编号前缀；默认的“从外到内”“放大层次”适合硬件篇，MoE 可使用“沿一次 MoE 调用”“数据路径”。
 
 正文的硬件字节映射、credit 等补充推导可放在 `<details class="pe-deep-dive">` 中。直接访问其内部锚点会展开对应内容；打印时所有技术补充自动展开，结束后恢复原状态。
 
 合并已有章节时，使用 `legacyChapters` 保存原 chapter ID、`title`、入口 `section`、全部旧 `anchors` 和可选 `noteKey`。旧 hash 路由映射到长文；旧笔记单独保留，不能用旧章的完成状态代替整篇长文的完成状态。当前 PE 的原总览笔记使用 `legacy-pe-overview`，避免覆盖同 ID 新长文笔记。问答的 `legacyKeys` 只映射语义相同的原题，改题后不要沿用已有熟练度。
 
+旧章节可能都有名为 `shape` 或 `contract` 的小节。合并时在对应旧章节的元数据内增加 `anchorMap`，例如 `{"anchors":["shape"],"anchorMap":{"shape":"router-shape"}}`；保留 `anchors` 原列表作为历史链接清单，每项映射后的目标必须存在。未改名的旧锚点可省略映射。不要把多个旧章节的通用锚点直接注入新正文，避免重复 HTML ID 或跳到错误内容。模块专题合并使用 `config/navigation.json` 中 module 的 `legacyGroups`，如 `{"moe-kernels":"moe-foundation"}`，保留旧 `#module/moe/moe-kernels` 入口。
+
 首次迁移先备份旧存储原文，再写入 `readingVersion: 2`。旧版备份导入、JSON/Markdown 导出、多标签合并和取消已读都须验证。`scripts/check.py` 检查阶段覆盖、旧锚点与重名 ID；浏览器验证实际跳转及历史笔记定位。
 
-长文章节使用 `portableReading` 指定独立入口，例如 `{"file":"vp.html","download":"518-vp.html","label":"保存完整 VP HTML ↓"}`。`scripts/build.py` 据此生成 `dist/pe.html`、`dist/vp.html`；它们与 `dist/index.html` 内嵌同一份内容和应用，仅默认路由不同，可保存后独立离线阅读。文件名必须是唯一的英文小写 HTML 文件名，不能占用 `index.html`。下载链接使用当前章的元数据，不能写死为 PE。静态检查验证独立入口内容一致性；浏览器验收验证实际下载目标。它们在同一来源共享浏览器笔记，文件离线副本则需导出/导入来转移笔记。
+之后再次合并章节时，已是 `readingVersion: 2` 的浏览器也必须把消失的旧 chapter 已读状态保留到 `legacyRead`。迁移依靠稳定 ID 和显式 `legacyKeys`，不能靠相同题目标题猜测对应关系；`scripts/check_moe_model.js` 同时检查这类再次迁移与同名锚点分流。
+
+长文章节使用 `portableReading` 指定独立入口，例如 `{"file":"vp.html","download":"518-vp.html","label":"保存完整 VP HTML ↓"}`。`scripts/build.py` 据此生成 `dist/pe.html`、`dist/vp.html`、`dist/moe.html`；它们与 `dist/index.html` 内嵌同一份内容和应用，仅默认路由不同，可保存后独立离线阅读。文件名必须是唯一的英文小写 HTML 文件名，不能占用 `index.html`。下载链接使用当前章的元数据，不能写死为 PE。静态检查验证独立入口内容一致性；浏览器验收验证实际下载目标。它们在同一来源共享浏览器笔记，文件离线副本则需导出/导入来转移笔记。
 
 ## 未来专题怎么放
 
@@ -72,7 +76,9 @@ node --check web/app.js
 node --check web/catalog.js
 node --check web/reading.js
 node --check web/pe-explorer.js
+node --check web/moe-explorer.js
 node scripts/check_pe_model.js
+node scripts/check_moe_model.js
 python3 -m unittest discover -s practice -v
 TMPDIR=/data/wangxw/tmp g++ -std=c++17 -Wall -Wextra -Werror \
   -fsanitize=address,undefined practice/coding.cpp \
@@ -89,3 +95,11 @@ TMPDIR=/data/wangxw/tmp g++ -std=c++17 -Wall -Wextra -Werror \
 `mapping` 只适用于 normal KC FP8 权重布局。它按实际 pack/RTL 位切片解释坐标，但小整数归约例子没有模拟舍入或 RTL 时序。`budget` 中 R、频率和发射率是显式条件参数；它计算 weight 供数上界和 AL1 输入容量，不取代编译器代价模型。
 
 修改映射需同时核对 pack 与硬件 slice，并运行 `scripts/check_pe_model.js` 的完整字节空间、独立反向映射与直接点积 oracle。修改界面需检查 C128/C256、最后一个字节、单/双 hub、w 改变造成的驻留翻转、当前状态放大与打印。新增其他格式时独立建立公式与证据，不能只换显示标签。
+
+## MoE 部署交互
+
+正文用 `<div data-moe-explorer></div>` 声明挂载点，模型与展示在 `web/moe-explorer.js`、样式在 `web/moe-explorer.css`，构建时内嵌。固定当前版本的 H=4096、E=288、I=2048、K=8、卡间 EP4、卡内 TP4；`T` 一律表示全局 token 数，均匀输入示例中每卡为 T/4。不要让可调参数悄悄变成另一模型。
+
+交互用连续的每卡 72 专家归属、I/TP=512 的矩阵分片解释 rank；容量仅计算 Routed FP8 与 Shared BF16 的纯矩阵。通信只计算 BF16 张量元素大小，不把 AllGather 结果容量写成物理线上流量，不从理想均匀 Top-8 分配宣称真实路由均衡。Shared 的真实权重归属和开发脚本零占位分配分开说明。
+
+修改公式时运行 `scripts/check_moe_model.js`，核对全部 1,152 个专家分片与总容量守恒。浏览器检查 T8/16/24/32、EP0/EP3、TP0/TP3、专家 0/71/72/287、非法编号处理、手机与打印；打印保留当前选择和计算结果，隐藏不能操作的控制器。

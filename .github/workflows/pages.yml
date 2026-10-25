@@ -30,7 +30,9 @@ jobs:
           node --check web/jobs.js
           node --check web/reading.js
           node --check web/pe-explorer.js
+          node --check web/moe-explorer.js
           node scripts/check_pe_model.js
+          node scripts/check_moe_model.js
       - name: Verify original coding references
         run: |
           python3 -m unittest discover -s practice -v

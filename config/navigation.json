@@ -81,14 +81,20 @@
       "id": "moe",
       "title": "GLM5Next 300B 真实部署",
       "number": "03",
-      "description": "从完整模型与 16-rank 所有权，走到 KDA、DSA、MoE 的通信、kernel、算子实现和优化证据。",
+      "description": "以卡间 EP4、卡内 TP4 为部署主线，在一篇连续讲解里贯通 MoE 拓扑、通信、四个 kernel 与验证边界；另保留整模型及 Attention 专题。",
       "groups": [
         {
-          "id": "deploy-model",
-          "title": "整张部署图与通信窗口",
+          "id": "moe-foundation",
+          "title": "MoE：从部署到四个 kernel 的完整讲解",
           "chapters": [
-            "glm-deployment-overview",
-            "glm-parallel-communication"
+            "moe-deployment-walkthrough"
+          ]
+        },
+        {
+          "id": "deploy-model",
+          "title": "完整模型与部署上下文",
+          "chapters": [
+            "glm-deployment-overview"
           ]
         },
         {
@@ -100,62 +106,29 @@
             "dsa-dataflow",
             "dsa-kernel-walkthrough"
           ]
-        },
-        {
-          "id": "moe-foundation",
-          "title": "MoE 部署决策与四 kernel 合同",
-          "chapters": [
-            "moe-topology",
-            "moe-topology-tradeoffs",
-            "moe-four-kernel-contract"
-          ]
-        },
-        {
-          "id": "moe-kernels",
-          "title": "进入 kernel：从 Router 到输出归位",
-          "chapters": [
-            "moe-router-internals",
-            "moe-sigmoid-topk-implementation",
-            "moe-shared-dataflow",
-            "moe-routed-dataflow",
-            "moe-projection-weight-implementation",
-            "moe-combine-reduce"
-          ]
-        },
-        {
-          "id": "moe-systems",
-          "title": "优化实战、通信重叠与数值证据",
-          "chapters": [
-            "moe-communication-overlap",
-            "moe-token-merge",
-            "moe-hardware-budget",
-            "moe-quantization-and-592",
-            "moe-evidence-and-interview"
-          ]
         }
       ],
       "learningPath": [
         {
-          "title": "整层视角",
-          "description": "固定模型、版本与状态生命周期",
+          "title": "先走通 MoE",
+          "description": "卡间 EP4、卡内 TP4，连续读完四个 kernel",
+          "chapter": "moe-deployment-walkthrough"
+        },
+        {
+          "title": "放回完整模型",
+          "description": "对齐层结构、Attention 与状态生命周期",
           "chapter": "glm-deployment-overview"
         },
         {
-          "title": "数据如何移动",
-          "description": "TP / CP / DP / EP 与 collectives",
-          "chapter": "glm-parallel-communication"
-        },
-        {
-          "title": "拆到 kernel",
-          "description": "Attention 阶段与 MoE 四 kernel",
-          "chapter": "moe-four-kernel-contract"
-        },
-        {
-          "title": "进入算子内部",
-          "description": "sigmoid、TopK、GEMM 与加权",
-          "chapter": "moe-sigmoid-topk-implementation"
+          "title": "继续拆 Attention",
+          "description": "沿 KDA 数据流进入对应 kernel",
+          "chapter": "kda-dataflow"
         }
-      ]
+      ],
+      "legacyGroups": {
+        "moe-kernels": "moe-foundation",
+        "moe-systems": "moe-foundation"
+      }
     },
     {
       "id": "compiler",

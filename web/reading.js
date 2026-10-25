@@ -9,22 +9,26 @@ for (const chapter of CHAPTERS) {
 }
 function currentRoute() {
   const [route, requested, section] = (location.hash.slice(1) || document.body.dataset.defaultRoute || 'home').split('/');
+  if (route === 'module') {
+    const module = CATALOG.modules.find(m => m.id === requested);
+    return [route, requested, module?.legacyGroups?.[section] || section];
+  }
   const alias = route === 'chapter' && chapterAliases.get(requested);
   if (!alias) return [route, requested, section];
   const noteKey = alias.noteKey || requested;
-  const target = section === 'notes' && state.notes[noteKey] ? 'note-' + noteKey : section || alias.section;
+  const target = section === 'notes' && state.notes[noteKey] ? 'note-' + noteKey : alias.anchorMap?.[section] || section || alias.section;
   return [route, alias.chapter, target];
 }
 function readingPathHTML(c) {
   if (!c.readingStages) return '';
   const portable = c.portableReading;
   const download = portable ? `<a class="portable-reading" href="${esc(portable.file)}" download="${esc(portable.download)}">${esc(portable.label)}</a>` : '';
-  return `<nav class="reading-path" aria-label="本文阅读路径"><p>从外到内，沿一条数据路径读完</p><ol>${c.readingStages.map((stage,i)=>`<li><a href="#chapter/${c.id}/${stage.id}"><small>${String(i+1).padStart(2,'0')}</small><span>${esc(stage.title)}</span></a></li>`).join('')}</ol>${download}</nav>`;
+  return `<nav class="reading-path" aria-label="本文阅读路径"><p>${esc(c.readingLabel || '从外到内，沿一条数据路径读完')}</p><ol>${c.readingStages.map((stage,i)=>`<li><a href="#chapter/${c.id}/${stage.id}"><small>${String(i+1).padStart(2,'0')}</small><span>${esc(stage.title)}</span></a></li>`).join('')}</ol>${download}</nav>`;
 }
 function chapterSectionsHTML(c) {
   const sectionHTML = (s,i,tag) => `<section id="${s.id}" data-section="${s.id}"><${tag}><span class="sec-no">${String(i+1).padStart(2,'0')}</span>${esc(sectionTitle(s.title))}</${tag}>${tag==='h3'?s.html.replace(/<(\/?)h3\b/g,'<$1h4'):s.html}</section>`;
   if (!c.readingStages) return c.sections.map((s,i)=>sectionHTML(s,i,'h2')).join('');
-  return c.readingStages.map((stage,i)=>`<section class="chapter-stage" id="${stage.id}" data-reading-stage="${stage.id}"><header class="reading-stage-heading"><span>放大层次 ${String(i+1).padStart(2,'0')} / ${String(c.readingStages.length).padStart(2,'0')}</span><h2>${esc(stage.title)}</h2><p>${esc(stage.summary)}</p></header>${stage.sections.map(id=>{const index=c.sections.findIndex(s=>s.id===id);return sectionHTML(c.sections[index],index,'h3');}).join('')}</section>`).join('');
+  return c.readingStages.map((stage,i)=>`<section class="chapter-stage" id="${stage.id}" data-reading-stage="${stage.id}"><header class="reading-stage-heading"><span>${esc(c.readingStageLabel || '放大层次')} ${String(i+1).padStart(2,'0')} / ${String(c.readingStages.length).padStart(2,'0')}</span><h2>${esc(stage.title)}</h2><p>${esc(stage.summary)}</p></header>${stage.sections.map(id=>{const index=c.sections.findIndex(s=>s.id===id);return sectionHTML(c.sections[index],index,'h3');}).join('')}</section>`).join('');
 }
 function chapterTocHTML(c, selected) {
   const link = (s,i) => `<a href="#chapter/${c.id}/${s.id}" data-toc="${s.id}">${String(i+1).padStart(2,'0')} ${esc(sectionTitle(s.title))}</a>`;

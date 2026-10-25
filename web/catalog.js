@@ -41,7 +41,7 @@ function renderKnowledgeHome() {
   ${jobsHomeHTML()}
   ${last ? `<a class="resume-reading" href="#chapter/${last.id}"><span><small>CONTINUE READING</small><strong>接着读：${esc(last.title)}</strong></span><span>→</span></a>` : ''}
   <div class="section-head"><div><div class="eyebrow">CHOOSE A FIELD</div><h2>先选主题，再沿专题深入</h2></div><p>每个主题有独立目录，章节链接与学习记录持续保留。</p></div><div class="module-grid">${MODULES.map(moduleCard).join('')}</div>
-  <div class="section-head"><div><div class="eyebrow">THREE WAYS TO STUDY</div><h2>从项目、机制或面试切入</h2></div></div><div class="study-paths"><a href="#module/moe"><small>01 / PROJECT</small><h3>走通 GLM5Next 部署</h3><p>完整模型 → 并行与通信 → KDA / DSA / MoE → kernel 内部。</p></a><a href="#module/compiler"><small>02 / IMPLEMENTATION</small><h3>真正理解 Pass 怎么工作</h3><p>IR 对象 → 分析与失效 → pattern → lowering → 后端约束。</p></a><a href="#companies"><small>03 / INTERVIEW</small><h3>从公司题目反查知识缺口</h3><p>查看原帖身份和时间，再进入 Coding 与对应知识专题。</p></a></div>`;
+  <div class="section-head"><div><div class="eyebrow">THREE WAYS TO STUDY</div><h2>从项目、机制或面试切入</h2></div></div><div class="study-paths"><a href="#chapter/moe-deployment-walkthrough"><small>01 / PROJECT</small><h3>一篇走通 GLM5Next MoE</h3><p>卡间 EP4、卡内 TP4 → Router / Shared / Routed / Reduce → 验证边界。</p></a><a href="#module/compiler"><small>02 / IMPLEMENTATION</small><h3>真正理解 Pass 怎么工作</h3><p>IR 对象 → 分析与失效 → pattern → lowering → 后端约束。</p></a><a href="#companies"><small>03 / INTERVIEW</small><h3>从公司题目反查知识缺口</h3><p>查看原帖身份和时间，再进入 Coding 与对应知识专题。</p></a></div>`;
 }
 function renderLearningPath(module) {
   if (!module.learningPath?.length) return '';
@@ -87,7 +87,7 @@ function openFigureDialog(svg, caption, namespace = 'figure') {
 }
 function enableFigureZoom() {
   $$('.article svg').forEach(svg=>{
-    if(svg.closest('svg')!==svg || svg.closest('.pe-explorer'))return;
+    if(svg.closest('svg')!==svg || svg.closest('.pe-explorer, .performance-explorer'))return;
     let fig=svg.closest('figure');
     if(!fig){fig=document.createElement('figure');svg.before(fig);fig.append(svg);}
     fig.classList.add('diagram');

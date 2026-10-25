@@ -34,7 +34,12 @@ for c in rows:
         assert [sid for stage in c['readingStages'] for sid in stage['sections']] == [s['id'] for s in c['sections']], f'Reading stages must cover every section exactly once in order: {c["id"]}'
     for old, meta in c.get('legacyChapters', {}).items():
         assert meta['section'] in anchors[c['id']], (old, meta)
-        assert set(meta['anchors']) <= anchors[c['id']], f'Lost historical anchors: {old}'
+        mapping = meta.get('anchorMap', {})
+        assert set(mapping) <= set(meta['anchors']), f'Undocumented historical anchors: {old}'
+        assert all(re.fullmatch(r'[a-z0-9-]+', key) for key in mapping), old
+        assert {mapping.get(anchor, anchor) for anchor in meta['anchors']} <= anchors[c['id']], f'Lost historical anchors: {old}'
+        assert old == c['id'] or old not in chapters, f'Legacy chapter shadows active chapter: {old}'
+assert len(aliases) == sum(old != c['id'] for c in rows for old in c.get('legacyChapters', {})), 'Duplicate legacy chapter'
 catalog = json.loads((ROOT / 'config/navigation.json').read_text())
 modules = {m['id']: m for m in catalog['modules']}
 reports = json.loads((ROOT / 'config/interviews.json').read_text())
@@ -54,6 +59,9 @@ assert all(n == 1 for n in placements.values()), 'A chapter must have exactly on
 for m in modules.values():
     assert re.fullmatch(r'[a-z0-9-]+', m['id'])
     assert len({g['id'] for g in m['groups']}) == len(m['groups']), m['id']
+    group_ids = {g['id'] for g in m['groups']}
+    assert set(m.get('legacyGroups', {})).isdisjoint(group_ids), m['id']
+    assert set(m.get('legacyGroups', {}).values()) <= group_ids, m['id']
     for g in m['groups']:
         assert g['chapters'] and re.fullmatch(r'[a-z0-9-]+', g['id']), g
 for m in modules.values():
@@ -76,13 +84,15 @@ def check_link(url, where):
     if url.startswith('#'):
         parts = url[1:].split('/')
         if parts[0] == 'chapter':
-            target = aliases.get(parts[1], {}).get('chapter', parts[1]) if len(parts) > 1 else None
+            alias = aliases.get(parts[1], {}) if len(parts) > 1 else {}
+            target = alias.get('chapter', parts[1]) if len(parts) > 1 else None
+            section = alias.get('anchorMap', {}).get(parts[2], parts[2]) if len(parts) > 2 else None
             if target not in chapters:
                 errors.append(f'{where}: missing chapter {url}')
-            elif len(parts) > 2 and parts[2] not in anchors[target]:
+            elif section and section not in anchors[target]:
                 errors.append(f'{where}: missing section {url}')
         elif parts[0] == 'module':
-            if len(parts) < 2 or parts[1] not in modules or (len(parts) > 2 and parts[2] not in {g['id'] for g in modules[parts[1]]['groups']}):
+            if len(parts) < 2 or parts[1] not in modules or (len(parts) > 2 and parts[2] not in ({g['id'] for g in modules[parts[1]]['groups']} | set(modules[parts[1]].get('legacyGroups', {})))):
                 errors.append(f'{where}: missing topic {url}')
         elif parts[0] == 'company':
             if len(parts) != 2 or parts[1] not in company_map:

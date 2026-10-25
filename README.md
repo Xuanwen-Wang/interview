@@ -10,21 +10,23 @@
 
 ## 内容与导航
 
-当前使用 **8 个知识域 → 20 个专题 → 64 章** 的目录结构。侧边栏只展开当前专题；全站目录支持主题、标题/标签与阅读状态筛选。已有章节链接、笔记和学习记录保留。
+当前使用 **8 个知识域 → 18 个专题 → 50 章** 的目录结构。侧边栏只展开当前专题；全站目录支持主题、标题/标签与阅读状态筛选。已有章节链接、笔记和学习记录保留。
 
 | 知识域 | 内容 |
 | --- | --- |
 | 开始与路线 | 岗位能力、项目叙述、工程证据 |
 | 算法与数据流 | Qwen3-8B基线 → 内部GLM5Next全貌；Attention与FFN两条演进线，数学、shape、状态与算子数据流 |
-| GLM5Next 300B真实部署 | 完整模型与16rank → baseline/FLAT16通信 → KDA/DSA/MoE → sigmoid/TopK/GEMM/加权；版本兼容、overlap与性能证据 |
+| GLM5Next 300B真实部署 | MoE 单篇：卡间 EP4、卡内 TP4 → token 往返 → Router/Shared/Routed/Reduce → 通信与验证；完整模型与 Attention 另有专题 |
 | Triton · MLIR · LLVM | AST/TTIR/布局、Op/Region/Dialect、PassManager与分析失效、Rewrite/Conversion、LLVM中后端 |
 | 518硬件与后端 | 真实pass、PE/MAC、minitile、AL1/WL1、hub/credit；VP wide/pipe、PRG、PostCal、多执行器；资源事件与InjectSync |
 | 性能与推理系统 | Roofline、并发与容量、服务与运行时 |
 | 公司与面经 | 12个公司或公司组、28条来源，区分官方JD、个人面经、官方作业与第三方材料 |
 | Coding实作 | 算法、图/数据流、kernel、玩具pass；原创Python/C++参考与测试 |
 
-当前 **490 小节、380 道追问、130 张正文 SVG**。附全文搜索、图示放大、3个通用交互实验和2个PE交互演示、术语表、阅读进度及本地笔记导入导出。SVG、样式和内容均内嵌；网页不依赖CDN、外部字体或第三方脚本。
+当前 **417 小节、319 道追问、111 张正文 SVG**。附全文搜索、图示放大、3个通用交互实验、2个PE交互演示和1个MoE拓扑/容量交互、术语表、阅读进度及本地笔记导入导出。SVG、样式和内容均内嵌；网页不依赖CDN、外部字体或第三方脚本。
 
+- [MoE 完整长文](https://xuanwen-wang.github.io/interview/moe.html)：34节、9个阅读阶段、18道追问；按卡间EP4、卡内TP4，用T24贯穿部署与四个kernel。并列真实权重验收配置绑定链和当前开发四核链，保留旧15章/107节链接及个人笔记。
+- [MoE 单篇重构与验收](evidence/review-moe-continuous.md)：固定版本、纠错、旧链接迁移与浏览器验证。
 - [PE 完整长文](https://xuanwen-wang.github.io/interview/pe.html)：一个 HTML，沿整体边界与接口 → 8×8 阵列 → ALU/MAC → 累加与写回 → minitile 连续展开；23节、21张图、2个交互；新增MTW/MTC/MTK本质、GLM5Next Gate/Up/Down真实配置与逐坐标映射。
 - [VP 完整长文](https://xuanwen-wang.github.io/interview/vp.html)：开头展开完整 RTL 架构，沿控制/CDC/ECC、X/Y 分流、A/B 向量链、归约/反馈到写回，再讲 TopK、sigmoid、RMSNorm 与 CUDA；30节、21张图、27道追问。
 - [VP 架构审查与验收](evidence/review-vp.md)：RTL与编译器固定来源、关键事实修正及网页验收。
@@ -39,9 +41,9 @@
 
 ## 模型到部署的阅读顺序
 
-先读[算法与数据流](https://xuanwen-wang.github.io/interview/#module/algorithms)：Qwen3-8B → 内部GLM5Next结构 → Attention/FFN演进与算子。再读[GLM5Next 300B真实部署](https://xuanwen-wang.github.io/interview/#module/moe)：完整部署地图 → token/partial所有权与通信 → Attention阶段及MoE四kernel → 内部数值与优化。
+先读[算法与数据流](https://xuanwen-wang.github.io/interview/#module/algorithms)：Qwen3-8B → 内部GLM5Next结构 → Attention/FFN演进与算子。再读[GLM5Next 300B真实部署](https://xuanwen-wang.github.io/interview/#module/moe)：[MoE单篇](https://xuanwen-wang.github.io/interview/moe.html)先沿卡、rank、token到四个kernel读完；再放回完整模型，继续KDA/DSA专题。
 
-2026-10-25复核发现：模型开发wrapper仍请求KDA v3.1，而最新torch_zeus默认分支只接受v4家族。页面明确保留这个集成断点；没有将两仓各自最新代码包装成已联调通过的部署。
+2026-10-25复核发现：真实权重300B验收配置绑定较早SGLang/torch的FP8 UScale链，当前开发四核链则使用BF16 Shared与per-tensor FP8 Routed；卡间EP4、卡内TP4一致，不代表两条执行链已经集成。开发caller未传配置中的clamp=10、KDA v3.1/v4接口断点等均在文中保留，没有将两仓各自最新代码包装成已联调通过的部署。
 
 ## 本地使用
 
@@ -53,7 +55,7 @@ python3 scripts/check.py
 python3 -m http.server 8768 --bind 127.0.0.1 --directory dist
 ```
 
-也可以直接打开 `dist/index.html`，或用 `dist/pe.html`、`dist/vp.html` 从头到尾阅读架构长文。正文与应用可离线阅读，外部来源链接需要网络。笔记仅存在当前浏览器的 localStorage，不会上传；不同域名、设备之间需要手动导出导入。
+也可以直接打开 `dist/index.html`，或用 `dist/moe.html`、`dist/pe.html`、`dist/vp.html` 从头到尾阅读对应长文。正文与应用可离线阅读，外部来源链接需要网络。笔记仅存在当前浏览器的 localStorage，不会上传；不同域名、设备之间需要手动导出导入。
 
 `dist/jobs.html` 可单独保存并离线查看岗位要求；岗位来源和状态边界见 [岗位核验记录](evidence/job-sources.md)。
 
