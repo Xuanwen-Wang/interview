@@ -21,12 +21,13 @@
 | 公司与面经 | 12个公司或公司组、28条来源，区分官方JD、个人面经、官方作业与第三方材料 |
 | Coding实作 | 算法、图/数据流、kernel、玩具pass；原创Python/C++参考与测试 |
 
-当前 **475 小节、362 道追问、117 张正文 SVG**。附全文搜索、图示放大、3个通用交互实验和2个PE交互演示、术语表、阅读进度及本地笔记导入导出。SVG、样式和内容均内嵌；网页不依赖CDN、外部字体或第三方脚本。
+当前 **478 小节、367 道追问、120 张正文 SVG**。附全文搜索、图示放大、3个通用交互实验和2个PE交互演示、术语表、阅读进度及本地笔记导入导出。SVG、样式和内容均内嵌；网页不依赖CDN、外部字体或第三方脚本。
 
-- [PE 完整长文](https://xuanwen-wang.github.io/interview/pe.html)：一个 HTML，沿整体边界与接口 → 8×8 阵列 → ALU/MAC → 累加与写回 → minitile 连续展开；20节、18张图、2个交互。
+- [PE 完整长文](https://xuanwen-wang.github.io/interview/pe.html)：一个 HTML，沿整体边界与接口 → 8×8 阵列 → ALU/MAC → 累加与写回 → minitile 连续展开；23节、21张图、2个交互；新增MTW/MTC/MTK本质、GLM5Next Gate/Up/Down真实配置与逐坐标映射。
 - [VP 完整长文](https://xuanwen-wang.github.io/interview/vp.html)：从四个执行器、128 B接口，到wide/pipe、归约、PRG与PostCal，再到融合、多VP和性能判断；18节、11张图、14道追问。
 - [VP 架构审查与验收](evidence/review-vp.md)：RTL与编译器固定来源、关键事实修正及网页验收。
 - [模型到部署重构审查](evidence/review-model-deployment.md)：算法与部署分层、固定版本、交叉审查和网页验收。
+- [PE minitile 与 GLM5Next 实例审查](evidence/review-pe-minitile-glm.md)：源码显式配置、默认模型、历史产物与硬件映射的证据边界。
 - [PE 单篇重构审查](evidence/review-pe-continuous.md)：旧链接、笔记迁移、连续阅读与离线验收。
 - [此前 PE 微架构审查](evidence/review-pe-v3.md)：原六章的数据路径与 RTL 证据。
 - [第二版审查与验收](evidence/review-v2.md)

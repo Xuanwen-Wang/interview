@@ -30,6 +30,9 @@
 - [算子数据流与上游编译组件](operator-internals-sources.md)：当前实现、版本化上游文档与手算。
 - [MoE部署与四kernel深度证据](moe-deep-sources.md)：拓扑、数值合同、通信边界与NV对照。
 - [PE硬件与同步深度证据](hardware-sync-sources.md)：RTL指纹、minitile、credit与C1/C2/C3边界。
+- [PE minitile字段与选择链](pe-minitile-selection.md)：真实w/c/k、减一编码、完整pin、覆盖表、纯模型复算与历史汇编。
+- [GLM5Next专家shape与PE映射](pe-glm-shapes.md)：当前owner Gate/Up/Down、M1/M2/M4配置、Shared区别与逐坐标复算。
+- [PE minitile实例审查](review-pe-minitile-glm.md)：图文交叉复核、证据边界及网页验收。
 - [VP硬件架构](vp-hardware-rtl.md)：四执行器、wide/pipe、读写口、PRG、归约、格式转换与反压的逐文件RTL证据。
 - [VP编译器与kernel](vp-compiler-sources.md)：固定版本的chaining、两种hint、PostCal舍入、参数归属及SiLU配方。
 - [VP架构审查与验收](review-vp.md)：正文与图示的交叉核对、独立HTML入口及浏览器验收。
