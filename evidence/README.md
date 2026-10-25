@@ -35,6 +35,12 @@
 - [PE minitile实例审查](review-pe-minitile-glm.md)：图文交叉复核、证据边界及网页验收。
 - [VP硬件架构](vp-hardware-rtl.md)：四执行器、wide/pipe、读写口、PRG、归约、格式转换与反压的逐文件RTL证据。
 - [VP编译器与kernel](vp-compiler-sources.md)：固定版本的chaining、两种hint、PostCal舍入、参数归属及SiLU配方。
+- [VP顶层与控制](vp-top-control-rtl.md)：CTRL/ECC/CDC、四套配置、数据标签与写响应完成。
+- [VP完整CAL连线](vp-datapath-rtl.md)：比较/归约双出口、TopK包、S2P与六类专用反馈目标。
+- [VP向量引擎逐模块](vp-vector-pipeline-rtl.md)：真实操作数、单写FIFO、跨组SHF和PreCal/PostCal分支。
+- [TopK真实路径](vp-topk-operator.md)：Router选择域、原生packet、CT Gather和前缀发布。
+- [sigmoid与RMSNorm](vp-rms-sigmoid-operators.md)：真实系数、accurate修正、tile归约次序与共享γ。
+- [CUDA固定实现对照](vp-cuda-operators.md)：PyTorch/vLLM源码与NVIDIA版本化文档，区分数学合同和执行组织。
 - [VP架构审查与验收](review-vp.md)：正文与图示的交叉核对、独立HTML入口及浏览器验收。
 - [公司面经与题源](interview-sources.md)：身份、时间和来源局限。
 - [第二版审查与验收](review-v2.md)：目录重构、交叉审阅与新增Coding验证。

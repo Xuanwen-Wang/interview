@@ -2,7 +2,7 @@
 
 日期：2026-10-25。范围是指南内容、来源、导航和独立 HTML。业务源码只读；本轮没有运行 compiler build、CycleSim、VCS、RTL 数值测试或硅上测量。
 
-## 内容与入口
+## 初版内容与入口（提交 d20a463）
 
 新增 `content/39-vp-walkthrough.json`，稳定 chapter ID 为 `hw-vp-architecture`。在“518 硬件与后端”的 PE 专题后加入 VP 专题；独立入口为 [vp.html](https://xuanwen-wang.github.io/interview/vp.html)。
 
@@ -55,3 +55,49 @@
 ## 发布路径
 
 继续使用 `Xuanwen-Wang/interview` 的 `main` 与既有 GitHub Actions 构建发布 GitHub Pages。发布完成以对应提交的 workflow 成功状态、线上 HTML 与本地构建逐字节比对为准；不把本地构建成功称作已上线。
+
+
+## RTL 全架构重写与实际算子扩展（2026-10-25）
+
+初版开头只画了 L2→VP→L2，不能解释完整微架构。本轮保留稳定 chapter/section ID，重写总图和关键硬件节，增加 TopK、sigmoid、RMSNorm 与固定 CUDA 实现。当前 VP 为 30 节、10 个连续阅读阶段、21 张 SVG、27 道追问；没有拆成多个 HTML。
+
+直接读取 RTL 实例与端口后补充三份证据：
+
+- [顶层/控制](vp-top-control-rtl.md)：9 个文件指纹，CTRL/ECC/CDC、四套配置、元数据、写请求与写响应。
+- [完整 CAL 连线](vp-datapath-rtl.md)：24 个文件指纹，所有主分支、mux、TopK packet、S2P 和反馈目标。
+- [向量/输入/输出模块](vp-vector-pipeline-rtl.md)：29 个文件指纹，七段引擎、具体操作数、单写 FIFO、PreCal/PostCal。三份的文件有重叠，数字不能相加当唯一文件数。
+
+正文和图交叉复核修正：
+
+1. 首图展开 CMP.tensor/tree/winner、SMT.tensor/tree、scalar 输入选择、输出选择和反馈；补全 FIFO→CMP、A FIFO→scalar PRG，以及固定寄存器回到 A/B 和 scalar 的支路。
+2. PreCal 先由 DISPART 分流；`split_send` 的非旁路模式选择元素广播，DATA_MUX 才整理 A/B。`re_quan` 在该副本未执行通用 scale/zp 乘加。
+3. A/B 真正并行/串行连线；pipe 数据高半填零，valid/end 部分复制，最终有效 lane 由 mask 处理，不写成简单高半 valid=0。
+4. PRG 主路普通为 X，对称模式可为 |X|；k 直连 MUL，b 经 FIFO。FLR 的 side.x 为 −X，特定 SUM1 SUB 配置形成 X−floor(X)。
+5. CAL FIFO 实例为16×1028，单写入口按 Y>PRG.b>FLR.s>DIP.s 选择，不能画成四条无冲突队列。SHIFT 使用对侧 FIFO；只有 A FIFO 装载 scalar PRG。
+6. SQR 输出回写专用 scalar 系数寄存器；S2P 负责连续结果组包，不承担任意广播。旁路之后仍可有 link pipe。
+7. `inst_start` 取 decoder 内部两级 RD 配置 pipe 间握手，不等于最终 RD 接受配置；普通 done 追写响应，PRG load 走独立分支。
+
+算子事实分别在 [TopK](vp-topk-operator.md)、[sigmoid/RMSNorm](vp-rms-sigmoid-operators.md)、[CUDA 对照](vp-cuda-operators.md)：
+
+- Router E288/计算320/pack384 不混淆，选择用带 bias 分数、权重 Gather 原分数；TopK packet从Mask回到Compare tensor出口，源分数 Gather 在CT，前缀发布不取消8轮选择。
+- fast64 的 x=1 使用实际区间/系数手算；accurate 是指数分解、向量倒数种子与一次Newton，不照旧注释误写rsqrt平方。
+- 518 RMSNorm实际顺序为每4×128 tile先沿通道归约，再累加4个partial；BF16、D4096完整四行请求量104KiB（共享γ），不是每行独立加载γ。
+- CUDA固定PyTorch v2.8.0与vLLM v0.10.2；专用TopK不仅支持2的幂，但E288无case；CUDA RMSNorm同样两遍输入，且存在低精度中间cast。多条VP设备指令不等于多次host launch。
+
+本轮只做源码核对、数值手算和网站验证，没有新增业务编译、zbin核对、RTL/VCS/CycleSim或GPU运行记录，也不报告跨硬件速度倍率。
+
+### 本轮静态与参考检查
+
+- 构建和内容/链接检查通过：64章、490节、380问、130张SVG（包含同期已提交的PE扩展）；全部来源显式锚点、阶段覆盖和独立入口一致性通过。
+- JavaScript语法、原有PE数学模型（16,384坐标/256点积）、Python参考9/9、C++17 warnings-as-errors及ASan/UBSan通过。
+- 新材料未包含个人绝对目录、内部主机地址、凭据、业务原始输入或运行缓存；业务源库保持只读。
+
+### 本轮浏览器验收
+
+- 1440、768、390 px 页面均无全页横向溢出；30节、10阶段、27问和21张SVG渲染完整。全部SVG文字的viewBox/所在框边界检查通过；总图、向量图、PreCal、wide/pipe及算子图逐张视觉检查。
+- 三种尺寸下阶段链接、搜索命中与定位、问答展开通过；总图放大150%可读。
+- 下载的`518-vp.html`与当前`dist/vp.html`逐字节一致。
+- 打印PDF共46页，包含30节标题、27题和全部答案；首个1110高总图完整落在第2页，底部说明完整，没有页高裁切。
+- 下载版断网以本地文件打开，30节/10阶段/27问/21图完整，0 HTTP请求、0脚本错误；390 px图内横滚可到末框，150%放大对话框不超过视口。打印前展开27个答案，打印后恢复原状态。
+
+- 现有PE交互计算浏览器抽查通过：C256→C128使`y[37]`从−13变−9；双hub→单hub使条件供数间隔3.067→6.133、带宽上界2.137→1.069、weight上限100%→65.2%，切回后恢复。这是教学计算器回归，不是硬件测量。

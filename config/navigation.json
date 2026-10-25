@@ -211,7 +211,7 @@
         },
         {
           "id": "vp",
-          "title": "VP 架构：从数据路径到编译器",
+          "title": "VP 架构：RTL 流水与实际算子",
           "chapters": [
             "hw-vp-architecture"
           ]
