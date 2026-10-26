@@ -1,0 +1,381 @@
+[
+  {
+    "id": "llvm-backend",
+    "title": "LLVM 后端下降：从 IR 到机器码",
+    "part": "LLVM 后端",
+    "order": 51,
+    "subtitle": "一张总图串起 SelectionDAG、Machine IR、调度、RA、栈帧与 MC。",
+    "minutes": 120,
+    "level": "进阶 → 源码",
+    "tags": [
+      "LLVM",
+      "CodeGen",
+      "SelectionDAG",
+      "GlobalISel",
+      "RA",
+      "MachineInstr"
+    ],
+    "lead": "沿一个 5*x+y 的真实编译结果，逐层看清机器约束何时出现、由谁解决。先读全图，再把指令选择、调度、寄存器分配和输出各自展开。",
+    "sections": [
+      {
+        "id": "backend-map",
+        "title": "先看全图：后端每一层究竟把什么定下来",
+        "html": "<p>后端接收 LLVM IR，将“计算什么”逐步落实成目标能执行的指令、寄存器、栈帧和字节编码。全图按<strong>表示的变化</strong>组织；绿色主线追踪 SelectionDAG，右侧补充 GlobalISel。先沿主线读完，再按模块深入。</p><figure class=\"diagram compiler-diagram\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 900 1150\" role=\"img\" aria-label=\"LLVM 后端：逐层减少抽象，逐层落实机器约束\"><defs><marker id=\"llvm-backend-map-arrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M0 0L10 5L0 10Z\" fill=\"#6a8078\"/></marker></defs><rect width=\"900\" height=\"1150\" rx=\"14\" fill=\"#f1f3ec\"/><text x=\"24\" y=\"34\" font-family=\"sans-serif\" font-size=\"21\" fill=\"#244c40\" text-anchor=\"start\">LLVM 后端：逐层减少抽象，逐层落实机器约束</text><text x=\"24\" y=\"61\" font-family=\"sans-serif\" font-size=\"13\" fill=\"#61766c\" text-anchor=\"start\">主线依据共享 22.0.0git 的 TargetPassConfig；具体 Pass 由 target、优化级别和选项决定</text><a href=\"#chapter/llvm-backend/target-abi\" aria-label=\"LLVM IR：函数、基本块、SSA 值\"><rect x=\"195\" y=\"89\" width=\"510\" height=\"66\" rx=\"8\" fill=\"#e3ece0\" stroke=\"#b9cabc\"/><text x=\"209\" y=\"115\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">LLVM IR：函数、基本块、SSA 值</text><text x=\"209\" y=\"137\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">入口已固定 triple / CPU / features / DataLayout</text></a><path d=\"M450 155V183\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#llvm-backend-map-arrow)\"/><a href=\"#chapter/llvm-backend/pipeline-owner\" aria-label=\"IR 准备：CodeGenPrepare 等\"><rect x=\"195\" y=\"185\" width=\"510\" height=\"64\" rx=\"8\" fill=\"#fffef8\" stroke=\"#b9cabc\"/><text x=\"209\" y=\"211\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">IR 准备：CodeGenPrepare 等</text><text x=\"209\" y=\"233\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">仍在 LLVM IR 上，整理寻址、控制流、intrinsic 等</text></a><path d=\"M450 249V263\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#llvm-backend-map-arrow)\"/><a href=\"#chapter/llvm-backend/dag-build\" aria-label=\"SelectionDAG 指令选择路径\"><rect x=\"24\" y=\"279\" width=\"525\" height=\"310\" rx=\"8\" fill=\"#e3ece0\" stroke=\"#b9cabc\"/><text x=\"38\" y=\"305\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">SelectionDAG 指令选择路径</text><text x=\"38\" y=\"327\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">下面是一个顶层 ISel Pass 内部的阶段</text></a><a href=\"#chapter/llvm-backend/dag-build\" aria-label=\"Build DAG → Combine\"><rect x=\"44\" y=\"350\" width=\"485\" height=\"43\" rx=\"8\" fill=\"#fffef8\" stroke=\"#b9cabc\"/><text x=\"58\" y=\"376\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">Build DAG → Combine</text></a><path d=\"M286 393v10\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#llvm-backend-map-arrow)\"/><a href=\"#chapter/llvm-backend/dag-types\" aria-label=\"Type / Vector / Operation Legalize\"><rect x=\"44\" y=\"405\" width=\"485\" height=\"43\" rx=\"8\" fill=\"#fffef8\" stroke=\"#b9cabc\"/><text x=\"58\" y=\"431\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">Type / Vector / Operation Legalize</text></a><path d=\"M286 448v10\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#llvm-backend-map-arrow)\"/><a href=\"#chapter/llvm-backend/dag-combine\" aria-label=\"Combine ↔ Legalize（条件式多轮）\"><rect x=\"44\" y=\"460\" width=\"485\" height=\"43\" rx=\"8\" fill=\"#fffef8\" stroke=\"#b9cabc\"/><text x=\"58\" y=\"486\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">Combine ↔ Legalize（条件式多轮）</text></a><path d=\"M286 503v10\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#llvm-backend-map-arrow)\"/><a href=\"#chapter/llvm-backend/dag-select\" aria-label=\"Select → DAG 调度 → Emit MI\"><rect x=\"44\" y=\"515\" width=\"485\" height=\"43\" rx=\"8\" fill=\"#fffef8\" stroke=\"#b9cabc\"/><text x=\"58\" y=\"541\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">Select → DAG 调度 → Emit MI</text></a><a href=\"#chapter/llvm-backend/global-isel\" aria-label=\"GlobalISel 可选路径\"><rect x=\"587\" y=\"279\" width=\"289\" height=\"310\" rx=\"8\" fill=\"#e6edf0\" stroke=\"#b9cabc\"/><text x=\"601\" y=\"305\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">GlobalISel 可选路径</text><text x=\"601\" y=\"327\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">取决于 target 支持与配置</text></a><a href=\"#chapter/llvm-backend/global-isel\" aria-label=\"IRTranslator → gMIR\"><rect x=\"607\" y=\"350\" width=\"249\" height=\"43\" rx=\"8\" fill=\"#fffef8\" stroke=\"#b9cabc\"/><text x=\"621\" y=\"376\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">IRTranslator → gMIR</text></a><path d=\"M732 393v10\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#llvm-backend-map-arrow)\"/><a href=\"#chapter/llvm-backend/global-isel\" aria-label=\"Legalizer\"><rect x=\"607\" y=\"405\" width=\"249\" height=\"43\" rx=\"8\" fill=\"#fffef8\" stroke=\"#b9cabc\"/><text x=\"621\" y=\"431\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">Legalizer</text></a><path d=\"M732 448v10\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#llvm-backend-map-arrow)\"/><a href=\"#chapter/llvm-backend/global-isel\" aria-label=\"RegBankSelect\"><rect x=\"607\" y=\"460\" width=\"249\" height=\"43\" rx=\"8\" fill=\"#fffef8\" stroke=\"#b9cabc\"/><text x=\"621\" y=\"486\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">RegBankSelect</text></a><path d=\"M732 503v10\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#llvm-backend-map-arrow)\"/><a href=\"#chapter/llvm-backend/global-isel\" aria-label=\"InstructionSelect\"><rect x=\"607\" y=\"515\" width=\"249\" height=\"43\" rx=\"8\" fill=\"#fffef8\" stroke=\"#b9cabc\"/><text x=\"621\" y=\"541\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">InstructionSelect</text></a><path d=\"M450 263H732V277\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#llvm-backend-map-arrow)\"/><path d=\"M450 263H286V277\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#llvm-backend-map-arrow)\"/><path d=\"M286 589V616H450V636\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#llvm-backend-map-arrow)\"/><path d=\"M732 589V616H450V636\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#llvm-backend-map-arrow)\"/><a href=\"#chapter/llvm-backend/machine-ir\" aria-label=\"MachineInstr：目标 opcode + 虚拟寄存器\"><rect x=\"195\" y=\"638\" width=\"510\" height=\"64\" rx=\"8\" fill=\"#fffef8\" stroke=\"#b9cabc\"/><text x=\"209\" y=\"664\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">MachineInstr：目标 opcode + 虚拟寄存器</text><text x=\"209\" y=\"686\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">FinalizeISel → Machine SSA 优化</text></a><path d=\"M450 702V732\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#llvm-backend-map-arrow)\"/><a href=\"#chapter/llvm-backend/phi-two-address\" aria-label=\"PHI 消除 / 两地址约束 / Coalescing\"><rect x=\"195\" y=\"734\" width=\"510\" height=\"66\" rx=\"8\" fill=\"#fffef8\" stroke=\"#b9cabc\"/><text x=\"209\" y=\"760\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">PHI 消除 / 两地址约束 / Coalescing</text><text x=\"209\" y=\"782\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">建立分配前表示与活跃区间</text></a><path d=\"M450 801V831\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#llvm-backend-map-arrow)\"/><a href=\"#chapter/llvm-backend/ra-greedy\" aria-label=\"Pre-RA 调度 → RA → VirtRegRewriter\"><rect x=\"195\" y=\"833\" width=\"510\" height=\"66\" rx=\"8\" fill=\"#fffef8\" stroke=\"#b9cabc\"/><text x=\"209\" y=\"859\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">Pre-RA 调度 → RA → VirtRegRewriter</text><text x=\"209\" y=\"881\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">排序、分配、拆分或 spill，最终落实物理寄存器</text></a><path d=\"M450 900V930\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#llvm-backend-map-arrow)\"/><a href=\"#chapter/llvm-backend/frame-lowering\" aria-label=\"栈帧 / Prologue-Epilogue / Late Passes\"><rect x=\"195\" y=\"932\" width=\"510\" height=\"66\" rx=\"8\" fill=\"#fffef8\" stroke=\"#b9cabc\"/><text x=\"209\" y=\"958\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">栈帧 / Prologue-Epilogue / Late Passes</text><text x=\"209\" y=\"980\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">frame index → 地址；pseudo 展开、后调度与块布局</text></a><path d=\"M450 999V1029\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#llvm-backend-map-arrow)\"/><a href=\"#chapter/llvm-backend/mc-output\" aria-label=\"AsmPrinter → MC → 汇编 / 目标文件\"><rect x=\"195\" y=\"1031\" width=\"510\" height=\"66\" rx=\"8\" fill=\"#e3ece0\" stroke=\"#b9cabc\"/><text x=\"209\" y=\"1057\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">AsmPrinter → MC → 汇编 / 目标文件</text><text x=\"209\" y=\"1079\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">MCInst、符号、fixup、编码和重定位</text></a><text x=\"24\" y=\"1130\" font-family=\"sans-serif\" font-size=\"13\" fill=\"#244c40\" text-anchor=\"start\">点击方框跳到对应模块。FastISel 是另一种快速选择策略，省略于主线；不是必须先后执行三套选择器。</text></svg><figcaption>这是阶段关系图，省略部分目标专用 Pass。Combine / Legalize / Select 位于 SelectionDAG 指令选择内部；MachineScheduler、寄存器分配等则是后续机器级 Pass。箭头不表示所有 target 都执行完全相同的列表。</figcaption></figure><div class=\"callout\"><p>证据范围：共享 LLVM <code>22.0.0git</code>，2026-10-26；本机 x86-64／O2 示例已生成 MIR、汇编及目标文件并反汇编。共享目录 Git 元数据不可用，关键源码按文件 SHA256 固定。以下玩具机器与区间图用于推导，不是 518、NVIDIA 或硅上性能测量。</p></div>"
+      },
+      {
+        "id": "pipeline-owner",
+        "title": "谁组装整个 pipeline：从 llc 走到 TargetPassConfig",
+        "html": "<p><code>llc</code> 读取 LLVM IR 或 MIR，选择 TargetMachine，建立代码生成 pipeline。当前共享源码中的传统路径由 <code>CodeGenTargetMachineImpl</code> 配合 <code>TargetPassConfig</code> 添加 IR 准备、指令选择、机器 Pass 和 AsmPrinter。target 可覆盖阶段、替换 Pass，也可通过 pre/post hooks 插入专用变换。</p><div class=\"table-wrap\"><table><thead><tr><th>源码入口</th><th>追踪什么</th></tr></thead><tbody><tr><td>llvm/tools/llc/llc.cpp</td><td>目标选择、输出类型、IR/MIR 输入和 Pass 执行入口</td></tr><tr><td>llvm/lib/CodeGen/CodeGenTargetMachineImpl.cpp</td><td>addPassesToEmitFile、addAsmPrinter</td></tr><tr><td>llvm/lib/CodeGen/TargetPassConfig.cpp</td><td>addISelPasses、addCoreISelPasses、addMachinePasses</td></tr><tr><td>llvm/lib/Target/X86/X86TargetMachine.cpp</td><td>这个 target 如何增删或替换通用阶段</td></tr></tbody></table></div><p>这一版本的 <code>addISelPasses</code> 先添加若干 intrinsic／IR lowering，再进入 <code>addIRPasses → addCodeGenPrepare → 异常处理准备 → addISelPrepare → addCoreISelPasses</code>。所以“后端只处理 MachineInstr”也不准确：CodeGen 前半段仍包含 LLVM IR Pass。</p><p>本机这条传统 CodeGen 路径使用 legacy PM；不能因为 <code>opt</code> 的优化 pipeline 使用 New PM，就假设 <code>llc</code> 所有调试参数都相同。LLVM 正在演进其他代码生成组织方式，阅读别的版本时须重新确认入口。</p><p class=\"compiler-source\"><strong>源码路标</strong> <code>llvm/lib/CodeGen/TargetPassConfig.cpp</code> · <code>addISelPasses / addMachinePasses</code>。共享快照的版本与文件哈希见文末证据。</p>"
+      },
+      {
+        "id": "running-example",
+        "title": "贯穿例子：同一个 5*x+y，逐层观察它的表示",
+        "html": "<pre><code>target triple = &quot;x86_64-unknown-linux-gnu&quot;\n\ndefine i32 @scaled_add(i32 %x, i32 %y) {\nentry:\n  %scaled = mul i32 %x, 5\n  %sum = add i32 %scaled, %y\n  ret i32 %sum\n}</code></pre><p>这里使用无 overflow flags 的 <code>i32</code> 运算，按 32 位取模。固定 <code>x86_64-unknown-linux-gnu</code>、<code>-mcpu=x86-64</code>、<code>-O2</code>。目标支持用 LEA 计算 base + index × scale，因此乘 5 不必生成乘法指令。<strong>指令条数减少不是性能测量</strong>；这里只追踪语义与表示。</p><div class=\"table-wrap\"><table><thead><tr><th>截面</th><th>本例观察</th></tr></thead><tbody><tr><td>LLVM IR</td><td>mul i32 + add i32 + ret</td></tr><tr><td>初始 DAG</td><td>mul / add 和参数、返回值的依赖</td></tr><tr><td>合法化后 Combine</td><td>出现 X86ISD::MUL_IMM 目标节点</td></tr><tr><td>选择后 MIR</td><td>LEA64_32r + ADD32rr，仍使用虚拟寄存器</td></tr><tr><td>VirtRegRewriter 后</td><td>主要 operands 变成 $rdi / $esi / $eax</td></tr><tr><td>最终输出</td><td>leal、addl、retq；对象反汇编验证编码</td></tr></tbody></table></div><p>同一表达式在别的 CPU、features 或优化级别下可能得到不同序列。后文会给出本机完整的观察命令，保留输入而不是要求读者凭空相信一张手画图。</p>"
+      },
+      {
+        "id": "target-abi",
+        "title": "Target、Subtarget 与 ABI：合法的机器是什么",
+        "html": "<div class=\"table-wrap\"><table><thead><tr><th>组件</th><th>后端需要它回答什么</th></tr></thead><tbody><tr><td>TargetMachine</td><td>目标代码生成的总入口，持有目标级配置并创建 pipeline</td></tr><tr><td>Subtarget</td><td>某个 CPU 和 feature 集合支持哪些能力，使用什么调度模型</td></tr><tr><td>TargetLowering</td><td>类型／操作是否合法，如何自定义降低，如何处理调用与返回</td></tr><tr><td>TargetInstrInfo / TargetRegisterInfo</td><td>指令性质、copy/spill 支持；寄存器类、别名与保留寄存器</td></tr><tr><td>TargetFrameLowering</td><td>栈帧、prologue/epilogue、栈对齐和调用栈规则</td></tr></tbody></table></div><p>ABI 在入口就开始限制表示：参数在哪些物理寄存器或栈位置，返回值放在哪里，call 会破坏哪些寄存器。选择阶段的 <code>CopyFromReg / CopyToReg</code> 和机器指令的 regmask 让这些限制进入数据流，RA 不能无视它们。</p><p>本例采用 x86-64 的这套目标 ABI，两个 i32 参数从 <code>$edi</code>、<code>$esi</code> 进入，结果通过 <code>$eax</code> 返回。这不是所有操作系统或目标通用的寄存器约定。</p><p class=\"compiler-source\"><strong>源码路标</strong> <code>llvm/include/llvm/CodeGen/TargetLowering.h</code> · <code>TargetLowering / LowerFormalArguments / LowerCall / LowerReturn</code>。共享快照的版本与文件哈希见文末证据。</p>"
+      },
+      {
+        "id": "backend-tablegen",
+        "title": "TableGen：描述机器，生成选择器与指令信息",
+        "html": "<p>新增一条目标指令，通常需要定义 opcode、输入输出寄存器类、编码字段、汇编格式、隐式使用／定义、约束和选择规则。TableGen 把这些描述提供给不同 generator；运行时的编译器使用生成后的描述表、matcher 或编码器。</p><div class=\"table-wrap\"><table><thead><tr><th>常见目标描述</th><th>构建期产物／消费者</th></tr></thead><tbody><tr><td>*RegisterInfo.td</td><td>寄存器、子寄存器与寄存器类信息</td></tr><tr><td>*InstrInfo.td</td><td>指令描述和 DAG 匹配规则等</td></tr><tr><td>*CallingConv.td</td><td>参数／返回值分配规则</td></tr><tr><td>*Sched*.td / processor descriptions</td><td>延迟、资源占用和处理器模型</td></tr><tr><td>*GenDAGISel.inc</td><td>供目标 DAG-to-DAG 选择器使用的生成 matcher</td></tr></tbody></table></div><p>模式描述“什么 DAG 子形状可由这条机器指令实现”，还需检查立即数范围、地址形式、features 等条件。不是所有指令都靠纯 TableGen pattern 完成：复杂寻址、自定义节点或特殊状态常需要 C++ lowering／selection。也不能把某条 pattern 命中理解为全局最优覆盖。</p><p class=\"compiler-source\"><strong>源码路标</strong> <code>llvm/lib/Target/X86/X86ISelDAGToDAG.cpp</code> · <code>X86DAGToDAGISel / SelectCode</code>。共享快照的版本与文件哈希见文末证据。</p>"
+      },
+      {
+        "id": "dag-build",
+        "title": "Build DAG：从 LLVM 指令建立值、chain 与 glue",
+        "html": "<p>SelectionDAG 通常按基本块构建和处理 DAG。<code>SelectionDAGBuilder</code> 遍历 LLVM IR，建立 <code>SDNode</code>；一个节点可以有多个结果，<code>SDValue</code> 包含节点和结果编号。跨块值与 PHI 由函数级状态、虚拟寄存器和机器 CFG 协作承接，不是把整个函数所有操作塞进一个块级 DAG。</p><figure class=\"diagram compiler-diagram\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 820 440\" role=\"img\" aria-label=\"SelectionDAG 同时保存值依赖和副作用顺序\"><defs><marker id=\"llvm-dag-edges-arrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M0 0L10 5L0 10Z\" fill=\"#6a8078\"/></marker></defs><rect width=\"820\" height=\"440\" rx=\"14\" fill=\"#f1f3ec\"/><text x=\"24\" y=\"34\" font-family=\"sans-serif\" font-size=\"21\" fill=\"#244c40\" text-anchor=\"start\">SelectionDAG 同时保存值依赖和副作用顺序</text><text x=\"24\" y=\"61\" font-family=\"sans-serif\" font-size=\"13\" fill=\"#61766c\" text-anchor=\"start\">实线：数据依赖；虚线：chain。load 有数据与 chain 两个结果；图中省略结果编号。</text><rect x=\"24\" y=\"100\" width=\"180\" height=\"62\" rx=\"8\" fill=\"#e6edf0\" stroke=\"#b9cabc\"/><text x=\"38\" y=\"126\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">指针 p / 偏移</text><text x=\"38\" y=\"148\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">地址计算</text><rect x=\"306\" y=\"100\" width=\"190\" height=\"62\" rx=\"8\" fill=\"#e6edf0\" stroke=\"#b9cabc\"/><text x=\"320\" y=\"126\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">load p</text><text x=\"320\" y=\"148\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">输入地址与 chain</text><rect x=\"590\" y=\"100\" width=\"200\" height=\"62\" rx=\"8\" fill=\"#e6edf0\" stroke=\"#b9cabc\"/><text x=\"604\" y=\"126\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">add(value, bias)</text><text x=\"604\" y=\"148\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">使用 load 的数据结果</text><path d=\"M204 131H304\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#llvm-dag-edges-arrow)\"/><path d=\"M496 131H588\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#llvm-dag-edges-arrow)\"/><rect x=\"590\" y=\"278\" width=\"200\" height=\"66\" rx=\"8\" fill=\"#e3ece0\" stroke=\"#b9cabc\"/><text x=\"604\" y=\"304\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">store q, sum</text><text x=\"604\" y=\"326\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">接收数据与 chain</text><path d=\"M690 162V276\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#llvm-dag-edges-arrow)\"/><rect x=\"24\" y=\"278\" width=\"180\" height=\"66\" rx=\"8\" fill=\"#e3ece0\" stroke=\"#b9cabc\"/><text x=\"38\" y=\"304\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">EntryToken</text><text x=\"38\" y=\"326\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">chain 起点</text><rect x=\"306\" y=\"278\" width=\"190\" height=\"66\" rx=\"8\" fill=\"#e3ece0\" stroke=\"#b9cabc\"/><text x=\"320\" y=\"304\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">load 的 chain 结果</text><text x=\"320\" y=\"326\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">约束后续副作用</text><path d=\"M204 310H264V150H304\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" stroke-dasharray=\"5 4\" marker-end=\"url(#llvm-dag-edges-arrow)\"/><path d=\"M401 162V276\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" stroke-dasharray=\"5 4\" marker-end=\"url(#llvm-dag-edges-arrow)\"/><path d=\"M496 310H588\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" stroke-dasharray=\"5 4\" marker-end=\"url(#llvm-dag-edges-arrow)\"/><text x=\"24\" y=\"400\" font-family=\"sans-serif\" font-size=\"14\" fill=\"#244c40\" text-anchor=\"start\">Glue 另用于需要更紧密绑定的节点关系；chain 不占物理寄存器，也不等于硬件内存栅栏。</text></svg><figcaption>数据依赖保证先产生值再消费；EntryToken → load → store 的 chain 表示本例的副作用顺序。load 向右输出数据，向下输出 chain；合法优化可以在证明允许时重新组织依赖。</figcaption></figure><p><strong>Value 边</strong>携带整数、浮点、向量等计算值。<strong>Chain 边</strong>表达 load/store/call 等的顺序依赖；例如一次 load 产生数据结果和 chain 结果。<strong>Glue</strong>用于需要更紧密绑定的关系，常见于某些参数、返回值或隐式状态处理。三者解决的问题不同。</p><p>Builder 也承担调用约定和 intrinsic lowering。看到 <code>X86ISD::*</code> 等目标节点时，先判断它仍是目标特定 DAG 节点，还是已经选出的机器 opcode；前者不等于最终机器指令。</p><p class=\"compiler-source\"><strong>源码路标</strong> <code>llvm/lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp</code> · <code>SelectionDAGBuilder / visit / LowerCallTo</code>。共享快照的版本与文件哈希见文末证据。</p>"
+      },
+      {
+        "id": "dag-combine",
+        "title": "Combine：在不同合法性阶段清理与重组 DAG",
+        "html": "<p>Combine 利用局部等价关系简化 DAG、折叠常量、合并操作并暴露机器可用形状。它既有通用规则，也允许 target-specific combine。和中端 InstCombine 相比，它看到的类型、地址与目标信息更接近机器。</p><pre><code>Build DAG\n  → Combine(BeforeLegalizeTypes)\n  → LegalizeTypes\n  → [if changed] Combine(AfterLegalizeTypes)\n  → LegalizeVectors\n  → [if changed] LegalizeTypes + Combine(AfterLegalizeVectorOps)\n  → Legalize operations\n  → Combine(AfterLegalizeDAG)\n  → Select</code></pre><p>这是当前共享 <code>CodeGenAndEmitDAG()</code> 的关键顺序。合法化可能把一条操作展开成多条操作，产生新的冗余，所以后面仍需 combine。不同阶段允许创建的类型／操作有不同限制；最终合法化后的 combine 不能任意制造后续无法选择的节点。</p><p>本例中，普通 <code>mul i32 %x, 5</code> 在合法化后 combine 变成 <code>X86ISD::MUL_IMM</code>，随后选择为 LEA。不能简单把这次变化归功于最初的中端优化，实际日志能定位发生的阶段。浮点 combine 还必须遵守 flags 和舍入语义。</p><p class=\"compiler-source\"><strong>源码路标</strong> <code>llvm/lib/CodeGen/SelectionDAG/{SelectionDAGISel,DAGCombiner}.cpp</code> · <code>CodeGenAndEmitDAG / DAGCombiner::Run</code>。共享快照的版本与文件哈希见文末证据。</p>"
+      },
+      {
+        "id": "dag-types",
+        "title": "Type Legalize：机器能表示这种值吗",
+        "html": "<figure class=\"diagram compiler-diagram\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 820 355\" role=\"img\" aria-label=\"类型合法化与操作合法化，是两次不同的问题\"><defs><marker id=\"llvm-legalize-arrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M0 0L10 5L0 10Z\" fill=\"#6a8078\"/></marker></defs><rect width=\"820\" height=\"355\" rx=\"14\" fill=\"#f1f3ec\"/><text x=\"24\" y=\"34\" font-family=\"sans-serif\" font-size=\"21\" fill=\"#244c40\" text-anchor=\"start\">类型合法化与操作合法化，是两次不同的问题</text><text x=\"24\" y=\"61\" font-family=\"sans-serif\" font-size=\"13\" fill=\"#61766c\" text-anchor=\"start\">假设玩具目标只支持 32 位整数寄存器；图中不是本机 x86 的精确策略。</text><rect x=\"24\" y=\"100\" width=\"226\" height=\"70\" rx=\"8\" fill=\"#e6edf0\" stroke=\"#b9cabc\"/><text x=\"38\" y=\"126\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">类型问题：i64 add</text><text x=\"38\" y=\"148\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">i64 不能直接放入寄存器</text><path d=\"M250 135H300\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#llvm-legalize-arrow)\"/><rect x=\"302\" y=\"100\" width=\"490\" height=\"70\" rx=\"8\" fill=\"#fffef8\" stroke=\"#b9cabc\"/><text x=\"316\" y=\"126\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">拆成两个 i32，并传播 carry</text><text x=\"316\" y=\"148\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">低半部加法 + 高半部加法 + 进位</text><rect x=\"24\" y=\"221\" width=\"226\" height=\"70\" rx=\"8\" fill=\"#e3ece0\" stroke=\"#b9cabc\"/><text x=\"38\" y=\"247\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">操作问题：i32 divide</text><text x=\"38\" y=\"269\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">i32 合法，但除法没有指令</text><path d=\"M250 256H300\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#llvm-legalize-arrow)\"/><rect x=\"302\" y=\"221\" width=\"490\" height=\"70\" rx=\"8\" fill=\"#fffef8\" stroke=\"#b9cabc\"/><text x=\"316\" y=\"247\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">展开算法 / 自定义 lowering / libcall</text><text x=\"316\" y=\"269\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">选择哪条路径由目标合法化规则决定</text></svg><figcaption>类型合法不保证操作合法；legal 不保证最快，也不保证一个节点对应一条机器指令。</figcaption></figure><p>LLVM IR 可以出现目标不能直接表示的类型，例如没有原生对应寄存器宽度的整数或向量。类型合法化会根据目标规则提升、拆分、扩宽或标量化。拆分整数必须处理 carry、比较、截断／扩展等语义，不能只把结果位宽改成更小。</p><p>向量类型与向量操作还可能分别需要处理：向量长度不合适、某种元素类型不支持，或类型能装入寄存器但没有相应运算。共享流程在 vector legalization 改写后可能再次运行 type legalization，说明它们不是互不相干的一次性步骤。</p><p class=\"compiler-source\"><strong>源码路标</strong> <code>llvm/lib/CodeGen/SelectionDAG/{LegalizeTypes,LegalizeVectorTypes}.cpp</code> · <code>DAGTypeLegalizer</code>。共享快照的版本与文件哈希见文末证据。</p>"
+      },
+      {
+        "id": "dag-ops",
+        "title": "Operation Legalize：这个 opcode × type 组合能执行吗",
+        "html": "<p>有了合法类型，还要检查每种操作在该类型上的实现。<code>TargetLowering</code> 的操作动作表达 target 的选择，例如 Legal、Custom、Expand、LibCall、Promote；具体可用动作和处理位置依版本与操作而定。</p><div class=\"table-wrap\"><table><thead><tr><th>动作</th><th>应如何理解</th></tr></thead><tbody><tr><td>Legal</td><td>这个组合可以继续留给后续选择；仍可能选成多条指令</td></tr><tr><td>Custom</td><td>调用目标自定义 lowering，构造目标节点或替代序列</td></tr><tr><td>Expand</td><td>用其他支持的操作展开并保持语义</td></tr><tr><td>LibCall</td><td>生成运行库调用，进一步受 ABI 与调用约定约束</td></tr><tr><td>Promote</td><td>提升到另一种类型运算，再处理结果语义</td></tr></tbody></table></div><p>例如一个目标缺少某种除法指令，可能生成库函数调用；对编译器来说是合法实现，对性能和寄存器压力来说则引入 call 成本和 clobber。只在选指令时补一个 pattern，无法修复更早的类型或操作合法化错误。</p><p class=\"compiler-source\"><strong>源码路标</strong> <code>llvm/lib/CodeGen/SelectionDAG/LegalizeDAG.cpp</code> · <code>SelectionDAGLegalize / LegalizeOp</code>。共享快照的版本与文件哈希见文末证据。</p>"
+      },
+      {
+        "id": "dag-select",
+        "title": "Select：把合法 DAG 覆盖成目标机器 opcode",
+        "html": "<p>选择器从可接受的 DAG 形状中匹配目标指令，检查立即数、寄存器类、地址模式和 subtarget predicates。通用 opcode 与目标 DAG 节点被改写成机器节点；一条机器指令可能覆盖多个原操作，也可能需要多条指令完成一个原操作。</p><p>本例的乘 5 利用了 <code>x + 4*x</code> 的寻址形式，选择到 <code>LEA64_32r</code>。LEA 在这里做整数地址式算术，不读取内存。<code>add</code> 选择成 <code>ADD32rr</code>，并包含隐式定义 <code>$eflags</code> 的信息。机器指令的显式 operands 之外，还有隐式状态约束。</p><p>遇到 <code>Cannot select</code>，先保存出错 DAG 节点及 operands 的类型，检查是合法化漏掉非法组合、pattern 未覆盖、predicate 不满足，还是输入节点形状与预期不一致。直接新增一个宽泛 pattern 可能隐藏前一层的错误。</p><p class=\"compiler-source\"><strong>源码路标</strong> <code>llvm/lib/CodeGen/SelectionDAG/SelectionDAGISel.cpp</code> · <code>DoInstructionSelection / SelectCodeCommon</code>。共享快照的版本与文件哈希见文末证据。</p>"
+      },
+      {
+        "id": "dag-schedule",
+        "title": "DAG 调度与 Emit：机器 opcode 还要排成指令序列",
+        "html": "<p>Select 的结果仍是 DAG。<code>ScheduleDAGSDNodes</code> 根据依赖和目标信息给节点排序，随后 <code>EmitSchedule</code> 将它们变成 MachineBasicBlock 中的 <code>MachineInstr</code>。此时还以虚拟寄存器表示多数中间值，但 ABI 或指令约束可能已经涉及物理寄存器。</p><p>这里的调度是<strong>SelectionDAG 内部调度</strong>。后面还可能有作用于 MachineInstr 的 pre-RA MachineScheduler，以及物理寄存器确定后的 post-RA 调度。看到日志里的多次 schedule，不代表同一个阶段无意义重复。</p><p class=\"compiler-source\"><strong>源码路标</strong> <code>llvm/lib/CodeGen/SelectionDAG/SelectionDAGISel.cpp</code> · <code>CreateScheduler / Scheduler-&gt;Run / EmitSchedule</code>。共享快照的版本与文件哈希见文末证据。</p>"
+      },
+      {
+        "id": "global-isel",
+        "title": "另一条路径：GlobalISel 直接在 Machine IR 中下降",
+        "html": "<div class=\"table-wrap\"><table><thead><tr><th>阶段</th><th>表示和任务</th></tr></thead><tbody><tr><td>IRTranslator</td><td>LLVM IR → generic MachineInstr，例如 G_ADD；使用 LLT 表示低层类型</td></tr><tr><td>Legalizer</td><td>根据目标规则合法化 generic MIR 的类型／操作</td></tr><tr><td>RegBankSelect</td><td>选择值落在哪种寄存器 bank，并处理必要的跨 bank copy</td></tr><tr><td>InstructionSelect</td><td>generic opcode → target opcode，进一步约束寄存器类</td></tr></tbody></table></div><p>GlobalISel 以 MachineFunction 为主要工作范围，不经过 SelectionDAG 的块级表示。generic MIR 和最终 target MIR 都使用机器指令框架，但 opcode、类型与寄存器约束处于不同阶段。它可结合不同位置的 combines，具体 pipeline 由 target 配置。</p><p><strong>RegBankSelect 不等于 RA。</strong>选 bank 说明值应落在哪类资源域；RA 才决定具体物理寄存器和必要的 spill。FastISel 则是另一种偏向快速编译的选择策略，可按目标与配置在不支持的情况走其他路径。三者不是固定串行的三个 Pass。</p><div class=\"callout\"><p>共享构建只注册了 X86、AMDGPU、NVPTX 等目标。本篇实际运行的是 x86 SelectionDAG 路径；GlobalISel 的结构根据源码与官方文档说明，没有冒充本次运行过 AArch64 等其他后端。</p></div><p class=\"compiler-source\"><strong>源码路标</strong> <code>llvm/lib/CodeGen/GlobalISel/</code> · <code>IRTranslator / Legalizer / RegBankSelect / InstructionSelect</code>。共享快照的版本与文件哈希见文末证据。</p>"
+      },
+      {
+        "id": "machine-ir",
+        "title": "Machine IR：还保留了哪些抽象",
+        "html": "<p><code>MachineFunction → MachineBasicBlock → MachineInstr</code> 是机器级包含关系。MachineOperand 可以是虚拟／物理寄存器、立即数、基本块、frame index、symbol 或 regmask 等。MIR 文本是这套表示的可读序列化，适合保存特定 Pass 的最小输入。</p><div class=\"table-wrap\"><table><thead><tr><th>仍未最终落实的东西</th><th>后续由谁处理</th></tr></thead><tbody><tr><td>虚拟寄存器与寄存器类</td><td>寄存器分配与 VirtRegRewriter</td></tr><tr><td>PHI、COPY、两地址约束</td><td>PHI elimination、coalescing、two-address pass 等</td></tr><tr><td>FrameIndex</td><td>栈帧布局与 frame index elimination</td></tr><tr><td>Pseudo instruction</td><td>某个约定阶段的目标专用／通用展开</td></tr><tr><td>符号与重定位</td><td>MC emission、assembler 与 linker</td></tr></tbody></table></div><p>刚选出的机器 IR 通常还保留虚拟寄存器的 SSA 性质，可运行 MachineCSE、MachineLICM、MachineCombiner 等优化。进入 PHI 消除与两地址重写后，SSA 状态会改变；要看 MachineFunction properties 和具体 Pass 的前置条件。</p><p class=\"compiler-source\"><strong>源码路标</strong> <code>llvm/include/llvm/CodeGen/{MachineFunction,MachineInstr,MachineOperand}.h</code> · <code>MachineFunctionProperties / MachineOperand</code>。共享快照的版本与文件哈希见文末证据。</p>"
+      },
+      {
+        "id": "phi-two-address",
+        "title": "分配前准备：PHI 消除、两地址和 Coalescing",
+        "html": "<pre><code># SSA-like teaching form\nmerge:\n  v = PHI [a, left], [b, right]\n\n# Edge-copy interpretation\nleft -&gt; merge:   v = COPY a\nright -&gt; merge:  v = COPY b\nmerge:          use v</code></pre><p>PHI 的值取决于控制流边。消除时必须把 copy 放在正确的路径上，并处理临界边与并行 copy 的语义。简单把所有 copy 放到 merge 开头会无条件覆盖值；简单逐条执行环形 copy 也会破坏旧值。</p><p>有些机器指令要求输出和某个输入使用同一个寄存器，即 tied operands／两地址约束。例如结果写回加法左输入。TwoAddressInstructionPass 为这种约束调整 COPY 和定义关系；RegisterCoalescer 尝试把可合并的 copy 两端关联起来，降低搬运，但不能违反干涉、寄存器类或子寄存器限制。</p><p>当前优化路径的关键顺序是 <code>PHIElimination → TwoAddressInstruction → RegisterCoalescer → RenameIndependentSubregs → MachineScheduler</code>，随后进入分配与改写。这个顺序由共享 TargetPassConfig 核对，目标可覆盖。</p><p class=\"compiler-source\"><strong>源码路标</strong> <code>llvm/lib/CodeGen/{PHIElimination,TwoAddressInstructionPass,RegisterCoalescer}.cpp</code> · <code>PHIElimination / RegisterCoalescer</code>。共享快照的版本与文件哈希见文末证据。</p>"
+      },
+      {
+        "id": "machine-schedule",
+        "title": "MachineScheduler：延迟、资源与寄存器压力一起看",
+        "html": "<p>调度在保持数据、内存和隐式状态依赖的条件下调整顺序。延迟描述结果何时可用；资源模型描述指令占用哪些执行资源和多久；吞吐约束与依赖链长度不是同一个指标。pre-RA 调度还必须考虑活跃值数量与可用寄存器类。</p><pre><code># A teaching scheduling trade-off\nload a\nload b\nuse a\nuse b\n\n# Loading b earlier may overlap latency,\n# but a and b remain live together for longer.</code></pre><p>更早发出 load 可能覆盖访存延迟，也可能延长活跃区间并增加 spill。调度器根据静态模型作判断，实际收益仍需在目标和负载下测量。post-RA 阶段已经知道物理寄存器，需考虑复用带来的 WAR/WAW 等假依赖；某些目标会用 AntiDepBreaker 类机制打破可消除的反依赖。</p><p class=\"compiler-source\"><strong>源码路标</strong> <code>llvm/lib/CodeGen/MachineScheduler.cpp</code> · <code>ScheduleDAGMILive / GenericScheduler</code>。共享快照的版本与文件哈希见文末证据。</p>"
+      },
+      {
+        "id": "ra-liveness",
+        "title": "RA 入口：先算活跃性，再讨论分配",
+        "html": "<p>一个值从定义到未来最后一次需要它的使用之间需要被保留。跨 CFG，活跃性是数据流固定点问题；机器级 LiveIntervals 进一步用 SlotIndexes 给指令位置编号，并表示可能分段、带洞的 live range 和子寄存器活跃性。</p><pre><code>LiveOut(B) = union LiveIn(S), for each successor S\nLiveIn(B)  = Use(B) union (LiveOut(B) - Def(B))\n# PHI operands are edge uses when the representation still has PHIs.</code></pre><figure class=\"diagram compiler-diagram\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 820 370\" role=\"img\" aria-label=\"活跃区间：寄存器保存的是“未来还会用到的值”\"><defs><marker id=\"llvm-ra-intervals-arrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M0 0L10 5L0 10Z\" fill=\"#6a8078\"/></marker></defs><rect width=\"820\" height=\"370\" rx=\"14\" fill=\"#f1f3ec\"/><text x=\"24\" y=\"34\" font-family=\"sans-serif\" font-size=\"21\" fill=\"#244c40\" text-anchor=\"start\">活跃区间：寄存器保存的是“未来还会用到的值”</text><text x=\"24\" y=\"61\" font-family=\"sans-serif\" font-size=\"13\" fill=\"#61766c\" text-anchor=\"start\">玩具直线程序；只展示三个值的重叠，不代表 LLVM SlotIndex 的精确离散编号。</text><text x=\"150\" y=\"110\" font-family=\"sans-serif\" font-size=\"13\" fill=\"#244c40\" text-anchor=\"middle\">def a</text><path d=\"M150 125V305\" stroke=\"#d5ded0\"/><text x=\"260\" y=\"110\" font-family=\"sans-serif\" font-size=\"13\" fill=\"#244c40\" text-anchor=\"middle\">def b</text><path d=\"M260 125V305\" stroke=\"#d5ded0\"/><text x=\"370\" y=\"110\" font-family=\"sans-serif\" font-size=\"13\" fill=\"#244c40\" text-anchor=\"middle\">def c</text><path d=\"M370 125V305\" stroke=\"#d5ded0\"/><text x=\"480\" y=\"110\" font-family=\"sans-serif\" font-size=\"13\" fill=\"#244c40\" text-anchor=\"middle\">use a</text><path d=\"M480 125V305\" stroke=\"#d5ded0\"/><text x=\"590\" y=\"110\" font-family=\"sans-serif\" font-size=\"13\" fill=\"#244c40\" text-anchor=\"middle\">use b</text><path d=\"M590 125V305\" stroke=\"#d5ded0\"/><text x=\"700\" y=\"110\" font-family=\"sans-serif\" font-size=\"13\" fill=\"#244c40\" text-anchor=\"middle\">use c</text><path d=\"M700 125V305\" stroke=\"#d5ded0\"/><text x=\"45\" y=\"172\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#244c40\" text-anchor=\"start\">a</text><rect x=\"150\" y=\"150\" width=\"330\" height=\"32\" rx=\"6\" fill=\"#6f987c\"/><text x=\"45\" y=\"226\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#244c40\" text-anchor=\"start\">b</text><rect x=\"260\" y=\"204\" width=\"330\" height=\"32\" rx=\"6\" fill=\"#829aae\"/><text x=\"45\" y=\"280\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#244c40\" text-anchor=\"start\">c</text><rect x=\"370\" y=\"258\" width=\"330\" height=\"32\" rx=\"6\" fill=\"#bd9d68\"/><text x=\"24\" y=\"343\" font-family=\"sans-serif\" font-size=\"14\" fill=\"#244c40\" text-anchor=\"start\">def c 之后、use a 之前有三个活跃值；若只允许两个同类物理寄存器，就必须改变存放或计算策略。</text></svg><figcaption>这张图只用于解释同时活跃与容量冲突。LLVM RA 还要处理寄存器类、别名、预着色、保留寄存器、call regmask 与指令约束。</figcaption></figure><p>如果没有正确的活跃区间，allocator 不知道哪些值可共用一个物理寄存器。看起来只差一条 kill 标记的 bug，可能真正来自更早的错误 live range 更新。调度、coalescing 与 split 会改变区间，相关分析也要同步维护。</p><p class=\"compiler-source\"><strong>源码路标</strong> <code>llvm/lib/CodeGen/{LiveIntervals,LiveRegMatrix}.cpp</code> · <code>LiveIntervals / LiveRegMatrix</code>。共享快照的版本与文件哈希见文末证据。</p>"
+      },
+      {
+        "id": "ra-greedy",
+        "title": "RA 核心：Greedy 如何分配、驱逐与拆分",
+        "html": "<p>把 RA 想成图着色有助于理解干涉，但当前 LLVM Greedy 的工程实现以 live intervals、分配顺序、干涉查询和启发式为核心。<code>RAGreedy::selectOrSplit</code> 是很好的阅读入口：它不是按名字顺序给每个虚拟寄存器随便找一个空槽。</p><div class=\"table-wrap\"><table><thead><tr><th>动作</th><th>解决的问题</th></tr></thead><tbody><tr><td>Assign</td><td>在允许的物理寄存器集合中找到不干涉的候选</td></tr><tr><td>Evict</td><td>移走更适合重新安置的已分配区间，随后重新处理它们</td></tr><tr><td>Split</td><td>把长区间拆开，在不同区域采用不同的分配或存放策略</td></tr><tr><td>Spill / rematerialize</td><td>把值转移到栈，或在允许时重新计算，解除容量冲突</td></tr><tr><td>VirtRegRewriter</td><td>将选定的虚拟寄存器映射落实到机器指令 operands</td></tr></tbody></table></div><p>优先级、spill weight、热区、hint、callee-saved 代价和目标限制都会影响结果。一次 split 或 evict 产生的新区间需要重新进入处理流程，因此不能把“assign→evict→split→spill”理解成每个值只走一遍的固定四步。</p><p>本例没有人为制造寄存器压力，RA 后主要使用 <code>$eax</code> 保存计算结果；没有出现 spill。这个结果只说明这个小函数的分配结果，不能用来证明复杂 kernel 的 RA 质量。</p><p class=\"compiler-source\"><strong>源码路标</strong> <code>llvm/lib/CodeGen/RegAllocGreedy.cpp</code> · <code>RAGreedy::selectOrSplit / tryAssign / tryEvict / trySplit</code>。共享快照的版本与文件哈希见文末证据。</p>"
+      },
+      {
+        "id": "ra-spill",
+        "title": "Spill 与重物化：溢出的是值，不是随便插两条指令",
+        "html": "<p>若某段区间无法保留在寄存器中，spiller 可以插入 store／reload，生成新的短区间，再交给后续分配。必须使用正确的宽度、对齐、寄存器类和目标指令，同时维护活跃性、调试信息以及 frame object。寄存器别名和子寄存器写入也可能影响正确性。</p><pre><code># Toy machine with two GPRs; semantic sketch only\nr0 = load A       # a\nr1 = load B       # b\nstore [slot_b], r1\nr1 = load C       # c\nuse r0           # last use of a\nr0 = load [slot_b]\nuse r0           # b\nuse r1           # c</code></pre><p>这个序列在第三个值到来前保存 b，在 a 死亡后重载 b，保持使用顺序与每个值的内容。若 b 是可安全重物化的便宜常量，可能重新生成比访存更好；若 b 来自带副作用的 load 或 call，不能随意重做。真实分配器会衡量热路径代价，不能仅按原始指令条数判断。</p><p>扩展 RA 时建议依次增加：寄存器类与别名、call regmask、live interval 拆分、eviction 启发式、rematerialization、stack-slot coloring、目标专用 spill。每个主题都保留独立 section 和最小 MIR，避免重新堆成一张名词列表。</p><p class=\"compiler-source\"><strong>源码路标</strong> <code>llvm/lib/CodeGen/{InlineSpiller,VirtRegMap,RegAllocGreedy}.cpp</code> · <code>InlineSpiller / VirtRegRewriter</code>。共享快照的版本与文件哈希见文末证据。</p>"
+      },
+      {
+        "id": "frame-lowering",
+        "title": "栈帧下降：把 FrameIndex 变成真正的地址",
+        "html": "<p>MachineFrameInfo 记录 spill slot、局部对象、callee-saved 保存等抽象栈对象。前面的指令可先引用 FrameIndex；确定大小、对齐、栈增长方向、frame/base pointer 和调用约束之后，才能落实偏移。</p><p>PrologEpilogInserter 配合 TargetFrameLowering 和 TargetRegisterInfo 插入进入／离开函数的代码，保存恢复必要寄存器，并消除抽象 frame index。某些大偏移无法直接编码，还需要额外寻址指令或寄存器 scavenging。它不等同于一次简单的“SP 减去所有局部变量大小”。</p><div class=\"table-wrap\"><table><thead><tr><th>要落实的事</th><th>常见错误</th></tr></thead><tbody><tr><td>ABI 栈对齐、调用区域与保存恢复</td><td>函数局部正确，调用边界却破坏栈或寄存器</td></tr><tr><td>frame object 大小与对齐</td><td>spill/reload 类型不一致、对象重叠</td></tr><tr><td>实际偏移和指令立即数范围</td><td>小例子正常，大栈帧编码失败</td></tr><tr><td>unwind / debug 信息</td><td>机器码能跑，但回溯或异常处理错误</td></tr></tbody></table></div><p class=\"compiler-source\"><strong>源码路标</strong> <code>llvm/lib/CodeGen/PrologEpilogInserter.cpp</code> · <code>PEIImpl / calculateFrameObjectOffsets / replaceFrameIndices</code>。共享快照的版本与文件哈希见文末证据。</p>"
+      },
+      {
+        "id": "late-passes",
+        "title": "Late Passes：物理寄存器确定后仍有工作",
+        "html": "<p>RA 后的指令仍可能包含 pseudo、冗余 copy、可折叠分支和需修正的机器约束。共享通用路径中，prologue/epilogue 之后有 late optimization、post-RA pseudo expansion、可选后调度、块布局及目标 pre-emit hooks。具体 target 可能在别的位置插入或替换这些阶段。</p><p>pre-RA 更自由地使用虚拟寄存器；post-RA 的新增临时值必须有真实资源来源。后端 bug 经常发生在某个 late Pass 新增指令，却没有维护隐式 defs/uses、regmask、栈对齐或调度约束。最终合法不只是“没有 vreg”。</p><p>因此调试时至少保留三道边界：ISel 后、RA 后、pre-emit 后。若前两处正确而最终输出错误，不应先修改高层 LLVM IR 优化。</p><p class=\"compiler-source\"><strong>源码路标</strong> <code>llvm/lib/CodeGen/TargetPassConfig.cpp</code> · <code>addMachineLateOptimization / addPreEmitPass / addPreEmitPass2</code>。共享快照的版本与文件哈希见文末证据。</p>"
+      },
+      {
+        "id": "mc-output",
+        "title": "AsmPrinter 与 MC：汇编文字和目标文件怎样出来",
+        "html": "<figure class=\"diagram compiler-diagram\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 820 430\" role=\"img\" aria-label=\"最后一段：从带编译信息的 MachineInstr 到编码与符号\"><defs><marker id=\"llvm-mc-output-arrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M0 0L10 5L0 10Z\" fill=\"#6a8078\"/></marker></defs><rect width=\"820\" height=\"430\" rx=\"14\" fill=\"#f1f3ec\"/><text x=\"24\" y=\"34\" font-family=\"sans-serif\" font-size=\"21\" fill=\"#244c40\" text-anchor=\"start\">最后一段：从带编译信息的 MachineInstr 到编码与符号</text><text x=\"24\" y=\"61\" font-family=\"sans-serif\" font-size=\"13\" fill=\"#61766c\" text-anchor=\"start\">AsmPrinter 是机器码输出入口的一部分；选择目标文件输出时不必先写 .s 再调用外部汇编器。</text><rect x=\"100\" y=\"95\" width=\"620\" height=\"67\" rx=\"8\" fill=\"#fffef8\" stroke=\"#b9cabc\"/><text x=\"114\" y=\"121\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">MachineInstr</text><text x=\"114\" y=\"143\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">目标 opcode、物理寄存器、机器级元数据</text><path d=\"M410 162v28\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#llvm-mc-output-arrow)\"/><rect x=\"100\" y=\"192\" width=\"620\" height=\"67\" rx=\"8\" fill=\"#fffef8\" stroke=\"#b9cabc\"/><text x=\"114\" y=\"218\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">AsmPrinter / target lowering → MCInst</text><text x=\"114\" y=\"240\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">更低层的 opcode 与 operands，配合符号和 streamer</text><path d=\"M410 259v28\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#llvm-mc-output-arrow)\"/><rect x=\"100\" y=\"289\" width=\"620\" height=\"67\" rx=\"8\" fill=\"#e3ece0\" stroke=\"#b9cabc\"/><text x=\"114\" y=\"315\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">MCStreamer → 文本汇编 或 目标文件</text><text x=\"114\" y=\"337\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">编码器 + assembler backend / fixup / relocation</text><text x=\"24\" y=\"401\" font-family=\"sans-serif\" font-size=\"14\" fill=\"#244c40\" text-anchor=\"start\">目标文件仍可能包含未解析的外部符号和重定位；linker 再完成链接阶段的地址解析。</text></svg><figcaption>具体指令 lowering、pseudo 展开时机与对象格式由 target 决定。这里是通用职责图。</figcaption></figure><p>MachineInstr 携带许多供编译器分析使用的信息；MC 层把指令、符号、节与编码联系起来。AsmPrinter 的目标实现可把 MachineInstr 转成 MCInst，并通过 MCStreamer 输出汇编文本或目标文件。编码器处理指令字节，assembler backend 处理 fixup、relaxation 等目标细节。</p><p>例如本机 <code>llc -filetype=obj</code> 直接输出 ELF 对象；<code>llvm-objdump -d</code> 解码后仍是 LEA、ADD、RET。这个例子没有外部调用，所以没有展示复杂重定位；真实对象文件可以保留需链接器解析的符号引用。</p><p class=\"compiler-source\"><strong>源码路标</strong> <code>llvm/lib/CodeGen/AsmPrinter/AsmPrinter.cpp</code> · <code>AsmPrinter / emitFunctionBody</code>。共享快照的版本与文件哈希见文末证据。</p>"
+      },
+      {
+        "id": "mir-walkthrough",
+        "title": "并排读结果：LLVM IR、选择后 MIR、RA 后 MIR、汇编",
+        "html": "<p>下面直接摘录本次运行结果；MIR 的 YAML 头部省略，只展示函数 body。<code>%0:gr32</code> 是带寄存器类的虚拟寄存器，<code>$edi</code> 是物理寄存器。<code>implicit-def</code> 描述指令隐式修改的状态。</p><h3>① 指令选择完成，仍有 vreg</h3><pre><code>bb.0.entry:\n    liveins: $edi, $esi\n  \n    %1:gr32 = COPY $esi\n    %0:gr32 = COPY $edi\n    %3:gr64 = IMPLICIT_DEF\n    %2:gr64_nosp = INSERT_SUBREG %3, %0, %subreg.sub_32bit\n    %4:gr32 = LEA64_32r %2, 4, %2, 0, $noreg\n    %5:gr32 = ADD32rr %4, %1, implicit-def dead $eflags\n    $eax = COPY %5\n    RET 0, $eax\n...</code></pre><p>这里 LEA 使用 64 位地址寄存器形式计算 32 位结果，因此出现 <code>INSERT_SUBREG</code> 和 <code>gr64_nosp</code>。不要只看 C/LLVM 层的 i32 就断定每个机器 operand 都应是 gr32。</p><h3>② VirtRegRewriter 后，映射落实</h3><pre><code>bb.0.entry:\n    liveins: $edi, $esi\n  \n    renamable $edi = KILL $edi, implicit-def $rdi\n    renamable $eax = LEA64_32r killed renamable $rdi, 4, renamable $rdi, 0, $noreg\n    renamable $eax = ADD32rr killed renamable $eax, killed renamable $esi, implicit-def dead $eflags\n    RET 0, $eax\n...</code></pre><p>结果已经使用物理寄存器，输入 COPY 大多消失；<code>KILL</code> 是机器层用于表达活跃性关系的伪操作，不会原样变成一条名叫 KILL 的 x86 指令。</p><h3>③ 最终反汇编</h3><pre><code>scaled-add.o:\tfile format elf64-x86-64\n\nDisassembly of section .text:\n\n0000000000000000 &lt;scaled_add&gt;:\n       0: 8d 04 bf                     \tleal\t(%rdi,%rdi,4), %eax\n       3: 01 f0                        \taddl\t%esi, %eax\n       5: c3                           \tretq</code></pre><p>从这四个截面反推职责：combine / select 决定用什么机器操作表达；RA 决定中间值在哪里；late lowering 和 emission 决定最终可编码的序列。这里没有执行对象函数，也没有计时。</p>"
+      },
+      {
+        "id": "backend-debug",
+        "title": "动手定位：先找第一次变坏的表示",
+        "html": "<p>把 <code>practice/llvm/scaled-add.ll</code> 拷到工作目录，用同一套 LLVM 工具运行。以下命令在共享构建已验证；工具路径应使用自己固定版本的 bin。输出文件放在你自己的工作目录。</p><pre><code># Print the traditional CodeGen pass structure.\nllc -O2 -mtriple=x86_64-unknown-linux-gnu -mcpu=x86-64   -debug-pass=Structure scaled-add.ll -o scaled-add.s\n\n# Save two machine-IR boundaries.\nllc -O2 -mtriple=x86_64-unknown-linux-gnu -mcpu=x86-64   -stop-after=finalize-isel scaled-add.ll -o selected.mir\nllc -O2 -mtriple=x86_64-unknown-linux-gnu -mcpu=x86-64   -stop-after=virtregrewriter scaled-add.ll -o allocated.mir\n\n# Verify machine instructions and inspect real encoding.\nllc -O2 -mtriple=x86_64-unknown-linux-gnu -mcpu=x86-64   -verify-machineinstrs -filetype=obj scaled-add.ll -o scaled-add.o\nllvm-objdump -d scaled-add.o\n\n# Internal DAG trace; requires a build that enables debug output.\nllc -O2 -mtriple=x86_64-unknown-linux-gnu -mcpu=x86-64   -debug-only=isel scaled-add.ll -o scaled-add.s</code></pre><div class=\"table-wrap\"><table><thead><tr><th>症状</th><th>先截哪一层</th></tr></thead><tbody><tr><td>Cannot select / unsupported type</td><td>初始、合法化后和 select 前 DAG；核对 opcode × type 与目标 features</td></tr><tr><td>某条指令被错误选中</td><td>select 前后 DAG、目标 pattern 与隐式约束</td></tr><tr><td>多余 copy 或意外 spill</td><td>coalescer / scheduler 前后 MIR、LiveIntervals、regclass 与 call mask</td></tr><tr><td>大栈帧／调用后结果错</td><td>RA 后、prologepilog 后和 final MIR，检查偏移与 ABI</td></tr><tr><td>目标字节或重定位错误</td><td>pre-emit MI、MC lowering、对象反汇编和 relocation</td></tr></tbody></table></div><p>进一步可以用 <code>-stop-before</code>、<code>-stop-after</code> 保存截面，再通过 <code>-run-pass</code> 在 MIR 上隔离机器 Pass。Pass 的注册名和所需 MIR properties 随版本变化，先查本机输出和同版本 <code>llvm/test/CodeGen/</code> 用例。不要把某版本命令名当成稳定 API。</p>"
+      },
+      {
+        "id": "backend-reading",
+        "title": "源码阅读路线与后续扩展",
+        "html": "<div class=\"table-wrap\"><table><thead><tr><th>顺序</th><th>带着问题读源码</th></tr></thead><tbody><tr><td>1. Pipeline</td><td>TargetPassConfig.cpp：阶段顺序在哪里，目标能覆盖哪里？</td></tr><tr><td>2. SelectionDAG</td><td>SelectionDAGISel.cpp：每次 combine / legalize 之后有哪些不变量？</td></tr><tr><td>3. 目标实现</td><td>X86ISelLowering.cpp、X86ISelDAGToDAG.cpp 和 .td：目标约束由谁声明？</td></tr><tr><td>4. 机器级准备与调度</td><td>PHIElimination、RegisterCoalescer、MachineScheduler：值与顺序怎么变？</td></tr><tr><td>5. RA</td><td>LiveIntervals → LiveRegMatrix → RegAllocGreedy → InlineSpiller → VirtRegRewriter</td></tr><tr><td>6. 收尾与输出</td><td>PrologEpilogInserter → AsmPrinter → MC，检查哪些抽象尚未消除</td></tr></tbody></table></div><p>你提供的 Five100Miles 系列按“概述 → lowering → combine → legalize → select”拆解指令选择，很适合建立阅读顺序。本篇借用这种模块化组织方式，技术判断以共享源码和 LLVM 官方文档核对；原系列属于 2020 年等历史材料，函数签名、顺序与默认行为需要按当前基线重新验证。</p><p>RA 已作为独立模块展开。以后可以在这个模块中继续加 section、源码入口和最小 MIR；调度、调用约定或 MC 也遵循同一结构。每个模块固定回答：<strong>输入表示 → 解决的约束 → 核心机制 → 输出不变量 → 如何观察与验证</strong>。</p><p>若回头遇到 PassManager、analysis invalidation、SSA 或 rewrite 术语不熟悉，转到 <a href=\"#chapter/compiler-foundations/pass-contract\">基础组件篇</a>，无需在后端每一节重新解释通用机制。</p>"
+      }
+    ],
+    "readingLabel": "沿表示下降阅读；图中模块可以直接点击",
+    "readingStageLabel": "下降阶段",
+    "portableReading": {
+      "file": "llvm-backend.html",
+      "download": "llvm-backend.html",
+      "label": "保存完整 LLVM 后端 HTML ↓"
+    },
+    "readingStages": [
+      {
+        "id": "backend-stage-map",
+        "title": "总图与入口",
+        "summary": "先识别 pipeline 的组织者和贯穿例子。",
+        "sections": [
+          "backend-map",
+          "pipeline-owner",
+          "running-example"
+        ]
+      },
+      {
+        "id": "backend-stage-target",
+        "title": "机器与 ABI",
+        "summary": "目标能力与描述决定合法的下降方式。",
+        "sections": [
+          "target-abi",
+          "backend-tablegen"
+        ]
+      },
+      {
+        "id": "backend-stage-isel",
+        "title": "指令选择",
+        "summary": "展开 SelectionDAG 内部；补充 GlobalISel 的另一条路线。",
+        "sections": [
+          "dag-build",
+          "dag-combine",
+          "dag-types",
+          "dag-ops",
+          "dag-select",
+          "dag-schedule",
+          "global-isel"
+        ]
+      },
+      {
+        "id": "backend-stage-machine",
+        "title": "机器 IR 与调度",
+        "summary": "准备好分配所需的表示、约束和顺序。",
+        "sections": [
+          "machine-ir",
+          "phi-two-address",
+          "machine-schedule"
+        ]
+      },
+      {
+        "id": "backend-stage-ra",
+        "title": "寄存器分配 RA",
+        "summary": "从活跃区间到分配、拆分、spill 与改写。",
+        "sections": [
+          "ra-liveness",
+          "ra-greedy",
+          "ra-spill"
+        ]
+      },
+      {
+        "id": "backend-stage-emit",
+        "title": "栈帧与输出",
+        "summary": "消除最后的机器抽象，输出字节与符号。",
+        "sections": [
+          "frame-lowering",
+          "late-passes",
+          "mc-output"
+        ]
+      },
+      {
+        "id": "backend-stage-lab",
+        "title": "截面与调试",
+        "summary": "读取本机结果，再按源码入口扩展模块。",
+        "sections": [
+          "mir-walkthrough",
+          "backend-debug",
+          "backend-reading"
+        ]
+      }
+    ],
+    "questions": [
+      {
+        "id": "backend-q1",
+        "q": "Combine、Legalize、Select 都是顶层 Pass 吗？",
+        "a": "在本篇 SelectionDAG 路径中，它们是顶层指令选择内部阶段，CodeGenAndEmitDAG 组织多轮 combine 与合法化，随后选择、调度并输出 MI。",
+        "followup": "如何用 debug-pass=Structure 和 debug-only=isel 区分两层？"
+      },
+      {
+        "id": "backend-q2",
+        "q": "类型已经合法，为什么还可能不能选指令？",
+        "a": "合法类型不保证所有 opcode 在该类型上都有实现；还需操作合法化、目标 pattern 和 predicate 覆盖。",
+        "followup": "一个 i32 除法在无原生除法目标上有哪些实现路径？"
+      },
+      {
+        "id": "backend-q3",
+        "q": "SelectionDAG 的 chain、glue 与数据边有何区别？",
+        "a": "数据边携带计算值；chain 表达副作用顺序依赖；glue 表达需要更紧密绑定的关系。它们不等同于物理寄存器或硬件内存栅栏。",
+        "followup": "一次 load 为什么可以有多个结果？"
+      },
+      {
+        "id": "backend-q4",
+        "q": "为什么后端出现不止一次调度？",
+        "a": "DAG 调度先把选出的节点排成 MI；pre-RA MachineScheduler 兼顾依赖、资源和寄存器压力；post-RA 调度面对已经确定的物理寄存器。",
+        "followup": "提前 load 何时会因 spill 得不偿失？"
+      },
+      {
+        "id": "backend-q5",
+        "q": "RegBankSelect 为什么不是 RA？",
+        "a": "它选择寄存器 bank 并处理跨 bank 需求；RA 决定具体物理寄存器、冲突处理、split 和 spill。",
+        "followup": "generic MIR 到 target MIR 期间哪些约束逐步确定？"
+      },
+      {
+        "id": "backend-q6",
+        "q": "LLVM Greedy RA 是否就是直接对干涉图着色？",
+        "a": "干涉图是解释模型；实现围绕 live intervals、物理寄存器干涉查询、优先级、eviction、splitting 和 spilling 工作。",
+        "followup": "selectOrSplit 产生的新区间为什么还需重新处理？"
+      },
+      {
+        "id": "backend-q7",
+        "q": "PHI 为什么不能在 merge 开头全部变成 COPY？",
+        "a": "每个输入属于特定前驱边，必须按实际路径选择。无条件 COPY 会覆盖结果，copy 环还需要并行 copy 语义。",
+        "followup": "临界边和寄存器 coalescing 如何影响插入位置？"
+      },
+      {
+        "id": "backend-q8",
+        "q": "RA 完成后还剩哪些抽象？",
+        "a": "可能还有 frame index、pseudo、晚期机器约束和符号；栈帧、late passes 与 MC 分别继续落实。",
+        "followup": "为什么不能随意在 post-RA 新增一个虚拟临时寄存器？"
+      },
+      {
+        "id": "backend-q9",
+        "q": "LEA + ADD 比 MUL + ADD 一定快吗？",
+        "a": "本例证明了所选表示与实际编码，没有性能计时。收益取决于 CPU、关键路径、吞吐、寄存器压力和上下文。",
+        "followup": "怎样固定目标和输入做真正可归因的性能对比？"
+      }
+    ],
+    "takeaways": [
+      "能画出 LLVM IR、SelectionDAG / gMIR、MachineInstr、MC 的边界。",
+      "能区分顶层 Pass 与 SelectionDAG 内部阶段，并解释多轮合法化和 combine。",
+      "能从活跃性、寄存器约束和热区代价解释 RA 的分配、驱逐、拆分与 spill。",
+      "能解释栈帧、late lowering、AsmPrinter 与 MC 各自消除哪些抽象。",
+      "能用同版本 llc 保存 MIR 截面并定位第一次出现问题的位置。"
+    ],
+    "sources": [
+      {
+        "id": "backend-snapshot",
+        "label": "共享 LLVM 源码快照与运行证据",
+        "url": "./evidence/compiler-guides-sources.md#snapshot",
+        "note": "22.0.0git；关键文件 SHA256 固定；不能从失效的 Git 元数据推断 commit。",
+        "kind": "源码"
+      },
+      {
+        "id": "backend-run",
+        "label": "本机 x86-64 编译截面",
+        "url": "./evidence/compiler-guides-sources.md#runs",
+        "note": "O2、mcpu=x86-64；MIR、汇编、对象反汇编、verifier；没有执行或性能测量。",
+        "kind": "本机运行"
+      },
+      {
+        "id": "backend-official",
+        "label": "LLVM Code Generator",
+        "url": "https://llvm.org/docs/CodeGenerator.html",
+        "note": "官方机制说明；具体 pipeline 以共享快照和目标输出为准。",
+        "kind": "官方文档"
+      },
+      {
+        "id": "backend-gisel",
+        "label": "GlobalISel",
+        "url": "https://llvm.org/docs/GlobalISel/index.html",
+        "note": "替代路径的组件结构；未声称本次执行过其他 target。",
+        "kind": "官方文档"
+      },
+      {
+        "id": "backend-mir",
+        "label": "MIR language reference",
+        "url": "https://llvm.org/docs/MIRLangRef.html",
+        "note": "机器 IR 文本和独立机器 Pass 调试。",
+        "kind": "官方文档"
+      },
+      {
+        "id": "backend-blog",
+        "label": "Five100Miles · LLVM 系列目录",
+        "url": "https://www.cnblogs.com/Five100Miles/category/1438128.html",
+        "note": "用户指定的历史阅读线索；采用模块划分思路，技术事实以源码与官方文档为准。",
+        "kind": "历史博客"
+      },
+      {
+        "id": "backend-blog-lowering",
+        "label": "LLVM 笔记(10) · lowering",
+        "url": "https://www.cnblogs.com/Five100Miles/p/12824942.html",
+        "note": "2020 年系列；只作进一步阅读，接口与行为按本篇源码基线重核。",
+        "kind": "历史博客"
+      },
+      {
+        "id": "backend-blog-combine",
+        "label": "LLVM 笔记(11) · combine",
+        "url": "https://www.cnblogs.com/Five100Miles/p/12840216.html",
+        "note": "2020 年系列；用于对照指令选择内部的组织方式。",
+        "kind": "历史博客"
+      },
+      {
+        "id": "backend-blog-legalize",
+        "label": "LLVM 笔记(12) · legalize",
+        "url": "https://www.cnblogs.com/Five100Miles/p/12865995.html",
+        "note": "2020 年系列；类型与操作合法化的历史阅读入口。",
+        "kind": "历史博客"
+      },
+      {
+        "id": "backend-blog-select",
+        "label": "LLVM 笔记(13) · select",
+        "url": "https://www.cnblogs.com/Five100Miles/p/12903057.html",
+        "note": "2020 年系列；pattern 和指令选择的历史阅读入口。",
+        "kind": "历史博客"
+      }
+    ],
+    "legacyChapters": {
+      "compiler-whiteboard": {
+        "title": "白板推导：从 CFG 到两只物理寄存器",
+        "section": "ra-liveness",
+        "anchors": [
+          "cfg-ssa",
+          "phi-edge-use",
+          "fixed-point",
+          "interference",
+          "spill-assembly",
+          "loop-and-transfer"
+        ],
+        "anchorMap": {
+          "cfg-ssa": "phi-two-address",
+          "phi-edge-use": "phi-two-address",
+          "fixed-point": "ra-liveness",
+          "interference": "ra-liveness",
+          "spill-assembly": "ra-spill",
+          "loop-and-transfer": "ra-liveness"
+        }
+      }
+    }
+  }
+]

@@ -36,7 +36,7 @@ Attention、FFN、PE、VP、MoE 部署与性能分析分别使用一个 chapter�
 | 中端核心 Pass 逐个拆解 | `compiler` 下新增 `middle-end-passes` 专题；按分析前提、合法性、变换、失效、反例组织章节 |
 | GLM5Next KDA 真实部署 | `moe`（显示名 GLM5Next 300B 真实部署）的 Attention 部署专题；区分模型wrapper与kernel版本，交叉链接算法与硬件 |
 | 更多公司面经 | 先添加来源记录和公司映射，再根据内容量添加叙事章节 |
-| LLVM 后端专题 | `compiler` 下新建专题；不要把所有细节挤进一篇总览 |
+| LLVM 后端专题 | 扩展 `llvm-backend` 的对应 readingStage；每个模块保留独立 section、源码入口、例子与验证边界 |
 | 新 Coding 题型 | `coding` 下按通用算法、数据流、kernel、pass 分类扩章；代码和题源分开 |
 | 新硬件代际 | 新知识域或 `hardware` 下独立专题；不改写旧代际的来源范围 |
 
@@ -118,3 +118,11 @@ Attention 的 N 包含本步新 token，按等长请求、每步每请求一个 
 正文使用 `<div data-attention-lab="flash"></div>`；支持 `flash`、`decode`、`rope`、`heads`、`mla`、`sparse`、`state`。`web/attention-lab.js`/CSS 在构建时内嵌，由 `initAttentionLabs()` 挂载，不依赖外部资源。页面默认静止，提供前后、重置、播放、键盘与步骤直达；页面切换、隐藏、离屏与打印停播。打印输出完整步骤与最终静态图。通用图示放大忽略 `.attention-lab` 内部SVG，避免替换/包裹破坏动画。
 
 新增例子须声明玩具维度与真实模型维度的边界，数据变化由可复算数值驱动。数学函数由 `node scripts/check_attention_lab.js` 的独立oracle校验；动画不代表GPU计时或硬件性能。RoPE示例必须区分当前新K与历史K；固定状态必须明确key/value轴、门控顺序与跨步保存语义。
+
+## LLVM / MLIR 两篇教程
+
+`compiler` 主题只显示两篇连续长文，由 `readingCollection: true` 展示两卷入口和模块目录；两卷分别生成 `compiler-foundations.html` 与 `llvm-backend.html`。基础组件正文在 `content/50-compiler-internals.json`，后端正文在 `content/51-llvm-backend.json`。普通主题保留原来的专题目录。
+
+后端按“总图 → 目标与 ABI → 指令选择 → Machine IR 与调度 → RA → 栈帧与输出 → 调试”分层。扩充 RA 时，在 `backend-stage-ra` 增加独立 section，说明输入、约束、核心机制、输出不变量、源码和最小 MIR；同步把 section ID 加入该 stage。已有 `ra-liveness`、`ra-greedy`、`ra-spill` 不改名。新增大主题可增加 stage，但仍保留这一篇完整 HTML，不把每个 Pass 再变成首页卡片。
+
+图必须区分顶层 CodeGen Pass 与 SelectionDAG 内部的 combine/legalize/select。目标与版本差异显式标明，不能把某次 x86 pipeline 宣称为全部后端的固定列表。共享源码没有可用 Git 元数据时，记录文件 SHA256，不编造 commit。原创输入保存在 `practice/llvm/`，核对记录见 `evidence/compiler-guides-sources.md`。旧七章的深链接和笔记通过 `legacyChapters` 迁移，不把旧章的已读状态当成新长文完成状态。

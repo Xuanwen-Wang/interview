@@ -114,30 +114,30 @@
     },
     {
       "id": "compiler",
-      "title": "Triton · MLIR · LLVM",
+      "title": "LLVM / MLIR 与后端",
       "number": "04",
-      "description": "掌握 IR 对象、Pass 与重写机制，再进入分析、优化和代码生成。",
+      "description": "两篇完整教程：先掌握 IR、PassManager、Analysis 与改写机制，再沿一张总图走完 LLVM 后端下降。各模块有独立锚点和源码入口，可持续扩展调度、RA 等专题。",
       "groups": [
         {
-          "id": "infra",
-          "title": "编译基础设施内部",
+          "id": "foundations",
+          "title": "基础组件",
           "chapters": [
-            "triton-ir-stack",
-            "mlir-object-model",
-            "pass-analysis",
-            "rewrite-conversion",
-            "llvm-mid-backend"
+            "compiler-foundations"
           ]
         },
         {
-          "id": "reasoning",
-          "title": "正确性与白板推导",
+          "id": "backend",
+          "title": "LLVM 后端下降",
           "chapters": [
-            "compiler-correctness-foundations",
-            "compiler-whiteboard"
+            "llvm-backend"
           ]
         }
-      ]
+      ],
+      "readingCollection": true,
+      "legacyGroups": {
+        "infra": "foundations",
+        "reasoning": "backend"
+      }
     },
     {
       "id": "hardware",

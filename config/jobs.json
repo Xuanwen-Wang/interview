@@ -230,9 +230,8 @@
       ]
     },
     "chapters": [
-      "llvm-mid-backend",
-      "compiler-correctness-foundations",
-      "compiler-whiteboard",
+      "compiler-foundations",
+      "llvm-backend",
       "compiler-codegen-debug"
     ]
   },
@@ -317,7 +316,7 @@
       "compiler-sync-proof",
       "compiler-real-case",
       "serving-runtime",
-      "pass-analysis"
+      "compiler-foundations"
     ]
   },
   {
@@ -381,9 +380,7 @@
       ]
     },
     "chapters": [
-      "triton-ir-stack",
-      "mlir-object-model",
-      "rewrite-conversion",
+      "compiler-foundations",
       "interview-bytedance"
     ]
   },
@@ -579,9 +576,7 @@
       ]
     },
     "chapters": [
-      "triton-ir-stack",
-      "mlir-object-model",
-      "llvm-mid-backend",
+      "compiler-foundations",
       "coding-kernels"
     ]
   },
@@ -650,9 +645,7 @@
       ]
     },
     "chapters": [
-      "mlir-object-model",
-      "rewrite-conversion",
-      "pass-analysis",
+      "compiler-foundations",
       "compiler-codegen-debug"
     ]
   }

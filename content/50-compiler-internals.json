@@ -1,641 +1,410 @@
 [
   {
-    "id": "triton-ir-stack",
+    "id": "compiler-foundations",
+    "title": "LLVM / MLIR 基础组件：IR、Pass 与改写机制",
+    "part": "编译器基础",
     "order": 50,
-    "title": "Triton 内部：从 Python AST 到布局与目标代码",
-    "subtitle": "frontend · TTIR · TTGIR · backend",
-    "lead": "一个tl.load究竟经历了哪些解释？沿原创向量kernel建立可检查的编译链，再解释布局、专门化、软件流水与后端插件。上游GPU路径和518路径分别说明，教学IR不冒充当前机器的实际dump。",
+    "subtitle": "先读懂对象，再理解 PassManager、Analysis 与 Conversion 怎样协作。",
+    "minutes": 85,
+    "level": "基础 → 进阶",
+    "tags": [
+      "LLVM",
+      "MLIR",
+      "PassManager",
+      "Analysis",
+      "SSA",
+      "Rewrite"
+    ],
+    "lead": "从一个 x + 0 的变换出发，沿 IR 对象、执行作用域、分析缓存和重写合法性，搭起阅读编译器源码的工具箱。",
     "sections": [
       {
-        "id": "entry",
-        "title": "01 / JIT frontend怎样理解Python",
-        "html": "<p>Python负责组织kernel、调用和元参数；JIT函数体中的受支持语法由Triton frontend解析AST，在编译环境里构建typed SSA IR。tl.arange产生块状值，tl.load建立受mask控制的内存操作，tl.sum表达块内归约。Python容器、动态对象操作、任意第三方函数不会天然变成设备指令。</p><figure class=\"diagram\"><svg viewBox=\"0 0 720 240\" role=\"img\" aria-label=\"固定版本上游NVIDIA普通Triton路径\"><rect width=\"720\" height=\"240\" rx=\"15\" fill=\"#eef2e7\"/><text x=\"24\" y=\"31\" fill=\"#274c3b\" font-size=\"18\" font-family=\"sans-serif\">固定版本上游NVIDIA普通Triton路径</text><rect x=\"20.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#315c4c\"/><text x=\"97.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">Python AST</text><text x=\"97.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">专门化与语义检查</text><path d=\"M177.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"195.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#506c79\"/><text x=\"272.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">TTIR</text><text x=\"272.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">块张量 / SSA / 内存</text><path d=\"M352.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"370.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#796447\"/><text x=\"447.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">TTGIR</text><text x=\"447.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">GPU布局与目标变换</text><path d=\"M527.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"545.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#5d5777\"/><text x=\"622.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">LLVM IR → PTX</text><text x=\"622.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">ptxas → cubin</text><text x=\"24\" y=\"179\" fill=\"#405b49\" font-size=\"14\" font-family=\"sans-serif\">前端语义、数据分布和指令选择是三个层次。</text><text x=\"24\" y=\"203\" fill=\"#405b49\" font-size=\"14\" font-family=\"sans-serif\">上游源码版本：1d503a352756；本章没有编译GPU产物。</text></svg><figcaption>依据上游backend stage注册重绘；Gluon另有glir入口，AMD与518不经过同一条PTX链。</figcaption></figure><p>固定源码ASTSource.make_ir把函数及参数签名、constexpr等交给AST到IR生成；backend再注册各编译阶段。Python环境、Triton版本、target architecture和backend选项都会影响实际产物。因此同一段Python文本相同，不足以证明两次测量运行相同代码。</p>"
+        "id": "orientation",
+        "title": "先确定工具箱，再讨论一次下降",
+        "html": "<p>写一个编译器变换，先回答三个问题：<strong>改的是什么对象，在哪个作用域执行，修改后哪些事实还成立？</strong>本篇用这条线介绍 IR、Pass、PassManager、Analysis 与 Rewrite。读完再进入 <a href=\"#chapter/llvm-backend/backend-map\">LLVM 后端下降</a>，把这些组件放到真正的 CodeGen 流程里。</p><div class=\"table-wrap\"><table><thead><tr><th>本篇：基础组件</th><th>下一篇：后端下降</th></tr></thead><tbody><tr><td>IR 的所有权、SSA、类型与语义</td><td>LLVM IR → DAG / gMIR → MachineInstr → MC</td></tr><tr><td>Pass 怎么运行，分析如何缓存与失效</td><td>指令选择、调度、寄存器分配、栈帧与输出</td></tr><tr><td>Pattern 怎样改写，Conversion 如何定义合法目标</td><td>每一阶段的输入、输出、源码入口和调试截面</td></tr></tbody></table></div><div class=\"callout\"><p>源码基线：2026-10-26 核对共享 LLVM/MLIR <code>22.0.0git</code>。共享目录缺少可用 Git 元数据，使用关键文件 SHA256 固定快照，不虚构 commit。本文的小 IR 示例为原创；标注“本机运行”的结果由这套工具产生。</p></div>"
       },
       {
-        "id": "specialization",
-        "title": "02 / 编译期常量、运行期值和cache key",
-        "html": "<p>BLOCK:tl.constexpr是编译时元参数，适合决定块shape、静态分支或展开方式。N若作为运行期标量传入，值在设备执行时才用来算mask；改变N不意味着Python需要把循环执行N遍。某些普通标量也可能被特化，具体受JIT与do_not_specialize等策略影响，不能笼统声称只有constexpr进入缓存key。</p><table><thead><tr><th>输入类别</th><th>编译器能知道什么</th><th>容易犯的错</th></tr></thead><tbody><tr><td>指针参数</td><td>元素类型及推导出的对齐信息</td><td>把一次具体地址当长期语义</td></tr><tr><td>运行期N</td><td>类型与可能的专门化条件</td><td>把所有动态N当独立shape版本</td></tr><tr><td>constexpr BLOCK</td><td>编译时整数及相关控制</td><td>生成过多参数组合</td></tr><tr><td>target/options</td><td>架构、warps、stages等</td><td>只记录源码SHA，不记录配置</td></tr></tbody></table><p>变体数可粗估为dtype种数×tile种数×target种数×其他专门化组合。数量过大意味着编译延迟、cache容量和调优成本上升；动态bucket减少变体，却可能增加padding。缓存应绑定影响代码的输入，既避免结果不同的版本碰撞，又避免把无关运行期值全部变成编译维度。</p>"
+        "id": "llvm-objects",
+        "title": "LLVM：沿 Module 找到一次 Use",
+        "html": "<figure class=\"diagram compiler-diagram\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 820 430\" role=\"img\" aria-label=\"两套 IR 对象，解决不同层次的表达问题\"><defs><marker id=\"compiler-objects-arrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M0 0L10 5L0 10Z\" fill=\"#6a8078\"/></marker></defs><rect width=\"820\" height=\"430\" rx=\"14\" fill=\"#f1f3ec\"/><text x=\"24\" y=\"34\" font-family=\"sans-serif\" font-size=\"21\" fill=\"#244c40\" text-anchor=\"start\">两套 IR 对象，解决不同层次的表达问题</text><text x=\"24\" y=\"61\" font-family=\"sans-serif\" font-size=\"13\" fill=\"#61766c\" text-anchor=\"start\">左：LLVM 的固定 IR 层次；右：MLIR 的可嵌套 Operation 结构</text><text x=\"34\" y=\"98\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#244c40\" text-anchor=\"start\">LLVM IR</text><rect x=\"24\" y=\"116\" width=\"366\" height=\"66\" rx=\"8\" fill=\"#e3ece0\" stroke=\"#b9cabc\"/><text x=\"38\" y=\"142\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">Module</text><text x=\"38\" y=\"164\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">全局符号、函数、DataLayout</text><path d=\"M206 182v22\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#compiler-objects-arrow)\"/><rect x=\"24\" y=\"206\" width=\"366\" height=\"66\" rx=\"8\" fill=\"#fffef8\" stroke=\"#b9cabc\"/><text x=\"38\" y=\"232\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">Function → BasicBlock</text><text x=\"38\" y=\"254\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">CFG 由 terminator 的 successor 连接</text><path d=\"M206 272v22\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#compiler-objects-arrow)\"/><rect x=\"24\" y=\"296\" width=\"366\" height=\"66\" rx=\"8\" fill=\"#fffef8\" stroke=\"#b9cabc\"/><text x=\"38\" y=\"322\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">Instruction : User : Value</text><text x=\"38\" y=\"344\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">operand 是 Use，结果参与 def-use</text><text x=\"438\" y=\"98\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#244c40\" text-anchor=\"start\">MLIR</text><rect x=\"428\" y=\"116\" width=\"366\" height=\"66\" rx=\"8\" fill=\"#e3ece0\" stroke=\"#b9cabc\"/><text x=\"442\" y=\"142\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">Operation（如 builtin.module）</text><text x=\"442\" y=\"164\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">name / operands / results / attributes</text><path d=\"M610 182v22\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#compiler-objects-arrow)\"/><rect x=\"428\" y=\"206\" width=\"366\" height=\"66\" rx=\"8\" fill=\"#fffef8\" stroke=\"#b9cabc\"/><text x=\"442\" y=\"232\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">Region → Block</text><text x=\"442\" y=\"254\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">block arguments + operations</text><path d=\"M610 272v22\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#compiler-objects-arrow)\"/><rect x=\"428\" y=\"296\" width=\"366\" height=\"66\" rx=\"8\" fill=\"#fffef8\" stroke=\"#b9cabc\"/><text x=\"442\" y=\"322\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">Operation（可再持有 Region）</text><text x=\"442\" y=\"344\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">OpResult 或 BlockArgument 都是 Value</text></svg><figcaption>结构图表示包含关系；def-use 是另一张连接图。一个 Value 的使用点可以出现在别的基本块。</figcaption></figure><p><code>Module</code> 持有函数和全局对象；函数包含基本块；基本块包含指令。<code>Instruction</code> 继承 <code>User</code>，而 <code>User</code> 继承 <code>Value</code>：一条有结果的指令既使用别的值，也能被其他指令使用。<code>Use</code> 记录“某个 User 的某个 operand 使用了哪个 Value”，所以 RAUW 能沿 use-list 更新使用点。</p><pre><code>%a = add i32 %x, 1\n%b = mul i32 %a, %a</code></pre><p>这里 <code>%a</code> 有两个 Use，但使用者都是 <code>%b</code>。不能把 users 的个数直接当作 operands 的使用次数。替换值前要保证类型和支配关系成立；删除指令还必须考虑副作用。<code>use_empty()</code> 只说明没有结果使用者，不能据此删除一次 store 或带副作用的 call。</p><p class=\"compiler-source\"><strong>源码路标</strong> <code>llvm/include/llvm/IR/{Value,User,Use,Instruction}.h</code> · <code>Value::replaceAllUsesWith / User::operands</code>。共享快照的版本与文件哈希见文末证据。</p>"
       },
       {
-        "id": "kernel",
-        "title": "03 / 一个能手推所有地址的kernel",
-        "html": "<pre><code>import triton\nimport triton.language as tl\n\n@triton.jit\ndef affine_kernel(X, Y, N, BLOCK: tl.constexpr):\n    i = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)\n    valid = i &lt; N\n    x = tl.load(X + i, valid, other=0.0)\n    y = x * 2.0 + 1.0\n    tl.store(Y + i, y, valid)\n\n# Launch after allocating compatible device tensors:\n# affine_kernel[(triton.cdiv(N, 128),)](x, y, N, BLOCK=128)</code></pre><p>原创kernel片段，调用行只展示接口；本轮未执行。令N=5、教学BLOCK=4：program0生成[0,1,2,3]且全有效；program1生成[4,5,6,7]，只有第一项load/store合法。other=0只定义无效load结果，不会使无效store合法；两个mask分别保护两次内存副作用。</p><p>一个program里的4或128个逻辑元素不等于4或128个独立CUDA线程。backend决定每线程持有多少元素、哪些元素分给warps、何时用向量指令。tl.program_id控制program实例，不是warp lane id；混淆二者会把并行映射解释错。</p>"
+        "id": "mlir-objects",
+        "title": "MLIR：Operation、Region、Block 与 Value",
+        "html": "<p>MLIR 把“可扩展指令”和“可嵌套结构”合在 <code>Operation</code> 里。一个 op 可以拥有多个 operands、多个 results、attributes/properties、successors 和 regions。Region 持有 Block，Block 持有 operations。SSA 值来自 op result 或 block argument；Block 本身不是一个 Value。</p><pre><code>module {\n  func.func @plus_zero(%x: i32) -&gt; i32 {\n    %zero = arith.constant 0 : i32\n    %sum = arith.addi %x, %zero : i32\n    return %sum : i32\n  }\n}</code></pre><p>沿这段程序展开：<code>builtin.module</code> 的 region 中有 <code>func.func</code>；函数自己的 region 有一个 block；<code>%x</code> 是这个 block 的参数，<code>%sum</code> 是 <code>arith.addi</code> 的结果。C++ 的具体 Op wrapper 为 <code>Operation *</code> 提供有类型的访问接口，不能把 wrapper 当作另一份独立 IR。</p><p>Dialect 定义一组 op、type 和 attribute 的语言语义。多个 dialect 可以同处一个 module；切换 dialect 并不自动完成 lowering。Region 的语义也由所属 op 和接口决定：有的使用 SSACFG，有的使用 graph 语义，不能把所有嵌套 region 都当成普通控制流图。</p><p class=\"compiler-source\"><strong>源码路标</strong> <code>mlir/include/mlir/IR/{Operation,Region,Block,Value}.h</code> · <code>Operation / OpResult / BlockArgument</code>。共享快照的版本与文件哈希见文末证据。</p>"
       },
       {
-        "id": "ttir",
-        "title": "04 / TTIR：先看SSA和内存语义",
-        "html": "<p>概念TTIR包含get_program_id、make_range、整数乘加、compare、addptr、masked load、浮点乘加与masked store。具体Op名字、属性和打印形式依版本变化；下面是语义骨架，不是某版本parser的可执行dump。</p><pre><code>pid       : i32\nrange     : tensor&lt;BLOCKxi32&gt;     = [0, ..., BLOCK-1]\nindex     : tensor&lt;BLOCKxi32&gt;     = pid * BLOCK + range\nmask      : tensor&lt;BLOCKxi1&gt;      = index &lt; splat(N)\nxptrs     : tensor&lt;BLOCKxptr&lt;f32&gt;&gt; = splat(X) + index\nx         : tensor&lt;BLOCKxf32&gt;     = masked_load(xptrs, mask, 0)\ny         : tensor&lt;BLOCKxf32&gt;     = x * 2 + 1\nmasked_store(splat(Y) + index, y, mask)</code></pre><p>SSA让mask、index和load结果的依赖明确；store没有普通数值result却有内存效应，不能因为没有use就删除。scalar向tensor广播不代表在外存分配完整广播tensor。检查优化时，要问是IR值被消除，还是实际load/store、shuffle或临时内存被消除。</p><p>TTIR适合常量传播、指针表达式和冗余broadcast等较早简化。过早丢失块结构，后面难恢复tile复用；太晚决定目标映射，前面又难估计资源。多层IR让不同问题在信息足够的阶段处理。</p>"
+        "id": "ssa-cfg",
+        "title": "SSA 与控制流：值究竟从哪条边进入",
+        "html": "<p>SSA 要求每个 SSA 值只有一个定义，定义必须在相应语义下支配使用。对普通 CFG，A 支配 B 意味着从入口到 B 的每条路径都经过 A。只在 then 块定义的值，不能直接拿到 merge 块当作每条路径都存在的值。</p><pre><code>then:\n  %a = add i32 %x, 1\n  br label %merge\nelse:\n  %b = sub i32 %x, 1\n  br label %merge\nmerge:\n  %v = phi i32 [ %a, %then ], [ %b, %else ]\n  ret i32 %v</code></pre><p>LLVM 的 <code>phi</code> 根据实际前驱选择输入；其输入 use 发生在对应前驱边。MLIR 常把同样的传递写成分支给目标 block argument 传参。做活跃性分析时，不能在 merge 块同时把所有 phi 输入当作普通 use，否则会人为扩大活跃区间。</p><p>SSA 描述的是值，不自动说明内存不别名。<code>%p</code> 和 <code>%q</code> 是不同 SSA 指针，依然可能指向同一字节。循环也不是“存在回边就完事”：自然循环、header、latch、preheader 的性质决定哪些变换有合法的插入位置。</p><p class=\"compiler-source\"><strong>源码路标</strong> <code>llvm/include/llvm/IR/Instructions.h</code> · <code>PHINode</code>。共享快照的版本与文件哈希见文末证据。</p>"
       },
       {
-        "id": "layout",
-        "title": "05 / TTGIR layout：同一个tensor由谁持有",
-        "html": "<p>layout描述逻辑坐标到线程、warp、CTA及每线程寄存器元素的映射，不仅是row-major/column-major内存stride。用4个教学lane分配2×4矩阵，真实GPU并非只有4lane：方案A让lane c持有(0,c),(1,c)，方案B让lane 2r+floor(c/2)持有(r,c)。</p><table><thead><tr><th>逻辑元素</th><th>方案A owner</th><th>方案B owner</th></tr></thead><tbody><tr><td>(0,0),(0,1)</td><td>lane0,lane1</td><td>lane0,lane0</td></tr><tr><td>(0,2),(0,3)</td><td>lane2,lane3</td><td>lane1,lane1</td></tr><tr><td>(1,0),(1,1)</td><td>lane0,lane1</td><td>lane2,lane2</td></tr><tr><td>(1,2),(1,3)</td><td>lane2,lane3</td><td>lane3,lane3</td></tr></tbody></table><figure class=\"diagram\"><svg viewBox=\"0 0 720 240\" role=\"img\" aria-label=\"布局转换改变元素所有权\"><rect width=\"720\" height=\"240\" rx=\"15\" fill=\"#eef2e7\"/><text x=\"24\" y=\"31\" fill=\"#274c3b\" font-size=\"18\" font-family=\"sans-serif\">布局转换改变元素所有权</text><rect x=\"20.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#315c4c\"/><text x=\"97.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">同一2×4数值</text><text x=\"97.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">逻辑shape不变</text><path d=\"M177.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"195.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#506c79\"/><text x=\"272.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">方案A</text><text x=\"272.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">每lane一列</text><path d=\"M352.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"370.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#796447\"/><text x=\"447.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">通信或重映射</text><text x=\"447.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">shuffle / shared等</text><path d=\"M527.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"545.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#5d5777\"/><text x=\"622.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">方案B</text><text x=\"622.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">每lane同一行两项</text><text x=\"24\" y=\"179\" fill=\"#405b49\" font-size=\"14\" font-family=\"sans-serif\">A沿行维归约时同列在同lane；B可先归约每行的相邻两列。</text><text x=\"24\" y=\"203\" fill=\"#405b49\" font-size=\"14\" font-family=\"sans-serif\">外存stride、分布式layout、MMA操作数布局要分别解释。</text></svg><figcaption>原创教学layout图；具体转换可能无指令，也可能需要通信。</figcaption></figure><p>TTGIR布局同时服务load合并、归约和dot消费者。两端要求不一致时convert_layout执行元素再分配，可能化为寄存器重命名、shuffle、共享内存往返。shape相同不能证明可以删除转换，必须证明物理所有权和消费者要求一致。</p>"
+        "id": "types-layout",
+        "title": "类型、属性与 DataLayout：语义不能靠名字猜",
+        "html": "<p>LLVM 的 <code>i32</code> 指定 32 位整数值；没有 overflow flags 的 add 按位宽取模。<code>nsw</code>／<code>nuw</code> 是可被优化器利用的语义承诺，溢出会产生 poison；并非给“更快加法”贴个标签。浮点 <code>fast</code>、<code>reassoc</code>、<code>contract</code> 也有不同授权范围。</p><p>Opaque pointer <code>ptr</code> 不携带被指向元素类型。load/store 的访问类型、GEP 的源元素类型、地址空间及 module 的 <code>DataLayout</code> 共同决定布局与访问含义。不能把“指针 64 位”推成“每次访问 8 字节”，也不能用宿主机的 sizeof 替代目标布局。</p><div class=\"table-wrap\"><table><thead><tr><th>对象</th><th>应回答的问题</th></tr></thead><tbody><tr><td>Type</td><td>这个值或访问的表示是什么？位宽、向量形状、地址空间是什么？</td></tr><tr><td>Attribute / property</td><td>这条操作的静态配置或语义承诺是什么？</td></tr><tr><td>DataLayout</td><td>目标的大小、对齐与指针布局如何解释？</td></tr><tr><td>Verifier</td><td>IR 满足结构和局部规则吗？它不证明整个优化语义等价。</td></tr></tbody></table></div><p class=\"compiler-source\"><strong>源码路标</strong> <code>llvm/include/llvm/IR/DataLayout.h</code> · <code>DataLayout / getTypeAllocSize</code>。共享快照的版本与文件哈希见文末证据。</p>"
       },
       {
-        "id": "gpu-passes",
-        "title": "06 / GPU优化pass：把loop变成有资源约束的流水",
-        "html": "<p>K循环可把下一块load提前，与当前dot重叠。num_stages影响资源与并行安排，但不是更多stage必然更快；增加stage会扩大活跃tile数，消耗shared memory和寄存器，可能降低驻留CTA数。GQA的KV共享与KDA的state读改写也会遇到同样取舍。</p><p>coalescing、layout传播、dot operand优化、pipeline和prefetch解决不同问题：有的改变线程到地址的映射，有的改变时间上的提前距离。把某个样本的对齐误当所有输入的合同，会破坏向量load合法性；mask不能证明满足目标宽度时，后端可能保守拆成标量访问。</p><p>BLOCK_K从64增至128，loop次数减少但总FLOPs通常不变；每步tile规模和潜在复用增加，临时状态也变大。比较时记录编译后寄存器/shared、spill和实际occupancy，再看吞吐。不能只数Python循环迭代。</p>"
+        "id": "adt-ods",
+        "title": "ADT、RTTI 与 TableGen：开发时常碰到的底座",
+        "html": "<div class=\"table-wrap\"><table><thead><tr><th>组件</th><th>用途</th><th>容易踩的边界</th></tr></thead><tbody><tr><td>isa / dyn_cast / cast</td><td>按 LLVM 类型体系判断和转换</td><td>cast 带类型前提；失败可预期时使用 dyn_cast 并检查</td></tr><tr><td>SmallVector / ArrayRef</td><td>少量元素优化的动态数组／只读连续视图</td><td>ArrayRef 不拥有数据，不能让它引用已销毁的临时数组</td></tr><tr><td>DenseMap / DenseSet</td><td>基于哈希的高效映射／集合</td><td>修改容器时注意迭代器失效，不依赖哈希遍历顺序输出稳定结果</td></tr><tr><td>LLVM TableGen</td><td>把寄存器、指令、匹配规则等描述生成 C++ 表和代码</td><td>它是构建期工具，运行时编译器执行生成的代码</td></tr><tr><td>MLIR ODS</td><td>生成 op wrapper、builder、部分 verifier 与接口样板</td><td>ODS 不自动证明自定义语义、重写合法性或全局约束</td></tr></tbody></table></div><p>Trait 声明 op 具有某种性质或共享实现；Interface 暴露通用算法可以调用的能力。例如内存副作用接口让 DCE、调度和其他分析理解读写行为；形状推导接口让调用者询问结果类型。不要让一个通用 Pass 通过 dialect 名字枚举所有具体 op。</p><p class=\"compiler-source\"><strong>源码路标</strong> <code>mlir/include/mlir/IR/OpBase.td</code> · <code>Op / Trait / Interface</code>。共享快照的版本与文件哈希见文末证据。</p>"
       },
       {
-        "id": "backend",
-        "title": "07 / LLIR、PTX和二进制的边界",
-        "html": "<p>固定NVIDIA backend的普通Triton stage依次是ttir、ttgir、llir、ptx、cubin；Gluon另走glir→ttgir。LLIR阶段完成目标相关lowering并交LLVM优化；PTX仍是虚拟ISA文本，cubin还需目标汇编工具处理。最终寄存器分配与硬件指令形态不能仅凭TTIR保证。</p><p>backend还处理architecture、共享内存、extern库、launch metadata和工具链错误。生成PTX、加载、运行正确、调用端参数/stream/workspace寿命正确是逐层验收的结果。每个边界应有产物身份和错误归因。</p><p>上游API持续变化。本章绑定源码提交，不承诺某pass名字在所有版本中存在；升级应先对比stage注册、options、布局接口，再移植定制pass。</p>"
+        "id": "pass-contract",
+        "title": "一个 Pass 的合同：输入、修改与后置条件",
+        "html": "<p>Pass 是一次按约定作用域执行的分析或变换单元。它可以遍历许多 op，也可以驱动一整组 patterns。设计 Pass 时，把“需要什么分析”“输入已具备什么结构”“会改变什么”“如何验证输出”写在一起。PassManager 组织执行，AnalysisManager 管缓存，三者不是同一个对象。</p><div class=\"table-wrap\"><table><thead><tr><th>问题</th><th>例：将整数 x + 0 化简为 x</th></tr></thead><tbody><tr><td>作用域</td><td>每个函数内部；不跨函数改写符号</td></tr><tr><td>合法前提</td><td>整数加法，零常量，类型一致；不能推广成任意浮点规则</td></tr><tr><td>变换</td><td>用 x 替换结果，删除无副作用的 add</td></tr><tr><td>分析失效</td><td>值相关分析可能变化；保持 CFG 的事实需按具体 API 声明</td></tr><tr><td>后置条件</td><td>SSA 使用合法，IR verifier 通过；边界输入行为不变</td></tr></tbody></table></div><p>“一个文件叫 Pass”不等于“每个 helper 是一个 Pass”。例如后端的 DAG combine、legalize、select 可以由一个顶层指令选择 Pass 内部调用。读日志时先识别执行单元，再看它的内部阶段。</p>"
       },
       {
-        "id": "fork-boundary",
-        "title": "08 / 518接入的职责对照",
-        "html": "<p>518既有路径从Triton前端进入TTIR，再通过项目Linalg/MemRef与ZeusHigh/ZeusLow编译链映射PE/VP/DT/CT。它不把上游TTGIR直接交给NVPTX；具体pass顺序见本站518章节，这里只建立职责对照。</p><table><thead><tr><th>共同问题</th><th>GPU常见落点</th><th>518落点</th></tr></thead><tbody><tr><td>块计算</td><td>TTIR</td><td>TTIR及转换接口</td></tr><tr><td>计算/存储映射</td><td>GPU布局、warps、shared</td><td>目标shape/descriptor、L2与执行单元</td></tr><tr><td>异步顺序</td><td>目标async/barrier</td><td>依赖模型、mail与完成证明</td></tr><tr><td>目标代码</td><td>LLVM/NVPTX等backend</td><td>ZeusLow及自定义CodeGen</td></tr></tbody></table><p>接入难点不是实现一个dot名字，而是给load/store/mask/reduce/dot的合法语义、布局、同步、精度和runtime ABI找到完整归属。通过parse只过第一关；应以vector add、归约、matmul、异步buffer复用逐步建立验证链，最终承载模型融合kernel。</p>"
+        "id": "llvm-pm",
+        "title": "LLVM New PM：层级、Adaptor 与 PreservedAnalyses",
+        "html": "<figure class=\"diagram compiler-diagram\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 820 400\" role=\"img\" aria-label=\"Pass 的执行与分析缓存，是两条相连的路径\"><defs><marker id=\"compiler-pm-arrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M0 0L10 5L0 10Z\" fill=\"#6a8078\"/></marker></defs><rect width=\"820\" height=\"400\" rx=\"14\" fill=\"#f1f3ec\"/><text x=\"24\" y=\"34\" font-family=\"sans-serif\" font-size=\"21\" fill=\"#244c40\" text-anchor=\"start\">Pass 的执行与分析缓存，是两条相连的路径</text><text x=\"24\" y=\"61\" font-family=\"sans-serif\" font-size=\"13\" fill=\"#61766c\" text-anchor=\"start\">实线：执行顺序；虚线：查询或失效。只有仍然成立的分析才可以继续使用。</text><a href=\"#chapter/compiler-foundations/analysis-invalidation\" aria-label=\"Pass A：查询支配树\"><rect x=\"24\" y=\"98\" width=\"230\" height=\"68\" rx=\"8\" fill=\"#fffef8\" stroke=\"#b9cabc\"/><text x=\"38\" y=\"124\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">Pass A：查询支配树</text><text x=\"38\" y=\"146\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">AM.getResult / getAnalysis</text></a><rect x=\"294\" y=\"98\" width=\"230\" height=\"68\" rx=\"8\" fill=\"#fffef8\" stroke=\"#b9cabc\"/><text x=\"308\" y=\"124\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">Pass B：改写 CFG</text><text x=\"308\" y=\"146\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">删除边、合并块、更新 IR</text><rect x=\"564\" y=\"98\" width=\"230\" height=\"68\" rx=\"8\" fill=\"#fffef8\" stroke=\"#b9cabc\"/><text x=\"578\" y=\"124\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">Pass C：再次查询</text><text x=\"578\" y=\"146\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">复用有效结果，或重新计算</text><path d=\"M254 132H292\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#compiler-pm-arrow)\"/><path d=\"M524 132H562\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" marker-end=\"url(#compiler-pm-arrow)\"/><rect x=\"154\" y=\"255\" width=\"510\" height=\"76\" rx=\"8\" fill=\"#e3ece0\" stroke=\"#b9cabc\"/><text x=\"168\" y=\"281\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#244c40\" text-anchor=\"start\">AnalysisManager：按 IR 单元缓存分析结果</text><text x=\"168\" y=\"303\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#61766c\" text-anchor=\"start\">preserve 有证明的结果；invalidate 其余受影响结果</text><path d=\"M139 168V218H220V253\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" stroke-dasharray=\"5 4\" marker-end=\"url(#compiler-pm-arrow)\"/><path d=\"M409 168V253\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" stroke-dasharray=\"5 4\" marker-end=\"url(#compiler-pm-arrow)\"/><path d=\"M680 168V218H600V253\" fill=\"none\" stroke=\"#6a8078\" stroke-width=\"2\" stroke-dasharray=\"5 4\" marker-end=\"url(#compiler-pm-arrow)\"/></svg><figcaption>这是职责图，不是某条固定优化流水线。Pass A/B/C 可以是不同的函数变换。</figcaption></figure><p>LLVM New PM 通常以 <code>Module → (CGSCC →) Function → Loop</code> 组织 IR 作用域。Module PM 不能直接把 Function Pass 当 Module Pass 调用，需要 adaptor 负责下钻和跨层分析协作。<code>PassBuilder</code> 则负责注册分析、构建标准 pipeline 或解析文本 pipeline。</p><pre><code>// C++ interface sketch; not a complete plugin.\nstruct ExamplePass : llvm::PassInfoMixin&lt;ExamplePass&gt; {\n  llvm::PreservedAnalyses run(llvm::Function &amp;F,\n                              llvm::FunctionAnalysisManager &amp;AM) {\n    auto &amp;DT = AM.getResult&lt;llvm::DominatorTreeAnalysis&gt;(F);\n    // Inspect F and DT; this sketch does not modify the IR.\n    return llvm::PreservedAnalyses::all();\n  }\n};</code></pre><p>变换 Pass 的 <code>run</code> 返回 <code>PreservedAnalyses</code>。全保留表示所有分析仍有效；返回 none 是保守失效。真正写优化时要根据修改和分析维护情况决定，不能把模板中的 all 原样复制到会改 IR 的 Pass。跨层 proxy 处理不同 AnalysisManager 的联系，也不意味着内层 Pass 可随意在外层制造昂贵的新分析。</p><p class=\"compiler-source\"><strong>源码路标</strong> <code>llvm/include/llvm/IR/{PassManager,Analysis}.h</code> · <code>PassManager::run / AnalysisManager / PreservedAnalyses</code>。共享快照的版本与文件哈希见文末证据。</p>"
+      },
+      {
+        "id": "mlir-pm",
+        "title": "MLIR PassManager：以 Operation 为锚点嵌套",
+        "html": "<p>MLIR 的基本单位是 Operation，PassManager 可以锚定 <code>builtin.module</code>，再嵌套处理 <code>func.func</code>。文本 pipeline 的括号表示嵌套作用域；逗号表示同一 manager 中的顺序。</p><pre><code>mlir-opt fold.mlir \\\n  --pass-pipeline=&#x27;builtin.module(func.func(canonicalize,cse))&#x27; \\\n  --verify-each</code></pre><p>这条命令对模块中的函数执行 canonicalize、cse。本地已运行，<code>plus_zero</code> 最终直接返回 <code>%arg0</code>。模块上执行一次 Pass 和逐个函数执行它，访问边界、并行机会和分析生命周期都不同。</p><p>OperationPass 不能查看兄弟操作的可变状态，也不能擅自改写父块里的兄弟函数。通常只能修改当前 op 嵌套的操作；当前 op 自身的 attributes 是允许修改的例外，不能因此任意改它的 operands。Pass 实例可能被克隆、并行运行，不要依赖跨函数共享的可变计数或运行顺序。</p><p>MLIR Pass 使用 <code>getAnalysis&lt;T&gt;()</code>、<code>markAnalysesPreserved&lt;T&gt;()</code> 等接口。它与 LLVM New PM 的 <code>AM.getResult</code>／<code>PreservedAnalyses</code> 概念相近，但接口和作用域合同不同。</p><p class=\"compiler-source\"><strong>源码路标</strong> <code>mlir/include/mlir/Pass/{Pass,PassManager,AnalysisManager}.h</code> · <code>OperationPass / OpPassManager::nest / PassManager::run</code>。共享快照的版本与文件哈希见文末证据。</p>"
+      },
+      {
+        "id": "analysis-invalidation",
+        "title": "Analysis：为什么结果能缓存，又为什么必须失效",
+        "html": "<p>分析是对某一份 IR 的事实描述。例如 DominatorTree 描述支配关系，LoopInfo 描述自然循环，AliasAnalysis 回答内存位置是否可能重叠，MemorySSA 组织内存定义／使用的关系。它们的构建成本不同，因此按需计算和缓存很有价值。</p><p>缓存的 key 包含 IR 单元身份，却不意味着该对象内容永远不变。假设 Pass A 查询支配树，Pass B 删除一条边，Pass C 再查询时若拿到旧树，后续代码移动可能依据错误的支配关系执行。<strong>失效是正确性的一部分。</strong>保留分析需要证明不受影响，或通过受支持的 updater 同步维护。</p><div class=\"table-wrap\"><table><thead><tr><th>修改</th><th>不能想当然保留的事实</th></tr></thead><tbody><tr><td>只替换算术表达式</td><td>值范围、ScalarEvolution 等可能改变；CFG 本身可以未变</td></tr><tr><td>新增／删除 CFG 边</td><td>支配关系、循环、可达性等可能改变</td></tr><tr><td>移动或删除 load/store</td><td>MemorySSA 及相关内存事实可能改变</td></tr><tr><td>删除 Function 或 Operation</td><td>还要处理缓存里关联该对象的条目，避免悬空身份</td></tr></tbody></table></div><p>分析之间也可能有依赖，失效需要传递。不要把“没有崩溃”当作缓存正确；最难查的是旧分析仍像一份合法数据，却对应变换之前的 IR。</p><p class=\"compiler-source\"><strong>源码路标</strong> <code>llvm/include/llvm/IR/PassManager.h</code> · <code>AnalysisManager::invalidate / Invalidator</code>。共享快照的版本与文件哈希见文末证据。</p>"
+      },
+      {
+        "id": "pipeline-order",
+        "title": "Pipeline 顺序：前置条件如何逐步成立",
+        "html": "<p>顺序来自信息和合法前提。高层结构还存在时，适合做 tiling、融合和算法变换；结构被下降成指针和循环后，优化器可能很难恢复原先的语义。反过来，只有目标布局或寄存器约束明确后，某些机器级优化才有依据。</p><p>同一层的顺序也有影响：规范化可能暴露 CSE 的相同表达式；循环标准化为 LICM 提供 preheader；lowering 引入的新冗余又可能需要清理。这不表示所有 pipeline 都应机械地在每个 Pass 前后加 canonicalize。先检查输出是否满足下一阶段的合同，再用 IR 差异和成本验证多加一次遍历是否值得。</p><div class=\"table-wrap\"><table><thead><tr><th>观察到的问题</th><th>先检查</th></tr></thead><tbody><tr><td>某 Pass 单独运行正常，串起来错</td><td>输入不变量是否满足，分析是否失效，Pass 是否依赖未声明顺序</td></tr><tr><td>结果没有变化</td><td>Pass 是否锚在正确层级，模式是否命中，合法前提是否足够</td></tr><tr><td>编译时间增加</td><td>重复分析、固定点迭代、全模块反复扫描、过早丢失结构</td></tr><tr><td>机器代码变慢</td><td>成本模型、后续合法化、寄存器压力和实际测量；IR 变短不等于更快</td></tr></tbody></table></div>"
+      },
+      {
+        "id": "rewriter",
+        "title": "Rewrite：Pattern 负责规则，Driver 负责执行",
+        "html": "<p>一个 rewrite pattern 回答“这个根 op 满足什么条件，可以被什么等价表示替换”。Driver 决定尝试哪些 op、怎样维护 worklist、何时重试。PatternRewriter 统一记录修改，帮助 driver 正确跟踪 IR；不能绕开它直接随意 erase 正在遍历的操作。</p><pre><code>// Teaching rule, not a complete C++ implementation.\nmatch:  %r = arith.addi %x, %zero : i32\ncheck:  %zero is the integer constant 0\nrewrite: replace all uses of %r with %x; erase the add</code></pre><p>匹配失败之前不要留下半套改写。对于多个结果、region、symbol 或类型变化，还要维护所有使用点和约束。Pattern 的 benefit 是规则选择的优先级信息，不等于精确的硬件运行时间。Greedy driver 通常反复应用到固定点或限制条件；两条规则互相改回去会造成循环。</p><p><code>fold</code> 用于受限的局部折叠，例如返回已有 Value 或常量 Attribute；canonicalization 使用 fold 和 patterns 化简表达式。它是尽力而为的规范化，不能让程序正确性依赖“canonicalizer 一定会消掉这条非法 op”。</p><p class=\"compiler-source\"><strong>源码路标</strong> <code>mlir/include/mlir/IR/PatternMatch.h</code> · <code>PatternRewriter / RewritePattern</code>。共享快照的版本与文件哈希见文末证据。</p>"
+      },
+      {
+        "id": "conversion",
+        "title": "Dialect Conversion：把合法目标写成可检查的条件",
+        "html": "<p>普通重写关心局部等价；Dialect Conversion 还关心最终 IR 是否属于目标允许的集合。<code>ConversionTarget</code> 指定 legal／illegal／dynamic legal，conversion patterns 负责替换，<code>TypeConverter</code> 在需要时映射类型。函数签名、block arguments、调用点、返回值与所有 use 必须一致迁移。</p><div class=\"table-wrap\"><table><thead><tr><th>转换方式</th><th>成功意味着什么</th></tr></thead><tbody><tr><td>Full conversion</td><td>所有最终操作都满足目标合法性规则</td></tr><tr><td>Partial conversion</td><td>显式非法的操作必须处理；原本未被判为非法的未知操作可以保留</td></tr><tr><td>Analysis conversion</td><td>分析可合法化的操作，不实际执行这套 IR 重写</td></tr></tbody></table></div><p>例如把 tensor 计算下降成 memref 操作，既要改变算子，也要决定存储、别名和生命周期；把 <code>index</code> 变成整数还要对齐目标位宽。Materialization 可桥接类型转换边界，但不能作为长期掩盖类型不一致的万能 cast。转换结束后要检查残留 bridge 是否由后续阶段处理。</p><p>“所有 op 都叫 llvm.*”仍不代表它已经是 LLVM 的 C++ IR。MLIR LLVM dialect 是 MLIR Operation；后续 translation 才构造 LLVM <code>Module / Function / Instruction</code>。这条边界是理解 MLIR 与 LLVM 后端衔接的关键。</p><p class=\"compiler-source\"><strong>源码路标</strong> <code>mlir/include/mlir/Transforms/DialectConversion.h</code> · <code>ConversionTarget / TypeConverter / applyFullConversion</code>。共享快照的版本与文件哈希见文末证据。</p>"
+      },
+      {
+        "id": "memory-correctness",
+        "title": "优化正确性：把 SSA、内存与数值合同放在一起",
+        "html": "<pre><code>%a = load i32, ptr %p\nstore i32 7, ptr %q\n%b = load i32, ptr %p</code></pre><p>能否用 <code>%a</code> 替换 <code>%b</code>？如果 p 与 q 可能指向同一位置，答案是否。AA 的回答用于证明两次访问是否互相影响；MemorySSA 提供内存依赖的组织方式，仍需要 AA 等信息识别可能的 clobber。volatile、atomic、调用副作用和异常行为还会增加约束。</p><p>浮点里，<code>(a+b)+c</code> 与 <code>a+(b+c)</code> 通常不能任意交换；融合成 FMA 也改变舍入次数。整数里的 signed overflow、poison、undef 和 freeze 有各自语义。写优化时先明确输入语义，再证明变换在允许输入上成立，不能靠几组随机数一致代替证明。</p><p>一套合理验证是：结构 verifier、目标化单元测试、反例边界和必要的差分执行。对内存优化专门覆盖别名与不别名；对循环覆盖零次、一次和回边；对数值覆盖极值、NaN/Inf 或 overflow 约定。</p><p class=\"compiler-source\"><strong>源码路标</strong> <code>llvm/lib/Analysis/MemorySSA.cpp</code> · <code>MemorySSA / MemorySSAWalker</code>。共享快照的版本与文件哈希见文末证据。</p>"
+      },
+      {
+        "id": "middle-end",
+        "title": "常见中端分析与 Pass，放回它们解决的问题",
+        "html": "<div class=\"table-wrap\"><table><thead><tr><th>分析／变换</th><th>解决的问题</th><th>关键前提</th></tr></thead><tbody><tr><td>DominatorTree / LoopInfo / ScalarEvolution</td><td>哪里必经，哪些块构成循环，归纳变量如何变化</td><td>CFG 与循环形态及分析维护</td></tr><tr><td>InstCombine / SimplifyCFG</td><td>局部表达式和控制流化简</td><td>指令语义、poison 与副作用</td></tr><tr><td>CSE / GVN</td><td>哪些计算可复用</td><td>等价性、支配关系和内存 clobber</td></tr><tr><td>LICM</td><td>把循环不变计算移到合适位置</td><td>不变不等于可安全提前执行；考虑零次循环与副作用</td></tr><tr><td>LoopVectorize / SLP</td><td>把标量工作合并成向量</td><td>依赖、对齐、尾部、目标成本、数值规则</td></tr><tr><td>DCE / ADCE</td><td>移除不影响可观察行为的计算</td><td>无结果使用不等于无副作用</td></tr></tbody></table></div><p>例如一个 load 的地址不随循环变化，并不保证可以搬到循环外：循环可能不执行，地址可能无效，循环内也可能写到同一位置。面试时把“依赖分析→合法性→收益→分析更新”讲清，比单独背 Pass 名字更有用。</p>"
+      },
+      {
+        "id": "triton-bridge",
+        "title": "Triton 放在哪一层：从前端来到这个工具箱",
+        "html": "<p>Triton kernel 的 Python 表达经过 specialization 和前端构造出 MLIR IR。不同 backend 决定随后哪些 dialect、layout 和 target lowering 会出现。TTIR、TTGIR 与 LLVM IR 的名字描述某条编译链里的表示层级，并不是所有后端都必须经过的固定清单。</p><p>在高层做布局、块划分或算子融合，仍然依赖 Operation、Pass、analysis 与 pattern 这些基础组件。到 LLVM IR 之后才进入下一篇的 CodeGen 主线。已有 518 的真实链路、版本和约束继续放在 <a href=\"#chapter/compiler-triton-pipeline/levels\">518 编译链章节</a>；不要用通用 LLVM 流程覆盖项目实际实现。</p><p>如果定位“某个 Triton 优化没生效”，先固定 specialization 参数、目标配置、compiler revision，保存每层 IR；找首次产生问题的层，而不是直接在最终汇编中猜前端做了什么。</p>"
+      },
+      {
+        "id": "foundation-lab",
+        "title": "动手：看一次化简发生，再看验证边界",
+        "html": "<p>使用前文的 <code>fold.mlir</code>，以及下面的 LLVM IR。它们都表达整数 x + 0；两种工具使用各自的 pipeline 语法。仓库 <code>practice/llvm/</code> 保存完整输入。</p><pre><code>define i32 @plus_zero(i32 %x) {\nentry:\n  %sum = add i32 %x, 0\n  ret i32 %sum\n}</code></pre><pre><code>opt -S -passes=&#x27;function(instcombine),verify&#x27; \\\n  -verify-each -debug-pass-manager fold.ll -o folded.ll\n\nmlir-opt fold.mlir \\\n  --pass-pipeline=&#x27;builtin.module(func.func(canonicalize,cse))&#x27; \\\n  --verify-each -o folded.mlir</code></pre><p>本机运行结果：LLVM 的函数体只剩 <code>ret i32 %x</code>；MLIR 只剩 <code>return %arg0 : i32</code>。LLVM 的 <code>-debug-pass-manager</code> 打印 New PM 执行与分析活动；MLIR 可以用 <code>--mlir-print-ir-after-all</code> 查看变化。这里证明工具链完成了这个例子的化简和 verifier 检查，没有运行生成代码或测量性能。</p><div class=\"callout\"><p>进一步练习：把整数 add 换成浮点，把零换成变量，把 load/store 别名反例加入程序。每次先写下合法条件，再观察结果。<code>--verify-each</code> 能抓结构错误，不能独立证明变换语义正确。</p></div>"
+      },
+      {
+        "id": "foundation-summary",
+        "title": "带着这六个问题进入后端",
+        "html": "<div class=\"table-wrap\"><table><thead><tr><th>读到一个新组件时</th><th>你应该能回答</th></tr></thead><tbody><tr><td>IR</td><td>它拥有谁、使用谁，控制流与数据流分别在哪里？</td></tr><tr><td>Pass</td><td>运行在哪种 IR 单元上，允许修改多大范围？</td></tr><tr><td>PassManager</td><td>如何排序、嵌套和插入验证？</td></tr><tr><td>Analysis</td><td>依赖什么事实，何时缓存、维护和失效？</td></tr><tr><td>Rewrite / Conversion</td><td>局部替换为什么正确，最终合法集合是什么？</td></tr><tr><td>后端边界</td><td>表示里还有哪些抽象，接下来由谁消除？</td></tr></tbody></table></div><p>下一步从 <a href=\"#chapter/llvm-backend/backend-map\">后端总览图</a> 出发，跟踪一个 <code>5*x+y</code> 的函数。每经过一层，都检查表示发生了什么变化，而不是只记住一个 Pass 名字。</p>"
+      }
+    ],
+    "readingLabel": "先把组件关系讲清，再进入后端下降",
+    "readingStageLabel": "组件层次",
+    "portableReading": {
+      "file": "compiler-foundations.html",
+      "download": "llvm-mlir-foundations.html",
+      "label": "保存完整基础组件 HTML ↓"
+    },
+    "readingStages": [
+      {
+        "id": "foundation-stage-ir",
+        "title": "IR 与对象",
+        "summary": "先分清包含关系、def-use 与程序语义。",
+        "sections": [
+          "orientation",
+          "llvm-objects",
+          "mlir-objects",
+          "ssa-cfg",
+          "types-layout",
+          "adt-ods"
+        ]
+      },
+      {
+        "id": "foundation-stage-pm",
+        "title": "Pass 与管理器",
+        "summary": "把作用域、执行顺序和分析缓存放在一起理解。",
+        "sections": [
+          "pass-contract",
+          "llvm-pm",
+          "mlir-pm",
+          "analysis-invalidation",
+          "pipeline-order"
+        ]
+      },
+      {
+        "id": "foundation-stage-rewrite",
+        "title": "改写与下降",
+        "summary": "理解局部规则与目标合法集合。",
+        "sections": [
+          "rewriter",
+          "conversion"
+        ]
+      },
+      {
+        "id": "foundation-stage-proof",
+        "title": "分析与正确性",
+        "summary": "把优化的前提和中端能力接起来。",
+        "sections": [
+          "memory-correctness",
+          "middle-end"
+        ]
+      },
+      {
+        "id": "foundation-stage-practice",
+        "title": "串起一条编译链",
+        "summary": "从 Triton 的入口来到 LLVM，再实际观察一次化简。",
+        "sections": [
+          "triton-bridge",
+          "foundation-lab",
+          "foundation-summary"
+        ]
       }
     ],
     "questions": [
       {
-        "id": "program",
-        "q": "tl.program_id与threadIdx有什么区别？",
-        "a": "前者索引Triton program实例，内部块元素由后端分布到线程/warp。元素不固定对应一线程，映射受layout和target影响。",
-        "followup": "一个线程为何可能持有多个元素？"
+        "id": "foundations-q1",
+        "q": "Pass、PassManager、AnalysisManager 分别管什么？",
+        "a": "Pass 执行一次分析或变换；PassManager 安排顺序、作用域与执行；AnalysisManager 按 IR 单元缓存和失效分析结果。",
+        "followup": "为什么修改 CFG 后仍返回全部分析保留可能导致错误代码？"
       },
       {
-        "id": "specialize",
-        "q": "相同源码为什么产生多个kernel？",
-        "a": "constexpr、dtype、target、options及JIT特化策略不同都会形成变体。需要冻结这些信息，不能只以Python文件hash标识产物。",
-        "followup": "怎样限制缓存变体数量？"
+        "id": "foundations-q2",
+        "q": "LLVM FunctionPass 与 MLIR OperationPass 的作用域一样吗？",
+        "a": "LLVM New PM 使用 Module、CGSCC、Function、Loop 等 IR 单元和 adaptor；MLIR 以 Operation 为锚点嵌套，访问与并发限制由 OperationPass 合同规定。",
+        "followup": "MLIR 函数 Pass 为什么不能顺手改兄弟函数？"
       },
       {
-        "id": "mask",
-        "q": "load的other=0能否替代store mask？",
-        "a": "不能。other只决定未加载lane的数值，store仍需独立保护无效地址。",
-        "followup": "若后续有除法，填0还可能产生什么？"
+        "id": "foundations-q3",
+        "q": "两个不同 SSA 指针能证明不别名吗？",
+        "a": "不能。SSA 只区分定义，指针运行时值仍可能指向相同内存，需要 AA 和更具体的访问语义。",
+        "followup": "两次 load 之间有 store 时，替换第二次 load 需要什么证据？"
       },
       {
-        "id": "layout",
-        "q": "convert_layout为什么可能昂贵？",
-        "a": "它可能改变跨线程的元素所有权，需要shuffle或shared往返和同步。shape不变不代表物理分布不变。",
-        "followup": "怎样证明转换可被消费者吸收？"
+        "id": "foundations-q4",
+        "q": "canonicalize 成功是否代表全量 lowering 完成？",
+        "a": "不代表。canonicalization 尽力应用 fold 和重写规则；转换目标合法性由 Dialect Conversion 显式定义并检查。",
+        "followup": "partial conversion 和 full conversion 对未知 op 的要求有何不同？"
       },
       {
-        "id": "fork",
-        "q": "518后端必须经过TTGIR吗？",
-        "a": "不是。可以从TTIR进入自有IR，但必须完整接管语义、映射、同步、代码生成和runtime合同。",
-        "followup": "不使用GPU布局后有哪些职责要补齐？"
-      }
-    ],
-    "sources": [
-      {
-        "id": "front",
-        "label": "上游ASTSource与编译编排",
-        "url": "https://github.com/triton-lang/triton/blob/1d503a35275625d2c236605a42855bfd81267047/python/triton/compiler/compiler.py",
-        "note": "上游Triton固定1d503a352756；不是本机518 fork；2026-10-24读取。",
-        "kind": "源码"
+        "id": "foundations-q5",
+        "q": "MLIR LLVM dialect 是 LLVM IR 吗？",
+        "a": "它仍是 MLIR Operation，使用 MLIR 的对象与类型系统；translation 才构造 LLVM 的 Module、Function 和 Instruction。",
+        "followup": "进入机器后端之前还需固定哪些目标信息？"
       },
       {
-        "id": "ast",
-        "label": "上游AST frontend",
-        "url": "https://github.com/triton-lang/triton/blob/1d503a35275625d2c236605a42855bfd81267047/python/triton/compiler/code_generator.py",
-        "note": "上游Triton固定1d503a352756；不是本机518 fork；2026-10-24读取。",
-        "kind": "源码"
-      },
-      {
-        "id": "nv",
-        "label": "上游NVIDIA backend",
-        "url": "https://github.com/triton-lang/triton/blob/1d503a35275625d2c236605a42855bfd81267047/third_party/nvidia/backend/compiler.py",
-        "note": "上游Triton固定1d503a352756；不是本机518 fork；2026-10-24读取。",
-        "kind": "源码"
-      },
-      {
-        "id": "add",
-        "label": "Triton官方编程模型",
-        "url": "https://triton-lang.org/main/getting-started/tutorials/01-vector-add.html",
-        "note": "访问2026-10-24；本章代码原创。",
-        "kind": "官方文档"
-      },
-      {
-        "id": "dialects",
-        "label": "Triton dialect索引",
-        "url": "https://triton-lang.org/main/dialects/dialects.html",
-        "note": "上游动态文档；本机fork不自动拥有全部dialect。",
-        "kind": "官方文档"
+        "id": "foundations-q6",
+        "q": "Verifier 通过能证明优化正确吗？",
+        "a": "只能证明它覆盖的结构与规则，不能证明变换前后的完整语义等价，需要合法性论证、边界反例和针对性执行验证。",
+        "followup": "为什么无结果使用的 store 不能直接 DCE？"
       }
     ],
     "takeaways": [
-      "program、元素和线程分层理解。",
-      "专门化与target参与产物身份。",
-      "layout是所有权，不只是stride。",
-      "518从TTIR后的职责需独立验证。"
-    ],
-    "part": "Triton · MLIR · LLVM",
-    "minutes": 45,
-    "level": "深入",
-    "tags": [
-      "frontend",
-      "TTIR",
-      "TTGIR",
-      "backend"
-    ]
-  },
-  {
-    "id": "mlir-object-model",
-    "order": 51,
-    "title": "MLIR 对象模型：Op、Region、Dialect 与接口",
-    "subtitle": "Operation · Region · ODS · Interface",
-    "lead": "把MLIR当作有类型、有结构、有可查询语义的对象系统。用分支函数和原创小dialect设计说明：什么由框架保证，什么必须由目标作者定义。",
-    "sections": [
-      {
-        "id": "tree",
-        "title": "01 / 结构树与use-def图叠在一起",
-        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 720 240\" role=\"img\" aria-label=\"MLIR的结构包含与数值依赖\"><rect width=\"720\" height=\"240\" rx=\"15\" fill=\"#eef2e7\"/><text x=\"24\" y=\"31\" fill=\"#274c3b\" font-size=\"18\" font-family=\"sans-serif\">MLIR的结构包含与数值依赖</text><rect x=\"20.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#315c4c\"/><text x=\"97.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">Operation</text><text x=\"97.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">名称 / operand / result</text><path d=\"M177.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"195.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#506c79\"/><text x=\"272.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">Region</text><text x=\"272.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">包含block</text><path d=\"M352.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"370.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#796447\"/><text x=\"447.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">Block</text><text x=\"447.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">参数 / operations</text><path d=\"M527.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"545.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#5d5777\"/><text x=\"622.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">Value</text><text x=\"622.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">结果或块参数</text><text x=\"24\" y=\"179\" fill=\"#405b49\" font-size=\"14\" font-family=\"sans-serif\">结构树回答“在哪里”；use-def图回答“依赖谁”。</text><text x=\"24\" y=\"203\" fill=\"#405b49\" font-size=\"14\" font-family=\"sans-serif\">Operation还可有successor、attribute/properties和location。</text></svg><figcaption>原创对象关系图；Region与Block可递归嵌入Operation，不是单向编译流水。</figcaption></figure><p>module和func.func都是Operation；函数体是Region，入口和分支目标是Block。arith.addi有两个operand、一个result，通常没有Region。scf.for自身也是Operation，内部包Region。把所有op都当平铺指令会误解循环与结构化控制流。</p><p>Value要么是Operation结果，要么是BlockArgument，不是可任意重新赋值的变量。%0文本名字可以重编号，不是对象身份。operand维护对Value的使用；替换结果需更新uses，移动Operation还要保持dominance与Region作用域。</p>"
-      },
-      {
-        "id": "regions",
-        "title": "02 / Region不自动等于CFG",
-        "html": "<p>SSACFG region由terminator指定successor，块参数由前驱传入，支配关系约束use。graph region未必以同样的块内顺序表达控制流；不能对所有Region机械使用“前一条指令先执行”的推理，应查询region kind和接口。</p><pre><code>module {\n  func.func @choose(%c: i1, %a: i32, %b: i32) -&gt; i32 {\n    cf.cond_br %c, ^left, ^right\n  ^left:\n    cf.br ^join(%a : i32)\n  ^right:\n    cf.br ^join(%b : i32)\n  ^join(%v: i32):\n    %one = arith.constant 1 : i32\n    %r = arith.addi %v, %one : i32\n    return %r : i32\n  }\n}</code></pre><p>这是标准dialect语法的原创IR，本轮仅手推未跑parser。true时得到a+1，false时b+1，%v表达合流。%a/%b支配分支，可直接引用；其他嵌套Region能否捕获外部值，受IsolatedFromAbove等约束。把函数内值移到module外部通常破坏作用域。</p>"
-      },
-      {
-        "id": "types-attrs",
-        "title": "03 / Type、Attribute、Property各管什么",
-        "html": "<p>Type描述Value，例如i32、tensor&lt;16x32xf16&gt;、带memory space和layout的memref。Attribute是编译时结构化数据，不是运行期SSA值；tile、枚举、符号引用常用它表达。新版本还有Operation properties承载内在参数，不能假设所有语义字段都在普通attribute字典里。</p><table><thead><tr><th>信息</th><th>表达</th><th>错误风险</th></tr></thead><tbody><tr><td>运行期N</td><td>SSA operand</td><td>写成attribute冻结动态值</td></tr><tr><td>固定axis</td><td>受约束attribute/property</td><td>无类型字符串漏检非法轴</td></tr><tr><td>dtype/地址空间</td><td>type或目标类型字段</td><td>从变量名字猜测</td></tr><tr><td>源码位置</td><td>Location</td><td>丢失后无法定位</td></tr><tr><td>函数引用</td><td>SymbolRef等</td><td>与SSA Value混淆</td></tr></tbody></table><p>Context负责type/attribute等对象uniquing与dialect加载，Operation仍是可变对象。跨context对象不能随意混用。序列化、插件和并发代码需遵循框架生命周期，dump文本只是对象的一种表示。</p>"
-      },
-      {
-        "id": "ods",
-        "title": "04 / ODS生成表示与检查，语义仍由作者负责",
-        "html": "<p>原创教学edu.add_i32接受两个i32并产生i32，按模2³²相加且无副作用。以下片段假设Edu_Dialect和相关接口已定义；省略自定义assemblyFormat，使用generic打印。它是设计片段，不是完整可构建项目。</p><pre><code>def Edu_AddI32Op : Op&lt;Edu_Dialect, &quot;add_i32&quot;, [Pure]&gt; {\n  let arguments = (ins I32:$lhs, I32:$rhs);\n  let results = (outs I32:$result);\n  let hasFolder = 1;\n}</code></pre><p>TableGen可生成C++访问器、builder、parser/printer及约束验证等样板；hasFolder要求实现折叠hook。它不会凭名称自动实现算术或目标指令。矩阵op的内维、广播、layout、dtype组合等跨字段约束通常仍需自定义verifier或接口。</p><p>添加.td后还要生成并编译.inc文件，在dialect initialize注册Operation，在工具中注册/加载dialect。只有源码文件而未接入生成/registry，会出现“文档里有op，运行时却不知道op”。C++类名与文本namespace也不可混淆。</p>"
-      },
-      {
-        "id": "interfaces",
-        "title": "05 / 通用pass如何理解陌生op",
-        "html": "<p>Trait描述结构或静态性质，Interface提供可调用的语义查询，如内存效果、类型推断、循环、分支或函数行为。通用pass通过接口工作，避免为每个目标op写字符串特判；接口答案必须忠实于真实语义。</p><p>dma_issue可能没有普通result，但发命令并改变内存或队列状态。若错误标成无副作用，就可能被DCE删除；完全不提供effect信息又会迫使优化保守。异步读取也不能因为发射op已结束就被解释为无外部影响。</p><p>NoMemoryEffect与可无条件推测执行是两件事：某个没有内存写入的操作仍可能受非法输入、异常或未定义行为约束。Pure等组合trait的承诺强于“没有store”。目标作者应清楚副作用、投机安全、alias与完成语义，不能为优化生效随意加trait。</p>"
-      },
-      {
-        "id": "registration",
-        "title": "06 / 注册、加载与链接分别解决什么",
-        "html": "<p>registry告诉Context有哪些dialect可加载；load实例化dialect并安装operation/type/attribute定义；工具或插件还必须链接到实现。测试工具注册不代表生产driver注册，只在pass里临时加载也可能遇到并发初始化边界。</p><pre><code>// Conceptual setup; headers and tool entry point omitted.\nDialectRegistry registry;\nregistry.insert&lt;func::FuncDialect, arith::ArithDialect,\n                cf::ControlFlowDialect, edu::EduDialect&gt;();\nMLIRContext context(registry);\ncontext.loadDialect&lt;edu::EduDialect&gt;();</code></pre><p>创建新dialect op的pass应以getDependentDialects声明依赖。allow-unregistered-dialect仅帮助某些文本实验，不会为未知op补上verifier、effect或lowering，不能证明生产编译支持它。</p><p>未知op错误依次查namespace、ODS生成、addOperations、driver registry、插件加载和pass执行。不要把parser报错直接归因于优化逻辑。</p>"
-      },
-      {
-        "id": "verify",
-        "title": "07 / 结构合法为什么仍可能算错",
-        "html": "<p>框架检查operand数量、类型、终结与dominance；自定义verifier检查额外合同。inferReturnTypes帮助推导结果，不替代验证，更不运行设备数学。KDA方阵转置错误可能shape完全合法，错误属于轴语义。</p><p>分层构造反例：删join参数检验branch合同；i32改f32检验ODS；分支内定义在另一分支使用检验dominance；异步op缺effect检验错误DCE；最后用真实输入验证数学与硬件。各类测试支持不同保证。</p><p>设计dialect应先列语义与不变量，再决定type/attribute/region，然后提供接口与lowering。把模型细节全塞字符串attribute，会让通用分析无法理解，并把业务特例扩散到每个pass。</p>"
-      }
-    ],
-    "questions": [
-      {
-        "id": "value",
-        "q": "OpResult与BlockArgument有何区别？",
-        "a": "两者都是SSA Value；前者由Operation定义，后者在块入口定义，其来源由前驱或容器语义决定。",
-        "followup": "合流块参数如何替代phi？"
-      },
-      {
-        "id": "region",
-        "q": "为何所有Region不能共用同样CFG假设？",
-        "a": "Region是结构容器，具体控制流与dominance语义由region kind和所属op决定；通用分析需尊重接口及隔离约束。",
-        "followup": "在graph region按文本顺序移动op有何风险？"
-      },
-      {
-        "id": "ods",
-        "q": "ODS生成类后机器就能执行op吗？",
-        "a": "不能。还需语义、注册、lowering、codegen及runtime路径。parser成功仅是表示层可用。",
-        "followup": "新matmul op有哪些跨组件合同？"
-      },
-      {
-        "id": "pure",
-        "q": "没有result的op可被DCE吗？",
-        "a": "不能仅据此决定。DMA、store、队列操作可能无result但有副作用；错误Pure会删除真实操作。",
-        "followup": "NoMemoryEffect是否等于可投机执行？"
-      },
-      {
-        "id": "verify",
-        "q": "verifier通过证明什么？",
-        "a": "仅证明已编码结构和语义不变量在当前IR上成立，不涵盖未编码数学、数值误差、异步时序或性能。",
-        "followup": "构造shape合法但轴语义错误的例子。"
-      }
+      "区分 IR 的包含关系、控制流和 def-use，能解释 SSA 与内存别名的边界。",
+      "能从作用域、顺序和分析失效说明一个 Pass 的正确性。",
+      "分清 LLVM New PM 与 MLIR PassManager 的接口和执行约束。",
+      "能说明 Rewrite、fold、canonicalization 与 Dialect Conversion 的职责。",
+      "通过一次实际化简进入 LLVM 后端，继续追踪表示与约束。"
     ],
     "sources": [
       {
-        "id": "langref",
-        "label": "MLIR语言与结构",
-        "url": "https://github.com/llvm/llvm-project/blob/5916210dbe10049c264ecf0a0ad685d101c392d9/mlir/docs/LangRef.md",
-        "note": "上游固定5916210dbe10；在线文档https://mlir.llvm.org/docs/LangRef/于2026-10-24核对；示例为教学推演。",
+        "id": "foundation-snapshot",
+        "label": "共享 LLVM / MLIR 源码快照与运行记录",
+        "url": "./evidence/compiler-guides-sources.md#snapshot",
+        "note": "22.0.0git；2026-10-26；关键文件 SHA256、源码符号和复现命令。",
+        "kind": "源码与本机运行"
+      },
+      {
+        "id": "foundation-pm",
+        "label": "LLVM New Pass Manager",
+        "url": "https://llvm.org/docs/NewPassManager.html",
+        "note": "接口说明；精确本地实现以共享快照为准。",
         "kind": "官方文档"
       },
       {
-        "id": "ods",
-        "label": "ODS",
-        "url": "https://github.com/llvm/llvm-project/blob/5916210dbe10049c264ecf0a0ad685d101c392d9/mlir/docs/DefiningDialects/Operations.md",
-        "note": "上游固定5916210dbe10；在线文档https://mlir.llvm.org/docs/DefiningDialects/Operations/于2026-10-24核对；示例为教学推演。",
-        "kind": "官方文档"
-      },
-      {
-        "id": "interfaces",
-        "label": "Interfaces",
-        "url": "https://github.com/llvm/llvm-project/blob/5916210dbe10049c264ecf0a0ad685d101c392d9/mlir/docs/Interfaces.md",
-        "note": "上游固定5916210dbe10；在线文档https://mlir.llvm.org/docs/Interfaces/于2026-10-24核对；示例为教学推演。",
-        "kind": "官方文档"
-      },
-      {
-        "id": "dialects",
-        "label": "定义Dialect",
-        "url": "https://github.com/llvm/llvm-project/blob/5916210dbe10049c264ecf0a0ad685d101c392d9/mlir/docs/DefiningDialects/_index.md",
-        "note": "上游固定5916210dbe10；在线文档https://mlir.llvm.org/docs/DefiningDialects/于2026-10-24核对；示例为教学推演。",
-        "kind": "官方文档"
-      }
-    ],
-    "takeaways": [
-      "同时理解结构树与use-def图。",
-      "ODS不自动实现机器语义。",
-      "接口承诺错误会破坏正确性。",
-      "注册、加载、链接和lowering都要闭环。"
-    ],
-    "part": "Triton · MLIR · LLVM",
-    "minutes": 45,
-    "level": "深入",
-    "tags": [
-      "Operation",
-      "Region",
-      "ODS",
-      "Interface"
-    ]
-  },
-  {
-    "id": "pass-analysis",
-    "order": 52,
-    "title": "PassManager 与分析：顺序、作用域和失效的合同",
-    "subtitle": "pipeline · analysis · invalidation · nesting",
-    "lead": "一个pass的正确性不仅在runOnOperation里面。它在哪里运行、允许看谁、依赖哪些分析、改完后哪些缓存仍然有效，都决定整条pipeline是否可靠。用一个小函数贯穿这些边界。",
-    "sections": [
-      {
-        "id": "anchor",
-        "title": "01 / pipeline是带作用域的树，不是字符串列表",
-        "html": "<p>MLIR pass锚定某类Operation：module级pass可处理符号与跨函数事务，func.func级pass处理函数内部，其他pass也可以锚定特定容器。OpPassManager的嵌套结构决定pass被应用在哪些实例上。把function pass简单塞在module层，不等于自动按你想的顺序遍历每个函数。</p><figure class=\"diagram\"><svg viewBox=\"0 0 720 240\" role=\"img\" aria-label=\"pipeline树决定谁能改什么\"><rect width=\"720\" height=\"240\" rx=\"15\" fill=\"#eef2e7\"/><text x=\"24\" y=\"31\" fill=\"#274c3b\" font-size=\"18\" font-family=\"sans-serif\">pipeline树决定谁能改什么</text><rect x=\"20.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#315c4c\"/><text x=\"97.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">builtin.module</text><text x=\"97.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">符号 / 全局决策</text><path d=\"M177.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"195.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#506c79\"/><text x=\"272.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">func.func嵌套PM</text><text x=\"272.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">每个函数的独立任务</text><path d=\"M352.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"370.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#796447\"/><text x=\"447.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">canonicalize → cse</text><text x=\"447.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">函数内变换</text><path d=\"M527.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"545.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#5d5777\"/><text x=\"622.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">回到module</text><text x=\"622.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">后续跨函数阶段</text><text x=\"24\" y=\"179\" fill=\"#405b49\" font-size=\"14\" font-family=\"sans-serif\">相同名字的pass，嵌套锚点不同可能覆盖不同IR。</text><text x=\"24\" y=\"203\" fill=\"#405b49\" font-size=\"14\" font-family=\"sans-serif\">保存完整pipeline、options和target，才能复现实验。</text></svg><figcaption>原创示意。多个函数可并行运行相同嵌套pipeline，顺序不能靠共享可变状态假定。</figcaption></figure><pre><code>mlir-opt example.mlir \\\n  --pass-pipeline=&quot;builtin.module(func.func(canonicalize,cse))&quot;</code></pre><p>命令是标准工具的示例写法，需安装包含对应dialect/pass的兼容mlir-opt；本轮未执行。作用是对每个func.func运行canonicalize后cse，不应把它解释为硬件映射或完整编译。</p>"
-      },
-      {
-        "id": "scope",
-        "title": "02 / 并行执行限制：为什么函数pass不能顺手改兄弟函数",
-        "html": "<p>固定上游文档要求OperationPass不检查当前op的兄弟或兄弟内部，因为其他线程可能同时修改；允许检查祖先，却不能随意修改祖先或兄弟。当前op本体的可改范围也有限，文档允许修改其attributes，不能据此任意替换当前op的operands或结构；通常变换对象是其内部嵌套IR。</p><p>例如一个func pass发现全局helper缺失，直接往module插入helper函数，会把线程安全、symbol唯一性和重复创建交给运气。应在module级阶段统一处理，或使用有明确合同的机制。相似地，统计不能把static计数器当跨函数正确顺序，因为pass实例可能被复制，函数运行顺序未定义。</p><p>持久缓存若以Operation指针为key，op被删除后地址可能复用。pass不能跨runOnOperation保留依赖旧IR的可变状态。每次调用初始化局部状态；需要跨作用域的信息则通过受管理分析和合法接口交互。</p>"
-      },
-      {
-        "id": "analysis",
-        "title": "03 / Analysis是按需计算的事实，不是另一种偷偷改IR的pass",
-        "html": "<p>Dominance回答哪个定义支配哪个使用；alias回答两段内存是否可能重叠；liveness回答值是否可能被后续使用；loop信息描述回边与嵌套。它们通常由AnalysisManager按需构造并缓存，供多个变换共享。分析要以当前IR为输入，不应把一次测量profile或硬件时延假设藏成无需版本的事实。</p><p>考虑choose函数：两个分支都到join。若把true分支改成直接return，CFG边变了，dominator关系必须重算或正确增量维护；如果只改arith.constant的数值，CFG结构可能未变，但常量传播结果已失效。不同analysis依赖的信息粒度不同，不能用一个“IR改了多少行”的经验决定保留。</p><table><thead><tr><th>改动</th><th>可能保持</th><th>必须重审</th></tr></thead><tbody><tr><td>只改诊断Location</td><td>CFG/dominance通常不变</td><td>以Location为key的自定义结果</td></tr><tr><td>换常量值</td><td>控制图若未改可不变</td><td>范围、常量与循环次数分析</td></tr><tr><td>插入load/store</td><td>CFG可能不变</td><td>memory effects/alias相关缓存</td></tr><tr><td>改branch successor</td><td>几乎不能凭直觉全保留</td><td>dominance、loop、liveness</td></tr><tr><td>复用物理地址</td><td>SSA依赖可能不变</td><td>物理alias、RAW/WAR/WAW</td></tr></tbody></table>"
-      },
-      {
-        "id": "invalidate",
-        "title": "04 / PreservedAnalyses是承诺：错误保留会复用过期证明",
-        "html": "<p>MLIR默认认为pass可能使已有分析失效；明确知道未受影响时才markAnalysesPreserved或markAllAnalysesPreserved。纯读取统计pass可以声明全保留，真正改IR的pass要逐类证明。有些analysis的isInvalidated还检查依赖analysis是否失效，因此只保留外层名字不一定足够。</p><pre><code>// Conceptual runOnOperation fragment.\nauto &amp;dom = getAnalysis&lt;DominanceInfo&gt;();\ninspectDominance(dom);\n// This example performs no IR mutation.\nmarkAllAnalysesPreserved();</code></pre><p>反例：先构建内存依赖图D，地址分配将a、z映射到重叠字节，却声明D保留。后端继续认为两条命令独立，可能丢掉必要WAR同步。这里源码SSA use-def没有改变，但D的输入包括地址，已发生实质变化。正确方式是更新依赖事实、重建图，或改变pipeline让构图发生在最终地址之后。</p><p>分析缓存只在合同内有效。若开发者拿到一个Analysis对象引用后手动改IR，又在同一pass里继续用旧对象，结束时的失效通知未必能补救当前调用中的错误；要在变更点安排增量更新或重新查询适当的新结果。</p>"
-      },
-      {
-        "id": "ordering",
-        "title": "05 / Pass顺序如何推导：先写需要和产生的事实",
-        "html": "<p>为每个pass写precondition和postcondition，比记一长串名字可靠。示例：normalize保证axis语义统一；shape推导建立静态维度；tiling消费维度并产生循环与slice；bufferization决定存储关系；address allocation给出物理区间；同步分析消费最终区间和异步effect。具体项目顺序可以更复杂，但每条边都应有理由。</p><p>若先做地址分配再插入新临时buffer，原容量与alias结论就过期；若在layout确定之前冻结vector load宽度，可能违背实际stride；若高层融合需要recognize某个matmul，却过早将其展开成标量循环，pattern就难以匹配。顺序影响的既有合法性，也有优化机会。</p><p>canonicalize不是为任意非法输入自动补救的服务。某lowering只接受rank4时，应先有显式normalize/verify合同，或在matcher与ConversionTarget共同表达合法范围；不能期待前面“跑几次canonicalize大概就变好了”。</p>"
-      },
-      {
-        "id": "debug",
-        "title": "06 / 失败、诊断和最小复现：找到第一个坏边界",
-        "html": "<p>用最小IR逐pass运行，保存输入/输出、选项、版本和诊断。verify-each可把结构破坏尽量定位到刚执行的pass；IR打印与pass instrumentation帮助看到哪次转换改变了shape/类型/位置。只保留最后一份失败汇编，往往丢失第一个错误产生的位置。</p><p>signalPassFailure用于告诉PM当前转换失败，但不天然把所有已修改IR恢复原状；事务回滚属于具体driver的机制，不能把pass失败等同于数据库rollback。写失败路径时，要让诊断指向违反的合同，并确保调用端停止后续依赖成功转换的阶段。</p><p>有些bug只在多线程或多个函数时出现，单函数reproducer可能把共享状态竞态删掉。因此最小化要保留触发结构：若错误依赖两个兄弟函数，复现至少留两者；若依赖循环回边，不能只摘循环体。最小复现是保留必要因果，不是文件越短越好。</p>"
-      },
-      {
-        "id": "exercise",
-        "title": "07 / 手推一个分析失效事故",
-        "html": "<p>设依赖图中A写buf0，B读buf0，C写buf1，A→B有RAW，C独立。一次内存复用把buf1改放到buf0区域，但C在B的旧读取完成前即可发射。现在新增B→C的WAR。即使A、B、C的SSA名字、计算公式和文本顺序都未变，图也必须变。</p><div class=\"formula\">变换前：Resource(buf0) ∩ Resource(buf1) = ∅<br>变换后：overlap(buf0,buf1) ≠ ∅ 且 B=Read、C=Write<br>新增约束：B完成相关读取 → C覆盖该区域</div><p>面试回答可分三层：PM层不能错误保留旧分析；分析层必须考虑物理alias与in-flight；验证层要用能暴露异步覆盖的目标测试。通用dominance或liveness通过，并不直接证明硬件完成顺序。这个例子把上游PM机制和518真实地址复用问题连接起来。</p>"
-      }
-    ],
-    "questions": [
-      {
-        "id": "nested",
-        "q": "同一pass列表放在不同嵌套层为何结果不同？",
-        "a": "锚点决定操作对象与遍历实例。module级和func级看到的IR范围、可修改范围、分析缓存和并行方式不同。",
-        "followup": "全局helper创建应放哪一层？"
-      },
-      {
-        "id": "stale",
-        "q": "只改地址属性，为什么分析也会失效？",
-        "a": "物理alias和依赖图以地址区间为输入；即使SSA不变，RAW/WAR/WAW可能改变。是否失效取决于分析依赖的事实，不取决于改了几行。",
-        "followup": "哪些analysis可合理保留？"
-      },
-      {
-        "id": "preserve",
-        "q": "markAllAnalysesPreserved可当性能优化开关吗？",
-        "a": "不可以。它是所有相关分析仍然有效的正确性承诺；错误保留会让后续pass复用过期证明。",
-        "followup": "只读统计pass为什么通常可以全保留？"
-      },
-      {
-        "id": "failure",
-        "q": "signalPassFailure会自动回滚IR吗？",
-        "a": "不能这样假设。它报告pass失败；回滚取决于具体转换driver和实现。已经修改的IR可能仍在，需要停止后续阶段并保留诊断。",
-        "followup": "如何让失败复现保留第一个坏IR？"
-      },
-      {
-        "id": "threads",
-        "q": "函数pass为何不应检查兄弟函数？",
-        "a": "兄弟可能由其他线程并行修改，读取也可能竞争。跨函数事务应使用适当作用域和分析接口。",
-        "followup": "为什么mutable static缓存会破坏确定性？"
-      }
-    ],
-    "sources": [
-      {
-        "id": "pm",
+        "id": "foundation-mlir-pm",
         "label": "MLIR Pass Infrastructure",
-        "url": "https://github.com/llvm/llvm-project/blob/5916210dbe10049c264ecf0a0ad685d101c392d9/mlir/docs/PassManagement.md",
-        "note": "上游固定5916210dbe10；在线文档https://mlir.llvm.org/docs/PassManagement/于2026-10-24核对；示例为教学推演。",
+        "url": "https://mlir.llvm.org/docs/PassManagement/",
+        "note": "OperationPass 作用域、并行限制与分析生命周期。",
         "kind": "官方文档"
       },
       {
-        "id": "canon",
-        "label": "Canonicalization合同",
-        "url": "https://github.com/llvm/llvm-project/blob/5916210dbe10049c264ecf0a0ad685d101c392d9/mlir/docs/Canonicalization.md",
-        "note": "上游固定5916210dbe10；在线文档https://mlir.llvm.org/docs/Canonicalization/于2026-10-24核对；示例为教学推演。",
-        "kind": "官方文档"
-      }
-    ],
-    "takeaways": [
-      "pipeline的锚点和顺序都是语义。",
-      "analysis保留是正确性承诺。",
-      "SSA不变不代表物理依赖不变。",
-      "最小复现要保留触发错误的结构。"
-    ],
-    "part": "Triton · MLIR · LLVM",
-    "minutes": 45,
-    "level": "深入",
-    "tags": [
-      "pipeline",
-      "analysis",
-      "invalidation",
-      "nesting"
-    ]
-  },
-  {
-    "id": "rewrite-conversion",
-    "order": 53,
-    "title": "Rewrite 与 Dialect Conversion：从局部等价到合法目标",
-    "subtitle": "pattern · fold · canonicalize · TypeConverter",
-    "lead": "重写不是匹配成功后随便改树。围绕一个整数零加法和一个类型变化示例，区分pattern原子性、greedy驱动、fold限制、目标合法性与跨类型桥接，解释为什么“能匹配”远远不够。",
-    "sections": [
-      {
-        "id": "transaction",
-        "title": "01 / 一个正确pattern的顺序：先证明，再变更",
-        "html": "<p>以整数x+0→x为例：匹配op类型，确认另一个operand是同类型零常量，确认操作语义是普通模整数加法，再replace结果。没有匹配成功前不能删producer、修改operand或插入临时op；返回failure意味着没有进行IR修改。所有变更通过PatternRewriter，包括nested block与region的修改，才能让driver维护worklist和监听器。</p><pre><code>// Conceptual matchAndRewrite; helper/type details omitted.\nif (!isZeroIntegerConstant(op.getRhs()))\n  return rewriter.notifyMatchFailure(op, &quot;rhs is not integer zero&quot;);\nrewriter.replaceOp(op, op.getLhs());\nreturn success();</code></pre><p>零常量可能还有其他users，替换add不等于可以无条件erase常量producer；通用DCE可以稍后处理真正无用且无副作用的常量。同样，融合两个op时必须检查旧producer的所有users，不能只因为当前consumer已替换就删除共享producer。</p><p>浮点x+0不能机械沿用整数规则：signed zero、NaN以及fast-math合同可能影响等价性。pattern的匹配条件是数学与IR语义的一部分，不应只写形状相同。</p>"
-      },
-      {
-        "id": "driver",
-        "title": "02 / Pattern定义与driver策略分开",
-        "html": "<p>Pattern描述一次局部转换；driver决定从哪里遍历、何时重试、如何处理新op和何时停止。greedy driver反复应用可用pattern与折叠，通常偏向较高benefit；benefit是局部选择优先级，不是全模型延迟，也不等于一个动态硬件cost model。</p><figure class=\"diagram\"><svg viewBox=\"0 0 720 240\" role=\"img\" aria-label=\"重写过程的四个检查点\"><rect width=\"720\" height=\"240\" rx=\"15\" fill=\"#eef2e7\"/><text x=\"24\" y=\"31\" fill=\"#274c3b\" font-size=\"18\" font-family=\"sans-serif\">重写过程的四个检查点</text><rect x=\"20.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#315c4c\"/><text x=\"97.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">Match</text><text x=\"97.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">语义 / shape / uses</text><path d=\"M177.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"195.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#506c79\"/><text x=\"272.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">Rewrite</text><text x=\"272.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">通过rewriter变更</text><path d=\"M352.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"370.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#796447\"/><text x=\"447.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">Driver</text><text x=\"447.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">更新worklist再匹配</text><path d=\"M527.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"545.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#5d5777\"/><text x=\"622.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">Verify / legalize</text><text x=\"622.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">结构与目标合同</text><text x=\"24\" y=\"179\" fill=\"#405b49\" font-size=\"14\" font-family=\"sans-serif\">把x+y改为y+x、又改回来，会形成振荡。</text><text x=\"24\" y=\"203\" fill=\"#405b49\" font-size=\"14\" font-family=\"sans-serif\">setHasBoundedRewriteRecursion声明有界，不会替你证明终止。</text></svg><figcaption>原创框架图；通用greedy与conversion driver共享pattern思想，但成功条件不同。</figcaption></figure><p>例如拆开opA产生opB，而另一个pattern又把opB组合回opA，两条单独看都等价，组合却不收敛。应选稳定方向，或将不同阶段放在不同pipeline范围。递归重写的有界标记用于告知driver允许已证明有限的递归，不是解决循环pattern的魔法开关。</p>"
-      },
-      {
-        "id": "fold",
-        "title": "03 / fold、canonicalize与CSE各自解决什么",
-        "html": "<p>fold通常把一个op的结果替换为已有Value或Attribute常量，或受限地原地更新当前op；它不能像任意RewritePattern一样创建一串新Operation。返回Attribute后如何物化常量，由调用方和dialect的constant materializer处理。这样fold既可被canonicalizer使用，也能用于builder或其他局部简化。</p><table><thead><tr><th>机制</th><th>典型输入→输出</th><th>不应承诺</th></tr></thead><tbody><tr><td>fold</td><td>整数add(2,3)→常量属性5</td><td>任意新建复杂子图</td></tr><tr><td>canonicalization pattern</td><td>组合/拆解冗余结构</td><td>全局最优或唯一规范形</td></tr><tr><td>CSE</td><td>同语义、同操作数的冗余纯计算→共用</td><td>忽略内存副作用合并load</td></tr><tr><td>dialect conversion</td><td>非法源op→目标合法op集合</td><td>只要模式跑过就是成功</td></tr></tbody></table><p>两次load地址相同，中间有store到可能alias区域，不能仅因文本相同做CSE。两次整数add无副作用且操作数/语义相同，则通常可以共用。这个差异解释为什么effect接口和alias信息必须进入优化，而不能把“表达式字符串相同”当证明。</p>"
-      },
-      {
-        "id": "canonical",
-        "title": "04 / Canonicalization是尽力简化，不能补正确性缺口",
-        "html": "<p>固定官方文档明确canonicalizer是best effort：可到固定点，也可能因迭代/重写预算停止；没有全局唯一canonical form保证。pipeline应在移除canonicalizer后仍保持正确，而不是依赖它悄悄修复非法IR。规范化形态还会随新增pattern改变。</p><p>示例假设某lowering只认axis=3，但源op允许axis=-1表示最后一维。正确方案是明确规范化语义、在前置pass统一axis并verify，或让lowering本身合法处理二者；“加一次canonicalize碰碰运气”没有给转换建立合同。</p><p>canonicalize适合快速局部简化，昂贵的全图搜索与复杂硬件cost model通常应放专门pass。若加一个pattern需要扫描整个函数再反复触发，编译时间可能出现二次增长。优化编译速度也要在合法性之后单独衡量。</p>"
-      },
-      {
-        "id": "target",
-        "title": "05 / ConversionTarget把“必须消失”写成可检查条件",
-        "html": "<p>ConversionTarget可把op或dialect标为legal、illegal、dynamic legal。dynamic legal可以按类型、layout、属性决定：例如某op只在合法目标元素格式下允许保留。matcher与target必须互相覆盖；target说非法而没有可处理它的pattern会失败，target过宽则可能让尚未lower的op溜到后端。</p><table><thead><tr><th>模式</th><th>成功条件的关键</th><th>典型用途</th></tr></thead><tbody><tr><td>full conversion</td><td>作用域内所有op都需合法化</td><td>后端不接受残留源dialect</td></tr><tr><td>partial conversion</td><td>显式illegal必须消失；允许符合规则的原有unknown保留</td><td>逐步降低部分dialect</td></tr><tr><td>analysis conversion</td><td>分析哪些op能合法化，不提交通常的IR重写结果</td><td>覆盖率/可行性检查</td></tr></tbody></table><p>recursive legality会把某个合法容器内部整体视为合法，即使里面还有通常非法的op。它适合明确跳过的封闭区域，不应为快速让full conversion成功而随意加到module。否则成功只证明你放宽了检查。</p><p>转换pattern不一定一步直接生成最终legal op，可以先产生另一个有合法化路径的中间op。driver负责追踪合法化图；应通过失败诊断找到没有出口的节点，而不是把所有未知op都标legal。</p>"
-      },
-      {
-        "id": "types",
-        "title": "06 / TypeConverter：换类型不是一次setType",
-        "html": "<p>若目标把某抽象handle变成两个机器值，例如base与length，转换可能是1→N。op结果、operands、block arguments、branch传参、函数签名与callsite必须一起更新。直接setType只改声明，不会自动修复所有使用者，更不补语义桥。</p><p>当ConversionPattern构造时绑定了TypeConverter，adaptor operands的类型保证匹配该converter给出的合法化类型；driver必要时可插入target materialization。未绑定TypeConverter时，传入的是最近映射的值（排除materializations），不保证已经变成目标类型。继续从原op读取旧operand可能绕过映射；它只适合明确需要原操作数的场景。TypeConverter的conversion描述类型关系，materialization才可在必要边界创建IR，将目标值接回仍需源类型的使用者，或把源值变为目标期望类型。</p><figure class=\"diagram\"><svg viewBox=\"0 0 720 240\" role=\"img\" aria-label=\"类型转换必须跨use-def边闭环\"><rect width=\"720\" height=\"240\" rx=\"15\" fill=\"#eef2e7\"/><text x=\"24\" y=\"31\" fill=\"#274c3b\" font-size=\"18\" font-family=\"sans-serif\">类型转换必须跨use-def边闭环</text><rect x=\"20.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#315c4c\"/><text x=\"97.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">源producer</text><text x=\"97.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">结果：抽象类型T</text><path d=\"M177.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"195.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#506c79\"/><text x=\"272.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">TypeConverter</text><text x=\"272.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">T → T1,T2等</text><path d=\"M352.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"370.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#796447\"/><text x=\"447.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">adaptor operands</text><text x=\"447.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">使用已转换的值</text><path d=\"M527.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"545.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#5d5777\"/><text x=\"622.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">目标consumer</text><text x=\"622.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">合法签名与布局</text><text x=\"24\" y=\"179\" fill=\"#405b49\" font-size=\"14\" font-family=\"sans-serif\">函数签名变更还必须同步entry参数、return和callsite。</text><text x=\"24\" y=\"203\" fill=\"#405b49\" font-size=\"14\" font-family=\"sans-serif\">桥接cast只是待消解的语义边界，不是错误自动修好。</text></svg><figcaption>原创类型转换图；图示以绑定TypeConverter的pattern为前提；未转换使用者可能需要source materialization，目标要求可能需要target materialization。</figcaption></figure><p>source materialization把替换值接回仍期待旧源类型的users；target materialization服务于目标类型需求。unrealized_conversion_cast有时充当中间桥，最终要由合法pipeline消解或明确允许；留在最终机器lowering前却无人负责，通常说明转换链未闭合。</p>"
-      },
-      {
-        "id": "example",
-        "title": "07 / 手推一个signature转换与失败点",
-        "html": "<p>教学源函数take_pair接受抽象pair&lt;i32,i32&gt;，内部extract0+extract1。目标以两个i32参数替代pair。正确结果是入口(%a,%b)、加法add %a,%b、return；所有调用从call take_pair(%pair)变成传入拆出的两项。若只改callee签名而不改call，IR立即不一致。</p><pre><code>Source semantics:\n  take_pair(pair(a,b)) = extract0(pair) + extract1(pair)\n\nTarget semantics:\n  take_pair(a:i32, b:i32) = add_i32(a,b)\n\nRequired updates:\n  function type + entry arguments + calls + returns\n  pair-producing edges + extraction users + temporary bridges</code></pre><p>这里pair是原创抽象类型，不声称某上游dialect已有同名op。可在白板上画出三个故障：call仍传1参、region参数仍是pair、旧extract继续引用已替换结果。三者分别对应接口、block signature和use-def重映射。只有“换了一个type”无法修复。</p>"
-      },
-      {
-        "id": "proof",
-        "title": "08 / 从正确性到测试：写出pattern不匹配的样本",
-        "html": "<p>正例证明该形态能转换；负例证明matcher拒绝超出合同的形态；非法目标例证明ConversionTarget没有把错误放过；共享producer例证明不会误删其他use；不同axis/layout/dtype例检验是否把单样本事实硬编码。类型转换还应有跨block、call和return的用例。</p><p>对于异步硬件，加上alias和inout反例：同一个input还有后续读取时不能当scratch；发起DMA后SSA无use不代表读已完成。PatternRewriter维护IR一致性，硬件effect和完成合同仍由目标实现负责。</p><p>最后区分证据：FileCheck能检查IR结构与诊断，不能独立证明数值或时序；功能参考验证数学，RTL/芯片检查真实执行合同。讲清每层保证，比把“pattern match成功”当作最终正确性更重要。</p>"
-      }
-    ],
-    "questions": [
-      {
-        "id": "failure",
-        "q": "matchAndRewrite返回failure前能否插入一个临时op？",
-        "a": "不能按通用pattern合同这么做。匹配尚未成功时不应修改IR，failure表示未变更；所有修改必须通过rewriter，使driver状态一致。",
-        "followup": "为什么直接op.erase会破坏worklist？"
-      },
-      {
-        "id": "fold",
-        "q": "fold能否新建两条算子完成分解？",
-        "a": "应使用RewritePattern。fold受限于已有Value/Attribute替换或当前op的有限原地更新，不能任意构建子图。",
-        "followup": "返回Attribute之后谁负责生成constant op？"
-      },
-      {
-        "id": "partial",
-        "q": "partial conversion是否意味着非法op可以剩下？",
-        "a": "显式标illegal的op仍须合法化；partial允许某些原有未显式标非法的unknown保留。它不是忽略失败的开关。",
-        "followup": "full conversion时unknown应如何处理？"
-      },
-      {
-        "id": "materialize",
-        "q": "source与target materialization分别桥接什么？",
-        "a": "source把转换后的替换值桥回仍期待旧类型的使用者；target把值转成目标pattern期望的类型。类型关系和实际IR桥接是不同职责。 绑定TypeConverter的conversion pattern才有adaptor类型合法化保证；未绑定时仅得到最近映射值。",
-        "followup": "adaptor operands为什么比直接读取旧operands可靠？"
-      },
-      {
-        "id": "canonical",
-        "q": "canonicalize能保证唯一最终IR吗？",
-        "a": "不能。它是有预算的尽力简化，pattern集合随版本变化，pipeline正确性不应依赖其必然完成某个形态修复。",
-        "followup": "两条相反重写都等价，为什么仍是设计错误？"
-      },
-      {
-        "id": "uses",
-        "q": "融合消费producer后为何不能直接删producer？",
-        "a": "其他users可能仍需要它；需验证use集合、side effects和依赖。局部consumer已替换不等于producer全局无用。",
-        "followup": "多输出op只用了一个结果时如何处理？"
-      }
-    ],
-    "sources": [
-      {
-        "id": "patterns",
-        "label": "PatternRewriter合同",
-        "url": "https://github.com/llvm/llvm-project/blob/5916210dbe10049c264ecf0a0ad685d101c392d9/mlir/docs/PatternRewriter.md",
-        "note": "上游固定5916210dbe10；在线文档https://mlir.llvm.org/docs/PatternRewriter/于2026-10-24核对；示例为教学推演。",
+        "id": "foundation-convert",
+        "label": "MLIR Dialect Conversion",
+        "url": "https://mlir.llvm.org/docs/DialectConversion/",
+        "note": "转换目标、类型转换与转换模式。",
         "kind": "官方文档"
       },
       {
-        "id": "canon",
-        "label": "Canonicalization与fold",
-        "url": "https://github.com/llvm/llvm-project/blob/5916210dbe10049c264ecf0a0ad685d101c392d9/mlir/docs/Canonicalization.md",
-        "note": "上游固定5916210dbe10；在线文档https://mlir.llvm.org/docs/Canonicalization/于2026-10-24核对；示例为教学推演。",
+        "id": "foundation-lang",
+        "label": "LLVM Language Reference",
+        "url": "https://llvm.org/docs/LangRef.html",
+        "note": "SSA、内存、整数和浮点语义。",
         "kind": "官方文档"
       },
       {
-        "id": "convert",
-        "label": "Dialect Conversion与TypeConverter",
-        "url": "https://github.com/llvm/llvm-project/blob/5916210dbe10049c264ecf0a0ad685d101c392d9/mlir/docs/DialectConversion.md",
-        "note": "上游固定5916210dbe10；在线文档https://mlir.llvm.org/docs/DialectConversion/于2026-10-24核对；示例为教学推演。",
+        "id": "foundation-mlir-lang",
+        "label": "MLIR Language Reference",
+        "url": "https://mlir.llvm.org/docs/LangRef/",
+        "note": "Operation、Region、Block 和 SSA 值。",
+        "kind": "官方文档"
+      },
+      {
+        "id": "foundation-rewrite",
+        "label": "MLIR Pattern Rewriter",
+        "url": "https://mlir.llvm.org/docs/PatternRewriter/",
+        "note": "Pattern、driver 与修改约束。",
         "kind": "官方文档"
       }
     ],
-    "takeaways": [
-      "先证明匹配，再通过rewriter变更。",
-      "fold、greedy与conversion有不同成功条件。",
-      "合法性不能靠canonicalize碰运气。",
-      "类型转换必须覆盖所有use-def和函数边界。"
-    ],
-    "part": "Triton · MLIR · LLVM",
-    "minutes": 45,
-    "level": "深入",
-    "tags": [
-      "pattern",
-      "fold",
-      "canonicalize",
-      "TypeConverter"
-    ]
-  },
-  {
-    "id": "llvm-mid-backend",
-    "order": 54,
-    "title": "LLVM 中后端：分析、循环、向量化与机器代码边界",
-    "subtitle": "LLVM IR · New PM · Alias · CodeGen",
-    "lead": "从一个四行整数函数出发，解释LLVM IR承诺的语义，再沿新PassManager、内存分析、循环变换和指令选择走向机器码。LLVM能力与518自定义后端的职责分开，避免“用了MLIR所以后面LLVM都会做”的误解。",
-    "sections": [
-      {
-        "id": "ir-semantics",
-        "title": "01 / LLVM IR：低层SSA仍有严格数学语义",
-        "html": "<pre><code>define i32 @twice_plus_one(i32 %x) {\nentry:\n  %twice = mul i32 %x, 2\n  %result = add i32 %twice, 1\n  ret i32 %result\n}</code></pre><p>原创可供兼容LLVM工具解析的小IR，本轮手推未执行。没有nsw/nuw的i32 add/mul按模2³²运算；x=0x80000000时twice=0，结果1。优化把乘2换为add x,x或合法shift，可以保持这种位向量语义，不需要假设结果落在有符号范围。</p><p>加nsw后，有符号溢出产生poison，这不是“饱和为最大值”。优化器会利用这种更强合同；若前端错误添加nsw，就可能把原本需要支持的溢出输入变成未定义行为的传播来源。fast-math、nonnull、dereferenceable、noalias等属性也都不是单纯加速提示，而是语义承诺。</p><p>现代LLVM使用opaque ptr：指针类型不再携带旧式pointee type；load/store以及getelementptr等操作仍需要自己的元素或访问类型信息。shape、tile、tensor layout一般已经lower成指针算术、循环、向量或intrinsic，LLVM不能凭空恢复原始模型意图。</p>"
+    "legacyChapters": {
+      "triton-ir-stack": {
+        "title": "Triton 内部：从 Python AST 到布局与目标代码",
+        "section": "triton-bridge",
+        "anchors": [
+          "entry",
+          "specialization",
+          "kernel",
+          "ttir",
+          "layout",
+          "gpu-passes",
+          "backend",
+          "fork-boundary"
+        ],
+        "anchorMap": {
+          "entry": "triton-bridge",
+          "specialization": "triton-bridge",
+          "kernel": "triton-bridge",
+          "ttir": "mlir-objects",
+          "layout": "triton-bridge",
+          "gpu-passes": "pipeline-order",
+          "backend": "triton-bridge",
+          "fork-boundary": "triton-bridge"
+        }
       },
-      {
-        "id": "new-pm",
-        "title": "02 / 新PassManager：Module、CGSCC、Function、Loop",
-        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 720 240\" role=\"img\" aria-label=\"LLVM新PM的层级与adaptor\"><rect width=\"720\" height=\"240\" rx=\"15\" fill=\"#eef2e7\"/><text x=\"24\" y=\"31\" fill=\"#274c3b\" font-size=\"18\" font-family=\"sans-serif\">LLVM新PM的层级与adaptor</text><rect x=\"20.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#315c4c\"/><text x=\"97.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">Module</text><text x=\"97.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">全局 / 符号</text><path d=\"M177.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"195.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#506c79\"/><text x=\"272.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">CGSCC（可选层）</text><text x=\"272.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">调用图强连通分量</text><path d=\"M352.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"370.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#796447\"/><text x=\"447.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">Function</text><text x=\"447.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">函数级分析/变换</text><path d=\"M527.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"545.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#5d5777\"/><text x=\"622.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">Loop</text><text x=\"622.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">循环级变换</text><text x=\"24\" y=\"179\" fill=\"#405b49\" font-size=\"14\" font-family=\"sans-serif\">AnalysisManager与变换PM分别管理事实和执行。</text><text x=\"24\" y=\"203\" fill=\"#405b49\" font-size=\"14\" font-family=\"sans-serif\">LLVM新PM中端机制不等于所有target机器后端都迁移为新PM。</text></svg><figcaption>原创层级图；可通过adaptor从Module直接运行Function pipeline，不要求每条链都经过CGSCC。</figcaption></figure><p>每类IR有自己的PassManager和AnalysisManager；跨层运行用adaptor，跨层分析通过proxy管理。PassBuilder可注册标准分析、建立默认优化pipeline并解析文本pipeline。把loop pass直接当function pass使用并不会自动获得正确loop实例和分析生命周期。</p><pre><code>opt -S -passes=&quot;function(instcombine,simplifycfg)&quot; example.ll -o simplified.ll</code></pre><p>示例只要求函数级简化，不等于完整O2，更不运行寄存器分配。pass返回PreservedAnalyses描述哪些结果仍有效；对被删除的函数等IR对象还要正确清理分析缓存，不能留下按地址索引的悬空结果。官方文档对当前中端与target codegen PM状态有明确区分，定制后端要核对自己的版本。</p>"
+      "mlir-object-model": {
+        "title": "MLIR 对象模型：Op、Region、Dialect 与接口",
+        "section": "mlir-objects",
+        "anchors": [
+          "tree",
+          "regions",
+          "types-attrs",
+          "ods",
+          "interfaces",
+          "registration",
+          "verify"
+        ],
+        "anchorMap": {
+          "tree": "mlir-objects",
+          "regions": "mlir-objects",
+          "types-attrs": "types-layout",
+          "ods": "adt-ods",
+          "interfaces": "adt-ods",
+          "registration": "adt-ods",
+          "verify": "memory-correctness"
+        }
       },
-      {
-        "id": "alias-memoryssa",
-        "title": "03 / Alias与MemorySSA：SSA名字不同不代表内存不同",
-        "html": "<p>给定两个指针p、q及访问大小，alias可能回答NoAlias、MayAlias、PartialAlias或MustAlias；没有证明不重叠时，MayAlias是保守答案，不是说真实一定alias。Mod/Ref再描述指令可能修改或读取某内存位置。指针相等测试只覆盖部分问题，访问区间和基址推导同样重要。</p><pre><code>store i32 7, ptr %p, align 4\n%a = load i32, ptr %q, align 4\nstore i32 9, ptr %p, align 4\n%b = load i32, ptr %q, align 4</code></pre><p>若p与q指向同一个i32，a=7、b=9，第二次load不能直接替换成a。若能证明访问NoAlias且没有其他相关写入，则可能消除重复load。错误noalias属性会把不合法的替换变成优化器认为合法；不能为性能随手添加。</p><p>MemorySSA建立MemoryDef、MemoryUse、MemoryPhi等抽象关系，帮助寻找可能clobber当前访问的内存定义；它不是把每个实际内存单元都变成精确SSA，也不替代alias分析。walker可以结合AA跳过不相关写入，从而降低反复扫描指令的成本。</p>"
+      "pass-analysis": {
+        "title": "PassManager 与分析：顺序、作用域和失效的合同",
+        "section": "pass-contract",
+        "anchors": [
+          "anchor",
+          "scope",
+          "analysis",
+          "invalidate",
+          "ordering",
+          "debug",
+          "exercise"
+        ],
+        "anchorMap": {
+          "anchor": "mlir-pm",
+          "scope": "mlir-pm",
+          "analysis": "analysis-invalidation",
+          "invalidate": "analysis-invalidation",
+          "ordering": "pipeline-order",
+          "debug": "foundation-lab",
+          "exercise": "foundation-lab"
+        }
       },
-      {
-        "id": "loops",
-        "title": "04 / Loop、Dominance、SCEV怎样支持LICM与变换",
-        "html": "<p>自然循环的回边指向header，且header支配该回边的源块；irreducible控制流不能机械当成单header循环处理。LoopInfo描述结构，DominatorTree支持支配，ScalarEvolution描述归纳变量和某些递推，例如i从0每次+1。trip count与no-wrap等证明决定循环展开、向量化和边界化简是否安全。</p><p>LICM把循环不变计算移出循环，但“不使用i”只说明operand看似不变。一个load还要证明循环内没有可能alias的写入，并考虑是否可安全提前执行：原循环零次迭代时不执行的可能陷阱操作，不能无条件放到preheader。</p><p>例子：for i in [0,n): y[i]=x[0]+i。如果y可能覆盖x[0]，第一次写后x[0]改变，load不再循环不变；若noalias成立且提前load安全，才可能外提。只从源代码表达式x[0]不含i推断合法LICM，会漏掉内存依赖。</p>"
+      "rewrite-conversion": {
+        "title": "Rewrite 与 Dialect Conversion：从局部等价到合法目标",
+        "section": "rewriter",
+        "anchors": [
+          "transaction",
+          "driver",
+          "fold",
+          "canonical",
+          "target",
+          "types",
+          "example",
+          "proof"
+        ],
+        "anchorMap": {
+          "transaction": "rewriter",
+          "driver": "rewriter",
+          "fold": "rewriter",
+          "canonical": "rewriter",
+          "target": "conversion",
+          "types": "conversion",
+          "example": "conversion",
+          "proof": "memory-correctness"
+        }
       },
-      {
-        "id": "vectorize",
-        "title": "05 / Loop Vectorizer与SLP：合法性和盈利性分开",
-        "html": "<p>Loop Vectorizer把多个迭代打包，SLP把同一基本块里可兼容的标量操作组合为向量。前者要考虑循环携带依赖、trip count、reduction和tail，后者要考虑数据流形状及重排成本。能形成向量IR不等于目标支持高效机器指令；TTI等成本信息帮助选择宽度与策略。</p><table><thead><tr><th>问题</th><th>合法性检查</th><th>成本检查</th></tr></thead><tbody><tr><td>y[i]=a[i]+b[i]</td><td>访问依赖、边界、alias</td><td>向量宽度、load/store吞吐</td></tr><tr><td>sum+=a[i]</td><td>浮点归约顺序/许可</td><td>归约树和水平合并代价</td></tr><tr><td>gather a[index[i]]</td><td>index与mask合法</td><td>硬件gather成本/缓存</td></tr><tr><td>短循环</td><td>tail与运行次数</td><td>版本判断和epilogue是否比收益大</td></tr></tbody></table><p>不能静态排除alias时，可用运行期区间检查生成vector与scalar两个版本；这叫版本化，不是忽略alias。向量尾部可以用scalar epilogue或mask处理，具体取决于target和成本。对浮点sum，改变结合顺序会改变舍入；需模型允许的语义，不能把整数归约法直接搬过去。</p><p>AI kernel里常已经通过Triton或MLIR显式表达分块和向量，此时LLVM自动向量化只负责剩余可识别的部分。它不会自动把任意scalar loop变成518 PE指令，也不会知道目标mail时序。</p>"
+      "llvm-mid-backend": {
+        "title": "LLVM 中后端：分析、循环、向量化与机器代码边界",
+        "section": "llvm-pm",
+        "anchors": [
+          "ir-semantics",
+          "new-pm",
+          "alias-memoryssa",
+          "loops",
+          "vectorize",
+          "codegen",
+          "llvm-vs-mlir",
+          "debug-exercise"
+        ],
+        "anchorMap": {
+          "ir-semantics": "types-layout",
+          "new-pm": "llvm-pm",
+          "alias-memoryssa": "memory-correctness",
+          "loops": "middle-end",
+          "vectorize": "middle-end",
+          "codegen": "triton-bridge",
+          "llvm-vs-mlir": "conversion",
+          "debug-exercise": "foundation-lab"
+        }
       },
-      {
-        "id": "codegen",
-        "title": "06 / 从LLVM IR到Machine IR：选择、合法化、分配、发射",
-        "html": "<p>目标后端可使用SelectionDAG或GlobalISel等指令选择框架，按target支持情况将IR操作转为合法机器操作；类型和操作legalization可能拆分不支持的宽类型、引入libcall或target intrinsic。选中MUL指令仍未指定所有物理寄存器，后续调度与寄存器分配要处理真实寄存器类、隐式clobber、调用约定和spill。</p><figure class=\"diagram\"><svg viewBox=\"0 0 720 240\" role=\"img\" aria-label=\"机器代码阶段增加新的物理约束\"><rect width=\"720\" height=\"240\" rx=\"15\" fill=\"#eef2e7\"/><text x=\"24\" y=\"31\" fill=\"#274c3b\" font-size=\"18\" font-family=\"sans-serif\">机器代码阶段增加新的物理约束</text><rect x=\"20.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#315c4c\"/><text x=\"97.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">LLVM IR</text><text x=\"97.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">SSA语义 / target信息</text><path d=\"M177.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"195.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#506c79\"/><text x=\"272.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">选择与合法化</text><text x=\"272.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">目标Machine IR</text><path d=\"M352.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"370.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#796447\"/><text x=\"447.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">调度 / RA / spill</text><text x=\"447.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">寄存器与资源约束</text><path d=\"M527.0 101h15m-5 -5l5 5l-5 5\" stroke=\"#58725d\" fill=\"none\" stroke-width=\"2\"/><rect x=\"545.0\" y=\"61\" width=\"155.0\" height=\"81\" rx=\"8\" fill=\"#5d5777\"/><text x=\"622.5\" y=\"91\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"15\" font-family=\"sans-serif\">MC / 发射</text><text x=\"622.5\" y=\"119\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"sans-serif\">编码 / relocation</text><text x=\"24\" y=\"179\" fill=\"#405b49\" font-size=\"14\" font-family=\"sans-serif\">虚拟寄存器多并不等于物理寄存器够用。</text><text x=\"24\" y=\"203\" fill=\"#405b49\" font-size=\"14\" font-family=\"sans-serif\">spill、两地址约束、调用约定可以改变最终指令数量。</text></svg><figcaption>原创职责图；具体目标pipeline可穿插多轮优化和调度，图不声称唯一固定顺序。</figcaption></figure><p>MIR能展示MachineInstr、虚拟寄存器、寄存器类与机器基本块，适合定位“LLVM IR正常，机器后端出错”。选择前的一个高层intrinsic可能展开很多指令；RA后spill增加内存访问，导致性能回退。反过来一串IR也可能被目标pattern合成一条硬件指令。</p>"
-      },
-      {
-        "id": "llvm-vs-mlir",
-        "title": "07 / LLVM dialect、LLVM IR与自定义后端不能混为一个名字",
-        "html": "<p>MLIR的LLVM dialect仍是MLIR Operation/Region对象，需translation等步骤进入LLVM IR模块；同名LLVM并不意味着此时已经在LLVM Machine IR里。上游Triton GPU链可能经过这些层；518现有ZeusLow自定义CodeGen有自己的RegisterAllocator、InstructionSelector、Peephole和Emitter，不会自动使用LLVM target后端完成所有工作。</p><table><thead><tr><th>看到的产物</th><th>应问的问题</th></tr></thead><tbody><tr><td>MLIR LLVM dialect</td><td>类型/region/调用签名是否已合法转换？</td></tr><tr><td>LLVM IR .ll</td><td>语义属性、alias和优化pipeline是否正确？</td></tr><tr><td>LLVM MIR</td><td>指令/寄存器类/机器CFG是否正确？</td></tr><tr><td>PTX等目标文本</td><td>是否仍需目标汇编工具？</td></tr><tr><td>ZeusLow / zbin</td><td>项目自己的配置、依赖、RA和编码合同是否通过？</td></tr></tbody></table><p>面试中可以说自己复用了LLVM/MLIR哪些基础设施，但应具体到对象、分析或转换框架。若目标指令选择自己实现，就说明覆盖的op、合法性、寄存器与ABI；不要借“用了LLVM”省略真正需要负责的部分。</p>"
-      },
-      {
-        "id": "debug-exercise",
-        "title": "08 / 从错误现象反推应保存哪层证据",
-        "html": "<p>整数边界输入变错：先查nsw/nuw、cast、符号扩展与width。只在alias输入变错：查AA合同、noalias属性、load提升与CSE。只在短长度变错：查向量tail和mask。LLVM IR结果正确、机器码错误：查legalization、MIR、RA和指令编码；性能回退则追实际spill、访存和调度变化。</p><p>一个有效复现包至少绑定源输入、编译器commit、target triple/CPU/features、pipeline/options、失败前后IR和最小触发输入。优化备注能解释为何未向量化，opt-bisect或逐pass对比帮助缩小首次变化范围，但二分结果仍需数学与机器语义证明。</p><p>练习：给twice_plus_one加nsw并测试最大正整数，解释与原函数的合同差异；给两load示例加入可alias指针，说明为何不能CSE；给循环加n=0，说明不安全外提为什么改变可观察行为。把这三类反例讲清楚，才能把优化描述从“更快”推进到“为什么合法”。</p>"
+      "compiler-correctness-foundations": {
+        "title": "从 SSA 到物理 alias：编译器正确性的底层功夫",
+        "section": "ssa-cfg",
+        "anchors": [
+          "ssa",
+          "cfg",
+          "alias",
+          "liveness",
+          "rewrite",
+          "numeric",
+          "interview-drill"
+        ],
+        "anchorMap": {
+          "ssa": "ssa-cfg",
+          "cfg": "ssa-cfg",
+          "alias": "memory-correctness",
+          "liveness": "ssa-cfg",
+          "rewrite": "rewriter",
+          "numeric": "types-layout",
+          "interview-drill": "foundation-summary"
+        }
       }
-    ],
-    "questions": [
-      {
-        "id": "poison",
-        "q": "nsw是不是告诉硬件使用有符号饱和？",
-        "a": "不是。它承诺无有符号溢出；违反时结果为poison。它改变IR可允许的行为，优化器可据此推理。",
-        "followup": "错误添加nsw如何使合法输入变成错误优化？"
-      },
-      {
-        "id": "memoryssa",
-        "q": "MemorySSA能替代alias分析吗？",
-        "a": "不能。它组织可能的内存定义/使用和合流，walker通常还需AA过滤不相关clobber；它不是每字节精确内存SSA。",
-        "followup": "MustAlias与MayAlias对load消除有什么不同？"
-      },
-      {
-        "id": "licm",
-        "q": "表达式不含循环变量就一定能外提吗？",
-        "a": "不能。load可能被循环内alias写入改变，操作也可能不能安全提前到零次迭代路径。需不变性、内存和投机安全证明。",
-        "followup": "以y覆盖x[0]构造反例。"
-      },
-      {
-        "id": "slp",
-        "q": "Loop Vectorizer和SLP有何不同？",
-        "a": "前者合并循环迭代，后者打包可兼容的标量数据流；两者都需合法性与target成本，不保证向量宽度越大越好。",
-        "followup": "FP归约改变顺序时需要什么合同？"
-      },
-      {
-        "id": "boundary",
-        "q": "LLVM dialect是否已经是LLVM IR？",
-        "a": "不是，前者仍是MLIR对象，需转换/translation形成LLVM IR；之后还可能经过目标机器选择、RA和发射。",
-        "followup": "ZeusLow自定义CodeGen与这些层怎样对应？"
-      },
-      {
-        "id": "pm",
-        "q": "新PM是否说明所有后端都采用新PM？",
-        "a": "不能推广。官方文档主要描述中端新PM；target-dependent codegen的PM迁移和pipeline应按具体版本/目标核对。",
-        "followup": "为什么把opt的pipeline误认为完整llc后端会漏掉RA？"
-      }
-    ],
-    "sources": [
-      {
-        "id": "llref",
-        "label": "LLVM IR语义",
-        "url": "https://github.com/llvm/llvm-project/blob/5916210dbe10049c264ecf0a0ad685d101c392d9/llvm/docs/LangRef.md",
-        "note": "上游固定5916210dbe10；在线文档https://llvm.org/docs/LangRef.html于2026-10-24核对；示例为教学推演。",
-        "kind": "官方文档"
-      },
-      {
-        "id": "npm",
-        "label": "LLVM新PassManager",
-        "url": "https://github.com/llvm/llvm-project/blob/5916210dbe10049c264ecf0a0ad685d101c392d9/llvm/docs/NewPassManager.md",
-        "note": "上游固定5916210dbe10；在线文档https://llvm.org/docs/NewPassManager.html于2026-10-24核对；示例为教学推演。",
-        "kind": "官方文档"
-      },
-      {
-        "id": "aa",
-        "label": "LLVM Alias Analysis",
-        "url": "https://github.com/llvm/llvm-project/blob/5916210dbe10049c264ecf0a0ad685d101c392d9/llvm/docs/AliasAnalysis.md",
-        "note": "上游固定5916210dbe10；在线文档https://llvm.org/docs/AliasAnalysis.html于2026-10-24核对；示例为教学推演。",
-        "kind": "官方文档"
-      },
-      {
-        "id": "mssa",
-        "label": "MemorySSA",
-        "url": "https://github.com/llvm/llvm-project/blob/5916210dbe10049c264ecf0a0ad685d101c392d9/llvm/docs/MemorySSA.md",
-        "note": "上游固定5916210dbe10；在线文档https://llvm.org/docs/MemorySSA.html于2026-10-24核对；示例为教学推演。",
-        "kind": "官方文档"
-      },
-      {
-        "id": "vector",
-        "label": "LLVM Vectorizers",
-        "url": "https://github.com/llvm/llvm-project/blob/5916210dbe10049c264ecf0a0ad685d101c392d9/llvm/docs/Vectorizers.md",
-        "note": "上游固定5916210dbe10；在线文档https://llvm.org/docs/Vectorizers.html于2026-10-24核对；示例为教学推演。",
-        "kind": "官方文档"
-      },
-      {
-        "id": "cg",
-        "label": "LLVM CodeGenerator",
-        "url": "https://github.com/llvm/llvm-project/blob/5916210dbe10049c264ecf0a0ad685d101c392d9/llvm/docs/CodeGenerator.md",
-        "note": "上游固定5916210dbe10；在线文档https://llvm.org/docs/CodeGenerator.html于2026-10-24核对；示例为教学推演。",
-        "kind": "官方文档"
-      },
-      {
-        "id": "loops",
-        "label": "LLVM Loop Terminology",
-        "url": "https://github.com/llvm/llvm-project/blob/5916210dbe10049c264ecf0a0ad685d101c392d9/llvm/docs/LoopTerminology.md",
-        "note": "2026-10-24核验固定SHA；header支配循环内块与回边源块。",
-        "kind": "官方文档"
-      }
-    ],
-    "takeaways": [
-      "IR属性是语义承诺，不是随意加速提示。",
-      "AA与MemorySSA共同支持内存优化。",
-      "循环变换先证合法，再算成本。",
-      "MLIR、LLVM IR、MIR和目标代码的边界需要分清。"
-    ],
-    "part": "Triton · MLIR · LLVM",
-    "minutes": 45,
-    "level": "深入",
-    "tags": [
-      "LLVM IR",
-      "New PM",
-      "Alias",
-      "CodeGen"
-    ]
+    }
   }
 ]
