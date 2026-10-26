@@ -1,0 +1,1492 @@
+{
+  "metadata": {
+    "collected_at": "2026-10-26T23:29:25+08:00",
+    "CycleSim_HEAD": "382c4f151fb8a6b59227f7a168ab231484b0864c",
+    "tracked_dirty": [
+      "M PROGRESS.md"
+    ],
+    "RTL_revision": "unknown; non-Git reference copy",
+    "scope": "source reading + frozen historical tables + independent Python arithmetic; no new simulator/RTL/VCS execution",
+    "animation_evidence_rule": "measured sparse events, measured totals, current-source arithmetic, and teaching projections are distinct classes",
+    "measurement_dates": "scalar fixture committed 2026-09-08; other TSV files do not contain exact per-run dates; commit/reorganization dates are not measurement timestamps"
+  },
+  "cases": [
+    {
+      "id": "vp-mul-fp32-256",
+      "title": "256 个 FP32 的 MUL：87 拍延迟为什么能每 17.5 拍完成一条",
+      "classification": "single VP microbenchmark plus same-instance B2B; not four independent VPs",
+      "shape": {
+        "input_axes": "TH,TW,TC",
+        "input": [
+          1,
+          1,
+          256
+        ],
+        "output": [
+          1,
+          1,
+          256
+        ],
+        "input_dtype": "FP32",
+        "output_dtype": "FP32"
+      },
+      "configuration": {
+        "read_mode": "Stensor",
+        "LUTG0": 1056,
+        "lit_stages": [
+          "MUL",
+          "CAL_OUT_MUX"
+        ],
+        "CGPm": 0,
+        "PSMO": 0,
+        "MG0M": 0,
+        "MULV_raw": 0,
+        "note": "原始minimal默认其余字段为0，这是激活MUL级的时序台架，不是数值oracle。",
+        "source_addr_16B_units": 0,
+        "destination_addr_16B_units": 512
+      },
+      "profile": {
+        "core_MHz": 400,
+        "vp_MHz": 400,
+        "vp_phase_ps": 0,
+        "Lrd": 17,
+        "Lwr": 17,
+        "neighbor": "always-ready behavioural L2; no competing masters; coefficient clock gates held open",
+        "B2B_repeats": 14,
+        "cmd_gap": 3,
+        "credit_variants": [
+          1,
+          2,
+          4
+        ]
+      },
+      "measurement_boundary": "T1 = VP顶层最后1111命令字被采样(launch)到inst_done；period为后11条中的10个done间隔的平均。",
+      "calculation": [
+        {
+          "label": "每拍元素",
+          "expression": "128 B / 4 B",
+          "value": 32,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "读写拍",
+          "expression": "ceil(256/32)",
+          "value": 8,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "首读",
+          "expression": "launch_to_first_read",
+          "value": 15,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "首写",
+          "expression": "15 + Lrd17 + pipe19 + MUL4",
+          "value": 55,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "末写",
+          "expression": "55 + (8-1)*II1",
+          "value": 62,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "done",
+          "expression": "62 + last_write_to_done8 + Lwr17",
+          "value": 87,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "完整包络",
+          "expression": "15+17+19+4+7+8+17",
+          "value": 87,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "地址阶段A",
+          "expression": "N8 + turnaround2",
+          "value": 10,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "尾部B",
+          "expression": "max(8+17,4+5)",
+          "value": 25,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "两槽约束",
+          "expression": "max(A10,(A10+B25)/2)",
+          "value": 17.5,
+          "evidence_kind": "current-source arithmetic"
+        }
+      ],
+      "observations": [
+        {
+          "credit": 1,
+          "RTL_T1": 87,
+          "RTL_period": 62,
+          "n_done": 14
+        },
+        {
+          "credit": 2,
+          "RTL_T1": 87,
+          "RTL_period": 31,
+          "n_done": 14
+        },
+        {
+          "credit": 4,
+          "RTL_T1": 87,
+          "RTL_period": 17.5,
+          "n_done": 14
+        }
+      ],
+      "comparison": {
+        "single_current_formula": 87,
+        "RTL_T1": 87,
+        "error_cycles": 0,
+        "error_pct": 0,
+        "credit4_resource_projection_period": 17.5,
+        "RTL_period": 17.5,
+        "period_error": 0,
+        "scope": "手算当前公式与冻结RTL表的对应项；本次未运行当前模型。credit1/2保留原始观察，不把A/B两资源式推广成所有credit下完整发射模型。"
+      },
+      "animation": {
+        "clock_domain": "core cycles",
+        "rules": [
+          "单条时间线的中间事件来自当前包络，不是这行TSV保存的完整波形，必须标教学投影。",
+          "B2B只存平均period和总完成条数，不得把自造等间隔条带标成实测。",
+          "两槽动画使用移去共同head的预约坐标；不能当作从inst_start起真实物理槽占用。"
+        ],
+        "single_projected_frames": [
+          {
+            "cycle": 0,
+            "label": "launch",
+            "evidence_kind": "teaching projection"
+          },
+          {
+            "cycle": 12,
+            "label": "inst_start",
+            "evidence_kind": "source-derived projection"
+          },
+          {
+            "cycle": 15,
+            "label": "首读请求",
+            "evidence_kind": "source-derived projection"
+          },
+          {
+            "cycle": 22,
+            "label": "第8个读请求",
+            "evidence_kind": "source-derived projection"
+          },
+          {
+            "cycle": 55,
+            "label": "首写请求",
+            "evidence_kind": "source-derived projection"
+          },
+          {
+            "cycle": 62,
+            "label": "第8个写请求",
+            "evidence_kind": "source-derived projection"
+          },
+          {
+            "cycle": 87,
+            "label": "inst_done；该总间隔有冻结RTL记录",
+            "evidence_kind": "historical measured total"
+          }
+        ],
+        "b2b_projected_reservation_starts": [
+          0,
+          10,
+          35,
+          45,
+          70,
+          80,
+          105
+        ],
+        "b2b_projection_steps": [
+          {
+            "command": 0,
+            "address_free": 10,
+            "slot0_free": 35
+          },
+          {
+            "command": 1,
+            "address_free": 20,
+            "slot1_free": 45
+          },
+          {
+            "command": 2,
+            "wait_until": 35,
+            "reason": "两个槽都占用；等待较早slot0"
+          }
+        ]
+      },
+      "engineering_questions": [
+        "增加一个4级MUL为何只多4拍，而不是8×4？",
+        "为什么87拍不是同实例II？",
+        "把credit从4降为1为什么17.5拍不再适用？"
+      ],
+      "sources": [
+        {
+          "source": "CycleSim:dev_docs/sim/vp_dt/62_vp_b2b.tsv",
+          "lines": [
+            99,
+            99
+          ],
+          "raw_row": "mul.c8\t17\t17\t1\t8\t87\t62.00\t0.713\t14"
+        },
+        {
+          "source": "CycleSim:dev_docs/sim/vp_dt/62_vp_b2b.tsv",
+          "lines": [
+            100,
+            100
+          ],
+          "raw_row": "mul.c8\t17\t17\t2\t8\t87\t31.00\t0.356\t14"
+        },
+        {
+          "source": "CycleSim:dev_docs/sim/vp_dt/62_vp_b2b.tsv",
+          "lines": [
+            101,
+            101
+          ],
+          "raw_row": "mul.c8\t17\t17\t4\t8\t87\t17.50\t0.201\t14"
+        },
+        {
+          "source": "CycleSim:test/vp/rtl_tb/measure_vp_b2b.py",
+          "lines": [
+            57,
+            67
+          ]
+        },
+        {
+          "source": "CycleSim:test/vp/rtl_tb/measure_vp_b2b.py",
+          "lines": [
+            123,
+            138
+          ]
+        },
+        {
+          "source": "CycleSim:test/vp/rtl_tb/vp_prog.py",
+          "lines": [
+            133,
+            138
+          ]
+        },
+        {
+          "source": "CycleSim:test/vp/rtl_tb/vp_prog.py",
+          "lines": [
+            244,
+            265
+          ]
+        },
+        {
+          "source": "CycleSim:simulator/include/zeus3/vector/vp_engine.h",
+          "lines": [
+            285,
+            322
+          ]
+        },
+        {
+          "source": "CycleSim:simulator/include/zeus3/vector/vp_engine.h",
+          "lines": [
+            525,
+            541
+          ]
+        },
+        {
+          "source": "CycleSim:simulator/include/zeus3/vector/vp_engine.h",
+          "lines": [
+            926,
+            934
+          ]
+        },
+        {
+          "source": "CycleSim:simulator/include/zeus3/vector/vp_engine.h",
+          "lines": [
+            1426,
+            1471
+          ]
+        }
+      ]
+    },
+    {
+      "id": "vp-reduce-sqrt-bf16-4x128",
+      "title": "4×128 的 BF16 规约：从第一个真实根节点结果算到 241 拍",
+      "classification": "real VP + real L2 + VP0 depth-4 production port pipe; isolated instruction",
+      "shape": {
+        "input_axes": "TH,TW,TC",
+        "input": [
+          1,
+          4,
+          128
+        ],
+        "output": [
+          1,
+          1,
+          4
+        ],
+        "input_dtype": "BF16",
+        "output_dtype": "FP32",
+        "scalar_results": 4
+      },
+      "configuration": {
+        "LUTG0": 544,
+        "LUTS": 44,
+        "vector_stages": [
+          "MUL",
+          "SUM_MAT tree"
+        ],
+        "scalar_stages": [
+          "MUL",
+          "SUM",
+          "SQT"
+        ],
+        "MG0M": 3,
+        "MULV_raw": "0x3f800000",
+        "PSMO": 0,
+        "SCSQ": 1,
+        "CGPm": 0,
+        "T0F": 3,
+        "source_addr_16B_units": 1372,
+        "destination_addr_16B_units": 8540,
+        "roll_end": 127
+      },
+      "profile": {
+        "core_MHz": 400,
+        "vp_phase_ps": 0,
+        "port": "VP0 depth4",
+        "other_L2_masters": "idle",
+        "SRAM": "existing behavioural foundry leaves",
+        "numerical_oracle": false,
+        "historical_fixture_commit": "22ce739 (2026-09-08); current source read only"
+      },
+      "measurement_boundary": "duration=inst_done-inst_start，真实VP顶层引脚；不是launch，也不是整核queue trace。",
+      "calculation": [
+        {
+          "label": "每拍BF16元素",
+          "expression": "E=64",
+          "value": 64,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "C拍",
+          "expression": "128/64",
+          "value": 2,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "输入拍",
+          "expression": "4个输出点×2",
+          "value": 8,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "输出写拍",
+          "expression": "ceil(4 FP32 / 32)",
+          "value": 1,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "first-cal相对start",
+          "expression": "L2 17 + 前端/预处理 11",
+          "value": 28,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "进入lane树前",
+          "expression": "2个前向连接 + MUL4",
+          "value": 6,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "64lane树",
+          "expression": "6层×4",
+          "value": 24,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "无序C根节点首结果",
+          "expression": "2个输入：t0/t1入FIFO，t2发起3拍加法，t5回流，t6寄存输出",
+          "value": 6,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "scalar输入连接",
+          "expression": "root→scalar",
+          "value": 1,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "SQT前缀",
+          "expression": "保留连接1+MUL4+SUM3",
+          "value": 8,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "其余3个结果",
+          "expression": "(4-1)*II33",
+          "value": 99,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "SQT首结果延迟",
+          "expression": "2轮×16",
+          "value": 32,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "标量出口/后配置",
+          "expression": "1+1+1+3",
+          "value": 6,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "写返回项",
+          "expression": "Lwr17+lastwrite8+cfg到末写5",
+          "value": 30,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "fixture引脚换算",
+          "expression": "test比较t.done+1-t.start",
+          "value": 1,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "总时长",
+          "expression": "28+6+24+6+1+8+99+32+6+17+8+5+1",
+          "value": 241,
+          "evidence_kind": "current-source arithmetic"
+        }
+      ],
+      "observations": {
+        "fixture_name": "scalar_0_2_4",
+        "absolute": {
+          "inst_start": 1078,
+          "cal_first": 1106,
+          "root_in_first": 1136,
+          "root_first": 1142,
+          "scalar_first": 1143,
+          "inst_done_derived_from_duration": 1319
+        },
+        "duration": 241,
+        "PSMO1_control": {
+          "fixture_name": "scalar_1_2_4",
+          "duration": 240,
+          "inst_start": 5218,
+          "cal_first": 5246,
+          "root_in_first": 5276,
+          "root_first": 5281,
+          "scalar_first": 5282
+        },
+        "note": "done=已记录start+已记录duration，不是额外独立保存的一列。"
+      },
+      "comparison": {
+        "explicit_source_dependency_formula": 241,
+        "RTL_duration": 241,
+        "error_cycles": 0,
+        "error_pct": 0,
+        "isolated_envelope_before_first_scalar_constraint": 233,
+        "lost_cycles_if_scalar_ready_assumed_too_early": 8,
+        "scope": "旧包络b.cycles245，减13后+1观察换算得233；真正schedule_pipeline取max并加入真实首结果约束，得到241。未新运行调度器。"
+      },
+      "animation": {
+        "origin": "inst_start=0",
+        "sparse_measured_frames": [
+          {
+            "cycle": 0,
+            "label": "inst_start",
+            "evidence_kind": "historical measured"
+          },
+          {
+            "cycle": 28,
+            "label": "第一输入进入cal",
+            "evidence_kind": "historical measured"
+          },
+          {
+            "cycle": 58,
+            "label": "第一根节点输入",
+            "evidence_kind": "historical measured"
+          },
+          {
+            "cycle": 64,
+            "label": "第一根节点结果",
+            "evidence_kind": "historical measured"
+          },
+          {
+            "cycle": 65,
+            "label": "第一scalar操作数",
+            "evidence_kind": "historical measured"
+          },
+          {
+            "cycle": 241,
+            "label": "inst_done",
+            "evidence_kind": "derived from measured start+duration"
+          }
+        ],
+        "model_only_frames": [
+          {
+            "cycle": 73,
+            "label": "首个SQT输入",
+            "evidence_kind": "source-derived projection"
+          },
+          {
+            "cycle": 106,
+            "label": "第2个SQT输入的依赖下界",
+            "evidence_kind": "source-derived projection"
+          },
+          {
+            "cycle": 139,
+            "label": "第3个SQT输入的依赖下界",
+            "evidence_kind": "source-derived projection"
+          },
+          {
+            "cycle": 172,
+            "label": "第4个SQT输入的依赖下界",
+            "evidence_kind": "source-derived projection"
+          },
+          {
+            "cycle": 204,
+            "label": "最后SQT结果",
+            "evidence_kind": "source-derived projection"
+          }
+        ],
+        "rules": [
+          "实心节点只放TSV保存的稀疏事件；连接线不冒充连续握手波形。",
+          "SQT操作数时刻和迭代内部格子使用虚线/教学推导图例。",
+          "切PSMO=1时根节点6→5，实测总241→240，不能宣称有序模式总是更快。"
+        ]
+      },
+      "engineering_questions": [
+        "把首SQT操作数放在inst_start会少算哪65+8拍？",
+        "为何按4个规约结果计33拍II，而不是512个输入元素？",
+        "PSMO=1在这个极短C深度竟快1拍，为什么不能外推到C=3584？"
+      ],
+      "sources": [
+        {
+          "source": "CycleSim:test/vp/vp_pipeline_rtl.tsv",
+          "lines": [
+            7,
+            7
+          ],
+          "raw_row": "scalar_0_2_4 fe01d0000030007f fe0070000000001f fe00700000000003 000000000030007f 0000006005800220 0000000000000000 0000000000000000 0000000000000000 0000000000000000 000000003f800000 0000000000000000 0000000000000001 0000215c0100055c 1078 241 1106 1142 1136 1143"
+        },
+        {
+          "source": "CycleSim:test/vp/vp_pipeline_rtl.tsv",
+          "lines": [
+            25,
+            25
+          ],
+          "raw_row": "scalar_1_2_4 fe01d0000030007f fe0070000000001f fe00700000000003 000000000030007f 0000006005800220 0000000000000000 0000000000000000 0000000000000000 0000000000000000 000000003f800000 0000000000000000 0000000000000005 0000215c0100055c 5218 240 5246 5281 5276 5282"
+        },
+        {
+          "source": "CycleSim:test/vp/rtl_tb/measure_vp_scalar_arrival.py",
+          "lines": [
+            1,
+            50
+          ]
+        },
+        {
+          "source": "CycleSim:test/vp/rtl_tb/gen_vp_l2.py",
+          "lines": [
+            1,
+            7
+          ]
+        },
+        {
+          "source": "CycleSim:test/vp/rtl_tb/gen_vp_l2.py",
+          "lines": [
+            123,
+            139
+          ]
+        },
+        {
+          "source": "CycleSim:test/vp/test_vp_pipeline.cpp",
+          "lines": [
+            61,
+            95
+          ]
+        },
+        {
+          "source": "CycleSim:simulator/include/zeus3/vector/vp_engine.h",
+          "lines": [
+            514,
+            518
+          ]
+        },
+        {
+          "source": "CycleSim:simulator/include/zeus3/vector/vp_engine.h",
+          "lines": [
+            896,
+            934
+          ]
+        },
+        {
+          "source": "CycleSim:simulator/include/zeus3/vector/vp_engine.h",
+          "lines": [
+            1149,
+            1177
+          ]
+        },
+        {
+          "source": "CycleSim:simulator/include/zeus3/vector/vp_engine.h",
+          "lines": [
+            1263,
+            1301
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dt-partial-c-8x20",
+      "title": "DT 8×20 切成两个不等宽块：为何 sum(max) 不能换成 max(sum)",
+      "classification": "real DT + ideal always-ready fixed-latency L2 timing microbenchmark",
+      "shape": {
+        "input_axes": "N,H,W,C",
+        "input": [
+          1,
+          16,
+          8,
+          20
+        ],
+        "input_dtype": "BF16",
+        "mathematical_output_order": "NCHW",
+        "mathematical_dense_output_extents": [
+          1,
+          20,
+          16,
+          8
+        ],
+        "source_surface": [
+          1,
+          16,
+          8,
+          20
+        ],
+        "recorded_destination_surface": [
+          1,
+          16,
+          8,
+          20
+        ]
+      },
+      "configuration": {
+        "order": 4,
+        "reshape": false,
+        "df_at_dt_top": 2,
+        "E": 16,
+        "Lrd": 9,
+        "Lwr": 2,
+        "source_addr_16B_units": 0,
+        "destination_addr_16B_units": 16384,
+        "loop_end": 127,
+        "loop_size": 0
+      },
+      "important_boundary": "历史timing row的DtCmd默认目的surface仍是源shape；不是正确紧凑NCHW数据布局的数值验收。真实算子需目的surface=(1,20,16,8)，不得修改输入后继续把433称为那次测量。此例只演示该冻结命令的端口块几何与周期。",
+      "measurement_boundary": "inst_start→inst_done；head=3另列，最后命令字到done为436。",
+      "calculation": [
+        {
+          "label": "每个H的输入矩阵",
+          "expression": "8 W × 20 C；C分成16+4",
+          "value": "8×16及8×4",
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "块A",
+          "expression": "fill8,drain16 → max=16",
+          "value": 16,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "块B",
+          "expression": "fill8,drain4 → max=8",
+          "value": 8,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "XFER",
+          "expression": "16个H×(16+8)",
+          "value": 384,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "读取拍",
+          "expression": "16×8×2",
+          "value": 256,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "写出拍",
+          "expression": "16×1×20",
+          "value": 320,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "NB",
+          "expression": "16×1×2",
+          "value": 32,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "Bl",
+          "expression": "min(8,4)",
+          "value": 4,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "总时长",
+          "expression": "384+32+4+9+2+2",
+          "value": 433,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "反例：把XFER写成max总拍",
+          "expression": "max(256,320)+32+4+9+2+2",
+          "value": 369,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "反例漏算",
+          "expression": "433-369",
+          "value": 64,
+          "evidence_kind": "current-source arithmetic"
+        }
+      ],
+      "observations": {
+        "primary_variant": {
+          "H": 16,
+          "W": 8,
+          "C": 20,
+          "f": [
+            8
+          ],
+          "d": [
+            16,
+            4
+          ],
+          "R": 256,
+          "write": 320,
+          "NB": 32,
+          "Bl": 4,
+          "XFER": 384,
+          "Lrd": 9,
+          "Lwr": 2,
+          "exec": 433,
+          "command_to_done": 436
+        },
+        "read_strobe_bytes": 6144,
+        "write_strobe_bytes": 5120,
+        "logical_payload_bytes": 5120,
+        "read_capacity_bytes": 8192,
+        "note": "rd_bytes是strobe统计，不能直接等同R×32或有效载荷。",
+        "control_variants": [
+          {
+            "H": 16,
+            "W": 16,
+            "C": 24,
+            "f": [
+              16
+            ],
+            "d": [
+              16,
+              8
+            ],
+            "R": 512,
+            "write": 384,
+            "NB": 32,
+            "Bl": 8,
+            "XFER": 512,
+            "Lrd": 9,
+            "Lwr": 2,
+            "exec": 565,
+            "command_to_done": 568
+          },
+          {
+            "H": 16,
+            "W": 16,
+            "C": 1,
+            "f": [
+              16
+            ],
+            "d": [
+              1
+            ],
+            "R": 256,
+            "write": 16,
+            "NB": 16,
+            "Bl": 1,
+            "XFER": 256,
+            "Lrd": 9,
+            "Lwr": 2,
+            "exec": 286,
+            "command_to_done": 289
+          },
+          {
+            "H": 16,
+            "W": 16,
+            "C": 32,
+            "f": [
+              16
+            ],
+            "d": [
+              16,
+              16
+            ],
+            "R": 512,
+            "write": 512,
+            "NB": 32,
+            "Bl": 16,
+            "XFER": 512,
+            "Lrd": 9,
+            "Lwr": 9,
+            "exec": 580,
+            "command_to_done": 583
+          }
+        ]
+      },
+      "comparison": {
+        "current_source_arithmetic": 433,
+        "RTL_exec": 433,
+        "error_cycles": 0,
+        "error_pct": 0,
+        "controls": [
+          {
+            "shape": [
+              1,
+              16,
+              16,
+              24
+            ],
+            "profile": [
+              9,
+              2
+            ],
+            "RTL": 565,
+            "model": 565
+          },
+          {
+            "shape": [
+              1,
+              16,
+              16,
+              1
+            ],
+            "profile": [
+              9,
+              2
+            ],
+            "RTL": 286,
+            "model": 286
+          },
+          {
+            "shape": [
+              1,
+              16,
+              16,
+              32
+            ],
+            "profile": [
+              9,
+              9
+            ],
+            "RTL": 580,
+            "model": 580
+          }
+        ],
+        "only_derived_profile_changes": [
+          {
+            "shape": [
+              1,
+              16,
+              16,
+              24
+            ],
+            "profile": [
+              9,
+              9
+            ],
+            "model": 572,
+            "note": "不是第44行原始profile；文档§5另有相同值，勿把第44行当572的raw row。"
+          },
+          {
+            "shape": [
+              1,
+              16,
+              16,
+              1
+            ],
+            "profile": [
+              9,
+              9
+            ],
+            "model": 293,
+            "note": "同理，第47行原始是Lwr2/286。"
+          }
+        ]
+      },
+      "animation": {
+        "rules": [
+          "可逐格展示每个H的8×20二维数据分成8×16、8×4，箭头解释行填/列排；这是数据几何。",
+          "32个块对及384个服务拍可以用累计账本动画，必须标教学投影，不能分配成声称实测的绝对start/read/write时间。",
+          "切换H/W/C仅对已有控制形态显示实测徽标；任意新shape值只能称公式预测。"
+        ],
+        "frames": [
+          {
+            "index": 0,
+            "label": "固定H=0，切C",
+            "matrix": [
+              8,
+              20
+            ],
+            "chunks": [
+              [
+                8,
+                16
+              ],
+              [
+                8,
+                4
+              ]
+            ]
+          },
+          {
+            "index": 1,
+            "label": "块A填8拍，排16拍",
+            "fill": 8,
+            "drain": 16,
+            "charged": 16
+          },
+          {
+            "index": 2,
+            "label": "块B填8拍，排4拍",
+            "fill": 8,
+            "drain": 4,
+            "charged": 8
+          },
+          {
+            "index": 3,
+            "label": "H0累计24服务拍",
+            "cumulative": 24
+          },
+          {
+            "index": 4,
+            "label": "重复16个H",
+            "cumulative": 384
+          },
+          {
+            "index": 5,
+            "label": "加方向交接和启动返回项",
+            "additional": 49,
+            "total": 433
+          }
+        ]
+      },
+      "engineering_questions": [
+        "为什么该例R=256、W=320，XFER却是384？",
+        "C24变C1能否只按有效字节比例缩短？",
+        "一张cycle表正确，是否证明目的surface与逐元素位置正确？"
+      ],
+      "sources": [
+        {
+          "source": "CycleSim:dev_docs/sim/vp_dt/63_dt_calibration.tsv",
+          "lines": [
+            38,
+            38
+          ],
+          "raw_row": "p\t2\t4\t0\t1\t16\t8\t20\t9\t2\t256\t320\t6144\t5120\t433\t3\t128\t2\t1\t6b\t256\t320\t373\t256\t320\t433"
+        },
+        {
+          "source": "CycleSim:dev_docs/sim/vp_dt/63_dt_calibration.tsv",
+          "lines": [
+            44,
+            44
+          ],
+          "raw_row": "p\t2\t4\t0\t1\t16\t16\t24\t9\t2\t512\t384\t12288\t12288\t565\t3\t128\t4\t1\t6b\t512\t384\t445\t512\t384\t565"
+        },
+        {
+          "source": "CycleSim:dev_docs/sim/vp_dt/63_dt_calibration.tsv",
+          "lines": [
+            47,
+            47
+          ],
+          "raw_row": "p\t2\t4\t0\t1\t16\t16\t1\t9\t2\t256\t16\t4096\t512\t286\t3\t128\t2\t1\t6b\t256\t16\t61\t256\t16\t286"
+        },
+        {
+          "source": "CycleSim:dev_docs/sim/vp_dt/63_dt_calibration.tsv",
+          "lines": [
+            96,
+            96
+          ],
+          "raw_row": "turn\t2\t4\t0\t1\t16\t16\t32\t9\t9\t512\t512\t16384\t16384\t580\t3\t64\t8\t1\t1c\t512\t512\t573\t512\t512\t580"
+        },
+        {
+          "source": "CycleSim:test/dt/rtl_tb/measure_dt_cost.py",
+          "lines": [
+            736,
+            764
+          ]
+        },
+        {
+          "source": "CycleSim:test/dt/rtl_tb/dt_cmd.py",
+          "lines": [
+            54,
+            103
+          ]
+        },
+        {
+          "source": "CycleSim:dev_docs/sim/vp_dt/63_dt_calibration.md",
+          "lines": [
+            443,
+            489
+          ]
+        },
+        {
+          "source": "CycleSim:simulator/include/zeus3/data/dt_engine.h",
+          "lines": [
+            238,
+            244
+          ]
+        },
+        {
+          "source": "CycleSim:simulator/include/zeus3/data/dt_engine.h",
+          "lines": [
+            280,
+            324
+          ]
+        }
+      ]
+    },
+    {
+      "id": "four-dt-shared-l2",
+      "title": "1、2、4 个 DT 同时工作：DT0 只多124拍，邻居宽口却丢掉一半服务",
+      "classification": "1/2/4 actual DT RTL instances + actual shared L2 + synthetic traffic on PE read port; no full PE compute unit",
+      "shape": {
+        "tile_axes": "N,H,W,C",
+        "per_DT_tile": [
+          1,
+          8,
+          16,
+          32
+        ],
+        "per_DT_source_surface": [
+          1,
+          8,
+          16,
+          256
+        ],
+        "per_DT_destination_surface": [
+          1,
+          8,
+          16,
+          32
+        ],
+        "dtype": "BF16",
+        "order": 0,
+        "note": "sourceSC256是allocation pitch，计算tile TC仍32；不能把两个C混为一谈。"
+      },
+      "configuration": {
+        "core_MHz": 400,
+        "L2_MHz": 400,
+        "phase": "same edge",
+        "DT_counts": [
+          1,
+          2,
+          4
+        ],
+        "source_addr_16B_units": "i*0x400",
+        "destination_addr_16B_units": "0x4010+i*0x900",
+        "launch": "same five command beats sent simultaneously to active instances, bypassing actual inst_ctrl queue",
+        "source_pitch_bytes": 512,
+        "source_macro_stride": 32,
+        "L2_macros": 128,
+        "macro_bytes": 16,
+        "synthetic_neighbor": {
+          "port": "PE array read / master3",
+          "width_bytes": 128,
+          "base_16B_units": 0,
+          "stride_16B_units": 8,
+          "burst": 1,
+          "gap": 0,
+          "strobe": 255,
+          "request_behavior": "hold valid until ready; continuous offers; not an AL1 or complete PE workload"
+        },
+        "other_masters": "idle"
+      },
+      "measurement_boundary": "exec_只保存run_l2(...)[0]即DT0的inst_start→done；pe_rate=pe_accw/win，win是所有活动DT执行窗口并集的注册门控，端点有1拍采样偏移。两者不是同一个窗口。",
+      "calculation": [
+        {
+          "label": "行轴W",
+          "expression": "W=16，Q=8",
+          "value": 16,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "每条读写拍",
+          "expression": "8×16×ceil(32/16)",
+          "value": 256,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "NB",
+          "expression": "8×1×2",
+          "value": 16,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "隔离解析基线",
+          "expression": "pass:256+16+9+9+3",
+          "value": 293,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "源pitch",
+          "expression": "SC256×2 B / 16 B",
+          "value": 32,
+          "evidence_kind": "current-source arithmetic"
+        },
+        {
+          "label": "宽口基线",
+          "expression": "独占时1 accepted beat/cycle",
+          "value": 1,
+          "evidence_kind": "current-source arithmetic"
+        }
+      ],
+      "observations": [
+        {
+          "n_DT": 1,
+          "DT0_exec": 302,
+          "DT0_read": 256,
+          "DT0_write": 256,
+          "DT0_rdstall": 21,
+          "DT0_wrstall": 0,
+          "wide_rate": 0.91391,
+          "wide_loss_pct": 8.609
+        },
+        {
+          "n_DT": 2,
+          "DT0_exec": 303,
+          "DT0_read": 256,
+          "DT0_write": 256,
+          "DT0_rdstall": 22,
+          "DT0_wrstall": 0,
+          "wide_rate": 0.59016,
+          "wide_loss_pct": 40.984
+        },
+        {
+          "n_DT": 4,
+          "DT0_exec": 426,
+          "DT0_read": 256,
+          "DT0_write": 256,
+          "DT0_rdstall": 136,
+          "DT0_wrstall": 0,
+          "wide_rate": 0.50816,
+          "wide_loss_pct": 49.184
+        }
+      ],
+      "comparison": {
+        "baseline_model_kind": "当前DtEngine::analyse隔离几何式，不是当前完整live/系统重放结果",
+        "baseline_each": 293,
+        "deltas_vs_baseline": [
+          9,
+          10,
+          133
+        ],
+        "baseline_relative_errors_pct": [
+          -2.980132450331126,
+          -3.3003300330033003,
+          -31.220657276995304
+        ],
+        "N4_vs_N1_extra_DT0": 124,
+        "unknown": [
+          "DT1/2/3的逐条start/done未保存在此汇总TSV中，不能构造全部DT的真实甘特图或makespan。",
+          "win和pe_accw原始整数没有被本TSV保存；不能从已四舍五入rate逆造整数握手记录。",
+          "当前解析式不预测这些跨master服务损失；完整live路径是否逐行覆盖需单独资格，未在本任务运行。"
+        ],
+        "rounding": "loss_pct用未四舍五入rate计算后保留3位；不能要求用表中5位rate反算末位完全一致。"
+      },
+      "animation": {
+        "rules": [
+          "实例数切换只切换真实记录的汇总指标，DT1..3画活动资源卡而非虚构完成时间条。",
+          "可按descriptor推导宏地址请求位置；必须标地址几何推导，不是按cycle实测的grant动画。",
+          "速率用“每1000个窗口cycle约accept多少拍”统计流量尺，不能随机点亮红格伪装真实stall时刻。",
+          "宽口称“PE读端口流量发生器”，不得标“PE矩阵乘时长”。"
+        ],
+        "source_macro_positions_first_8_geometry": [
+          0,
+          32,
+          64,
+          96,
+          0,
+          32,
+          64,
+          96
+        ],
+        "all_source_bases_macro_mod128": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "all_destination_bases_macro_mod128": [
+          16,
+          16,
+          16,
+          16
+        ],
+        "states": [
+          {
+            "N": 1,
+            "DT0_end_relative": 302,
+            "wide_approx_accepted_per_1000": 913.91
+          },
+          {
+            "N": 2,
+            "DT0_end_relative": 303,
+            "wide_approx_accepted_per_1000": 590.16
+          },
+          {
+            "N": 4,
+            "DT0_end_relative": 426,
+            "wide_approx_accepted_per_1000": 508.16
+          }
+        ]
+      },
+      "engineering_questions": [
+        "为什么SC256不改变有效tile与256读拍，却改变宏地址步长？",
+        "DT0从302到303几乎没变，能否说第二DT免费？",
+        "为什么不能把49.184%当完整kernel slowdown？",
+        "为什么不能把四条DT都画成426拍结束？"
+      ],
+      "sources": [
+        {
+          "source": "CycleSim:dev_docs/sim/vp_dt/63_dt_intfpred.tsv",
+          "lines": [
+            69,
+            69
+          ],
+          "raw_row": "intfpred_n\tstride 32 1x8x16x32 sc=256\t\t\t\t1\t302\t256\t256\t21\t0\t0.91391\t8.609\t\t"
+        },
+        {
+          "source": "CycleSim:dev_docs/sim/vp_dt/63_dt_intfpred.tsv",
+          "lines": [
+            70,
+            70
+          ],
+          "raw_row": "intfpred_n\tstride 32 1x8x16x32 sc=256\t\t\t\t2\t303\t256\t256\t22\t0\t0.59016\t40.984\t\t"
+        },
+        {
+          "source": "CycleSim:dev_docs/sim/vp_dt/63_dt_intfpred.tsv",
+          "lines": [
+            71,
+            71
+          ],
+          "raw_row": "intfpred_n\tstride 32 1x8x16x32 sc=256\t\t\t\t4\t426\t256\t256\t136\t0\t0.50816\t49.184\t\t"
+        },
+        {
+          "source": "CycleSim:dev_docs/sim/vp_dt/63_dt_intfpred.tsv",
+          "lines": [
+            63,
+            63
+          ],
+          "raw_row": "intfpred_n\tstride 4  1x8x16x32 sc=32\t\t\t\t1\t293\t256\t256\t12\t0\t0.80546\t19.454\t\t"
+        },
+        {
+          "source": "CycleSim:dev_docs/sim/vp_dt/63_dt_intfpred.tsv",
+          "lines": [
+            65,
+            65
+          ],
+          "raw_row": "intfpred_n\tstride 4  1x8x16x32 sc=32\t\t\t\t4\t293\t256\t256\t12\t0\t0.55405\t44.595\t\t"
+        },
+        {
+          "source": "CycleSim:test/dt/rtl_tb/measure_dt_cost.py",
+          "lines": [
+            534,
+            573
+          ]
+        },
+        {
+          "source": "CycleSim:test/dt/rtl_tb/measure_dt_cost.py",
+          "lines": [
+            852,
+            855
+          ]
+        },
+        {
+          "source": "CycleSim:test/dt/rtl_tb/measure_dt_cost.py",
+          "lines": [
+            1173,
+            1183
+          ]
+        },
+        {
+          "source": "CycleSim:test/dt/rtl_tb/measure_dt_cost.py",
+          "lines": [
+            1257,
+            1277
+          ]
+        },
+        {
+          "source": "CycleSim:test/dt/rtl_tb/tb_dt_l2.v",
+          "lines": [
+            1,
+            34
+          ]
+        },
+        {
+          "source": "CycleSim:test/dt/rtl_tb/tb_dt_l2.v",
+          "lines": [
+            174,
+            217
+          ]
+        },
+        {
+          "source": "CycleSim:test/dt/rtl_tb/tb_dt_l2.v",
+          "lines": [
+            298,
+            309
+          ]
+        },
+        {
+          "source": "CycleSim:test/dt/rtl_tb/tb_dt_l2.v",
+          "lines": [
+            375,
+            419
+          ]
+        },
+        {
+          "source": "CycleSim:simulator/include/zeus3/data/dt_engine.h",
+          "lines": [
+            280,
+            324
+          ]
+        }
+      ]
+    }
+  ],
+  "references": [
+    {
+      "repository": "CycleSim",
+      "path": "dev_docs/sim/vp_dt/62_vp_b2b.tsv",
+      "sha256": "ae147552ad81d76b0c72cfc3958522ea7e9a5942a9649b4873d2339c2d963267"
+    },
+    {
+      "repository": "CycleSim",
+      "path": "test/vp/rtl_tb/measure_vp_b2b.py",
+      "sha256": "cb3d5d431610108ae7b7b0f6d19d9d87094c7921f78078682a24b4cc80806fb3"
+    },
+    {
+      "repository": "CycleSim",
+      "path": "test/vp/rtl_tb/vp_prog.py",
+      "sha256": "c9f23fccdeb391b6e2a17422086b33da818884af8f105a5da51a7d6ab6493446"
+    },
+    {
+      "repository": "CycleSim",
+      "path": "simulator/include/zeus3/vector/vp_engine.h",
+      "sha256": "0ffef2917c73d1b69cd9be62b2c684208d99eba014efe065307a46c0ee09eb5b"
+    },
+    {
+      "repository": "CycleSim",
+      "path": "test/vp/vp_pipeline_rtl.tsv",
+      "sha256": "15d79316552ee1d7d8d46c6952753a746a757a5ffd3e81b63b07ca36d38402a2"
+    },
+    {
+      "repository": "CycleSim",
+      "path": "test/vp/rtl_tb/measure_vp_scalar_arrival.py",
+      "sha256": "31679ae189cd665335f87ebaa803d09d3d629b4fc612192f78cbcd25e9691896"
+    },
+    {
+      "repository": "CycleSim",
+      "path": "test/vp/rtl_tb/gen_vp_l2.py",
+      "sha256": "ebbf96485a879075e6beb7f7c691f688cbee20535c5f364df2d0c1ac7f8f2043"
+    },
+    {
+      "repository": "CycleSim",
+      "path": "test/vp/test_vp_pipeline.cpp",
+      "sha256": "a13103bcab9bcdf584ad74cb76dff13f26724919f8ee89cc765f436d1fc19152"
+    },
+    {
+      "repository": "CycleSim",
+      "path": "dev_docs/sim/vp_dt/63_dt_calibration.tsv",
+      "sha256": "f1db23dab4e281ca19434dc95bf4d9835d4793382c22d70441b6c7b02e5369d6"
+    },
+    {
+      "repository": "CycleSim",
+      "path": "test/dt/rtl_tb/measure_dt_cost.py",
+      "sha256": "72ff917954779adbd19c5c7a3ce1aededb32ceff70e167dcb47616838613a6b5"
+    },
+    {
+      "repository": "CycleSim",
+      "path": "test/dt/rtl_tb/dt_cmd.py",
+      "sha256": "ff47cc3aa7bf75d1a683766b57b6b1a9fe6302936f251d64ae2e66a4cc262c5a"
+    },
+    {
+      "repository": "CycleSim",
+      "path": "dev_docs/sim/vp_dt/63_dt_calibration.md",
+      "sha256": "b7fb320285cd37b2aaea5fc3580e43d768c4e55a37c50b84f23dc664bbe2bf2b"
+    },
+    {
+      "repository": "CycleSim",
+      "path": "simulator/include/zeus3/data/dt_engine.h",
+      "sha256": "78ddb541fa38fcf15a0c666aabec6697db445fd001ba00b4215c6a1de476fc9f"
+    },
+    {
+      "repository": "CycleSim",
+      "path": "dev_docs/sim/vp_dt/63_dt_intfpred.tsv",
+      "sha256": "dbce7aa1e29404580883cbad8da2a51716585e7c6f579798f165fdb8e61ac30f"
+    },
+    {
+      "repository": "CycleSim",
+      "path": "test/dt/rtl_tb/tb_dt_l2.v",
+      "sha256": "da046772d7c89cd0aba3749ca1246030bc0cb005037b8897a226157ed512f5b2"
+    },
+    {
+      "repository": "RTL reference copy",
+      "path": "zeus518/vp_v3/sub_module/ctrl/vp_518_wr_addr_gen.v",
+      "sha256": "5c63e742abccd71b30e2dc581126a09b7715e568ba5ca66b3d1151963e91cf4e"
+    },
+    {
+      "repository": "RTL reference copy",
+      "path": "zeus518/vp_v3/sub_module/cal/vp_518_acc.v",
+      "sha256": "c5603167dd3ecc4e321878a765c2b5998bbabdd67de476097d099139d44952e1"
+    },
+    {
+      "repository": "RTL reference copy",
+      "path": "zeus518/vp_v3/sub_module/cal/vp_518_acc_tree.v",
+      "sha256": "a5e7b40a5ec0ce74415e4df4c21fc0983679442ffd11e410052bba2411ea4892"
+    },
+    {
+      "repository": "RTL reference copy",
+      "path": "zeus518/vp_v3/sub_module/cal/scl/vp_518_square_root_div.v",
+      "sha256": "8047cfdc50e050258626377b81b50aad587c5969bbc83032a40ac10c6ce7211f"
+    },
+    {
+      "repository": "RTL reference copy",
+      "path": "zeus518/dt/dt_inst_parse.v",
+      "sha256": "2b4a60d0056f07abf8e18090a54af83f2bb5de5e53153b9fa865586930b3b729"
+    },
+    {
+      "repository": "RTL reference copy",
+      "path": "zeus518/dt/rd_dtbuf_ctrl.v",
+      "sha256": "20512679d92f93e5e17fc127ab0b9177025a213aba6df29eb9d4a4025e2af0b6"
+    },
+    {
+      "repository": "RTL reference copy",
+      "path": "zeus518/l2buffer_ctrl/rtl/z518_l2_l2buffer_ctrl.v",
+      "sha256": "44a2022879adef52e1b1d7dfdd03983ff836fb7825c981a492e6874d624bd05e"
+    },
+    {
+      "repository": "CycleSim",
+      "path": "CLAUDE.md",
+      "sha256": "bbb56b59c424193d52e885f0267ccbe665157c13130d2d4252eee46152e6ce51"
+    },
+    {
+      "repository": "CycleSim",
+      "path": "PROGRESS.md",
+      "sha256": "963eca71ed0b3d30e25979a222021eb7ede515fc28d41f18f69e2b38fa7c8b3c"
+    }
+  ]
+}

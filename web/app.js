@@ -97,6 +97,7 @@ function renderChapter(id, section) {
  initLoweringExplorers();
  initSyncExplorers();
  initAttentionLabs();
+ initCycleCasebooks();
  enableFigureZoom();
  initInterviewQuestions();
  if(section)scrollChapterAnchor(section);

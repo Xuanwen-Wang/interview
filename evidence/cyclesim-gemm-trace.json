@@ -1,0 +1,364 @@
+{
+  "id": "gemm128-rtl",
+  "shape": "BF16 GEMM M=N=K=128, 1 core",
+  "job": "26c7e41c609f",
+  "originEvent": "first CT trace event",
+  "originRawCycle": 1924,
+  "clockMHz": 400,
+  "ctEd": 652,
+  "total": 2534,
+  "rows": [
+    {
+      "unit": "LD",
+      "instance": 0,
+      "opcodeLow": 8,
+      "start": 53,
+      "end": 161,
+      "duration": 108
+    },
+    {
+      "unit": "VP",
+      "instance": 0,
+      "opcodeLow": 8,
+      "start": 251,
+      "end": 842,
+      "duration": 591
+    },
+    {
+      "unit": "LD",
+      "instance": 0,
+      "opcodeLow": 8,
+      "start": 886,
+      "end": 1061,
+      "duration": 175
+    },
+    {
+      "unit": "PE",
+      "instance": 0,
+      "opcodeLow": 8,
+      "start": 1076,
+      "end": 1377,
+      "duration": 301
+    },
+    {
+      "unit": "DT",
+      "instance": 0,
+      "opcodeLow": 8,
+      "start": 876,
+      "end": 2001,
+      "duration": 1125
+    },
+    {
+      "unit": "VP",
+      "instance": 0,
+      "opcodeLow": 9,
+      "start": 2043,
+      "end": 2238,
+      "duration": 195
+    },
+    {
+      "unit": "ST",
+      "instance": 0,
+      "opcodeLow": 8,
+      "start": 2276,
+      "end": 2528,
+      "duration": 252
+    }
+  ],
+  "mailEvents": [
+    {
+      "unit": "VP",
+      "event": "start",
+      "t": 440
+    },
+    {
+      "unit": "ST",
+      "event": "start",
+      "t": 441
+    },
+    {
+      "unit": "ST",
+      "event": "done",
+      "t": 441
+    },
+    {
+      "unit": "ST",
+      "event": "start",
+      "t": 443
+    },
+    {
+      "unit": "ST",
+      "event": "done",
+      "t": 443
+    },
+    {
+      "unit": "DT",
+      "event": "start",
+      "t": 444
+    },
+    {
+      "unit": "DT",
+      "event": "done",
+      "t": 444
+    },
+    {
+      "unit": "VP",
+      "event": "start",
+      "t": 452
+    },
+    {
+      "unit": "VP",
+      "event": "start",
+      "t": 458
+    },
+    {
+      "unit": "VP",
+      "event": "start",
+      "t": 460
+    },
+    {
+      "unit": "PE",
+      "event": "start",
+      "t": 484
+    },
+    {
+      "unit": "PE",
+      "event": "done",
+      "t": 484
+    },
+    {
+      "unit": "VP",
+      "event": "start",
+      "t": 485
+    },
+    {
+      "unit": "VP",
+      "event": "start",
+      "t": 487
+    },
+    {
+      "unit": "VP",
+      "event": "start",
+      "t": 489
+    },
+    {
+      "unit": "VP",
+      "event": "start",
+      "t": 527
+    },
+    {
+      "unit": "VP",
+      "event": "done",
+      "t": 843
+    },
+    {
+      "unit": "VP",
+      "event": "done",
+      "t": 844
+    },
+    {
+      "unit": "VP",
+      "event": "done",
+      "t": 845
+    },
+    {
+      "unit": "DT",
+      "event": "start",
+      "t": 845
+    },
+    {
+      "unit": "DT",
+      "event": "done",
+      "t": 845
+    },
+    {
+      "unit": "VP",
+      "event": "done",
+      "t": 846
+    },
+    {
+      "unit": "VP",
+      "event": "done",
+      "t": 847
+    },
+    {
+      "unit": "DT",
+      "event": "start",
+      "t": 847
+    },
+    {
+      "unit": "DT",
+      "event": "done",
+      "t": 847
+    },
+    {
+      "unit": "VP",
+      "event": "done",
+      "t": 848
+    },
+    {
+      "unit": "VP",
+      "event": "done",
+      "t": 849
+    },
+    {
+      "unit": "VP",
+      "event": "done",
+      "t": 850
+    },
+    {
+      "unit": "DT",
+      "event": "start",
+      "t": 877
+    },
+    {
+      "unit": "DT",
+      "event": "start",
+      "t": 878
+    },
+    {
+      "unit": "PE",
+      "event": "start",
+      "t": 1077
+    },
+    {
+      "unit": "PE",
+      "event": "done",
+      "t": 1378
+    },
+    {
+      "unit": "LD",
+      "event": "start",
+      "t": 1380
+    },
+    {
+      "unit": "LD",
+      "event": "done",
+      "t": 1380
+    },
+    {
+      "unit": "DT",
+      "event": "done",
+      "t": 2002
+    },
+    {
+      "unit": "DT",
+      "event": "done",
+      "t": 2003
+    },
+    {
+      "unit": "VP",
+      "event": "start",
+      "t": 2240
+    },
+    {
+      "unit": "VP",
+      "event": "done",
+      "t": 2240
+    },
+    {
+      "unit": "PE",
+      "event": "start",
+      "t": 2240
+    },
+    {
+      "unit": "PE",
+      "event": "done",
+      "t": 2240
+    },
+    {
+      "unit": "VP",
+      "event": "start",
+      "t": 2242
+    },
+    {
+      "unit": "VP",
+      "event": "done",
+      "t": 2242
+    },
+    {
+      "unit": "VP",
+      "event": "start",
+      "t": 2244
+    },
+    {
+      "unit": "VP",
+      "event": "done",
+      "t": 2244
+    },
+    {
+      "unit": "DT",
+      "event": "start",
+      "t": 2246
+    },
+    {
+      "unit": "DT",
+      "event": "done",
+      "t": 2246
+    },
+    {
+      "unit": "ST",
+      "event": "start",
+      "t": 2277
+    },
+    {
+      "unit": "ST",
+      "event": "start",
+      "t": 2278
+    },
+    {
+      "unit": "ST",
+      "event": "done",
+      "t": 2529
+    },
+    {
+      "unit": "ST",
+      "event": "done",
+      "t": 2530
+    },
+    {
+      "unit": "DT",
+      "event": "start",
+      "t": 2531
+    },
+    {
+      "unit": "DT",
+      "event": "done",
+      "t": 2531
+    },
+    {
+      "unit": "VP",
+      "event": "start",
+      "t": 2532
+    },
+    {
+      "unit": "VP",
+      "event": "done",
+      "t": 2532
+    },
+    {
+      "unit": "VP",
+      "event": "start",
+      "t": 2534
+    },
+    {
+      "unit": "VP",
+      "event": "done",
+      "t": 2534
+    }
+  ],
+  "sources": [
+    {
+      "path": "test/vcs/results/gemm_mkn_blocked_aligned.26c7e41c609f/vcs/output_trace_core0.bin",
+      "sha256": "60a212b9e16d9f7b5a55080ef01b1ded27ef578eedc21c87d42a157fd2c39d64"
+    },
+    {
+      "path": "test/vcs/results/gemm_mkn_blocked_aligned.26c7e41c609f/vcs/trace_time_alignment.json",
+      "sha256": "ac97c531221d29224a6d59dade472a69ac7ea223266883b425077da768abceaf"
+    },
+    {
+      "path": "tools/scripts/decode_vcs_trace.py",
+      "sha256": "f4d790821cc5e8f166b0d6fa85d40cfcff0a7028e1d3140907bbd65d22eaa40f"
+    }
+  ]
+}

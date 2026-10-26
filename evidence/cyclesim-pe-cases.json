@@ -1,0 +1,4449 @@
+{
+  "schema_version": 1,
+  "provenance": {
+    "collected_date": "2026-10-26",
+    "source_repository": "Zeus3Simulator",
+    "source_head": "382c4f151fb8a6b59227f7a168ab231484b0864c",
+    "source_dirty": [
+      "M PROGRESS.md"
+    ],
+    "method": "只读当前源码、历史 TSV 和冻结控制波形；未编译、未执行 CycleSim、未运行 RTL/VCS；数值运算仅为公式手算与历史文件统计。",
+    "rtl_revision": "unknown: source drop has no Git metadata",
+    "source_files": [
+      {
+        "path": "simulator/include/zeus3/tensor/pe_engine.h",
+        "sha256": "1908864c00fa0abe5961ee3acb59b90839cd53191bc4d9841ab3ad0ffc6a23bb"
+      },
+      {
+        "path": "simulator/include/zeus3/tensor/pe_int4_timing.h",
+        "sha256": "baa9a7f913516be9c241d1fbd35af2b8826d27f2cb14ee18de215c7709edccbb"
+      },
+      {
+        "path": "simulator/include/zeus3/tensor/pe_int4_consumer.h",
+        "sha256": "1fb2f161f295f7c24e231be1de5b1f628c030f14fe85517c00d14a7abced9760"
+      },
+      {
+        "path": "simulator/include/zeus3/tensor/wl1_int4_path.h",
+        "sha256": "2e0aa0d1722686cda8ee77eb1315ee6e7fadd630d1028a8093022a0b461c04d6"
+      },
+      {
+        "path": "test/pe/rtl_tb/pe_cmd.py",
+        "sha256": "4cdd51fceacb2cd44fbd9933fa7edff16e747c75db0d042bbf9e94fbf9ee73f7"
+      },
+      {
+        "path": "test/pe/rtl_tb/measure_pe_array.py",
+        "sha256": "c569bb5c0737612efe70c9916346a9918746a0ba3449d5f8bbe6101b705df790"
+      },
+      {
+        "path": "test/pe/rtl_tb/tb_pe_array.v",
+        "sha256": "c96fab8fe7d2297e43f901476ece60d8fe882e9eecdec10a092ab9874cfae96e"
+      },
+      {
+        "path": "test/pe/rtl_tb/measure_pe_mt.py",
+        "sha256": "2740da4f477711c859f99544e9907fa999e89d3f14c03ef4133ce48aef2c67c7"
+      },
+      {
+        "path": "test/pe/rtl_tb/tb_pe_mt.v",
+        "sha256": "d44c96af5b4480f57d9fac5c33efebc8db1018e32d4e8ea194967f358820070f"
+      },
+      {
+        "path": "dev_docs/sim/pe_weight/72_pe_envelope.tsv",
+        "sha256": "5b4fe5bd2a397623d5656c85a88654287ed80e05ade61fd8182ddcf90be2bd29"
+      },
+      {
+        "path": "dev_docs/sim/pe_weight/72_pe_mt.tsv",
+        "sha256": "949aad24a4aeadcf9ac4537d35c8735f48ccfceea49cb320fe3939a967f8f50f"
+      },
+      {
+        "path": "dev_docs/sim/pe_weight/72_pe_calibration.md",
+        "sha256": "84b6111f04482383d923e98cadb0f4d0afeba4137cd59fba8e2371e4d9e8b33d"
+      },
+      {
+        "path": "test/pe/int4_rtl/cases.tsv",
+        "sha256": "5995dc892fb101c522f4736688f5e9ea2dd90e76d682d7200f8477caf510077e"
+      },
+      {
+        "path": "test/pe/int4_rtl/README.md",
+        "sha256": "b0d409154cfe30c4657be9db33641aa56a9f436e7cd7fd3c3bc8114a7fa00d86"
+      },
+      {
+        "path": "test/pe/int4_rtl/vcs_repeats.json",
+        "sha256": "53276bd75f142229a3de81bc442151ebdeb3b8f3a916f55162da5971bfc14eed"
+      },
+      {
+        "path": "test/pe/int4_rtl/issue16_calibrated.json",
+        "sha256": "105da1a8bc59a70ea314cb3a43c0d2cc6d59f4c333900bd442ec18655286d607"
+      },
+      {
+        "path": "test/pe/test_pe_int4_wave.cpp",
+        "sha256": "37833cd9ef579b49374439068c7baf689ab05955baa5d2b1ba064cffafc99557"
+      },
+      {
+        "path": "test/pe/test_pe_int4_calibration.cpp",
+        "sha256": "0f13899462bcf30a803b87a2dab425cade312d26a57e82bd047c85f10dcfde8e"
+      },
+      {
+        "path": "test/wl1/int4_wave/provenance.json",
+        "sha256": "0b8a1b3828a345b1d37a3e0f80cbadbda2a6ed5ec5f4a72d03f64b0e2ce4af8d"
+      },
+      {
+        "path": "test/wl1/int4_wave/README.md",
+        "sha256": "c32002f6dd1fa96970275a236eb594f105738aaed9c05520ed76ef8b289c5d12"
+      },
+      {
+        "path": "tools/src/model_run.h",
+        "sha256": "06c9abd39f8c93dd27736aac44dfe871eda5258b288621057e0d08a334c09be7"
+      },
+      {
+        "path": "tools/src/sim_daemon.cpp",
+        "sha256": "54464f0a30814a9581dc1dc762929399bb45281d6c85646bb91e743f00046a0a"
+      }
+    ],
+    "rtl_files": [
+      {
+        "path": "zeus518/pe_ctrl/pe_ctrl_logic.v",
+        "sha256": "f52913bf2bbd4cba3b85974cbe67fedd6874466f2dc42e0bd5deafe94db9eb7e"
+      },
+      {
+        "path": "zeus518/pe_ctrl/pec_pipelines.v",
+        "sha256": "3bf715bc9c80ed82cec6c75bfad94a9ad77c72f67bbad29414f445282973e6c2"
+      },
+      {
+        "path": "zeus518/pegroup/pe518_al1.v",
+        "sha256": "5f35c60924b10919c20575c72e3c557b525835133e12056a42f642010ccfa887"
+      },
+      {
+        "path": "zeus518/pegroup/pe518_al1_mt_coord_cal.v",
+        "sha256": "e892c578ddae91c3c31b85b75db16c9e7465b748b75efb9b006b5b18f5fafd13"
+      },
+      {
+        "path": "zeus518/pegroup/pe518_alu_ctrl.v",
+        "sha256": "67efd29a15325f3266f43cd2365a8a2f1db148927870bb3b0327c169cd49dc4b"
+      },
+      {
+        "path": "zeus518/pegroup/pe518_ol1_ctrl.v",
+        "sha256": "76972f03bc8d29f44e9257e7de402a4c618c13c7abbed65ad8447e15555df11e"
+      },
+      {
+        "path": "zeus518/pegroup/pegroup518_dt.v",
+        "sha256": "e7ce490d584a77c69226ff4cf3bd152a218ed6e2183678fc0617c617e0b34cfb"
+      },
+      {
+        "path": "zeus518/wl1/wl1_518_uscale_ctrl.v",
+        "sha256": "a903434d465fdb84cb81468af77fd36389607778e64dce15f2d49a844603956c"
+      },
+      {
+        "path": "zeus518/wl1/wl1_518_rd_buffer.v",
+        "sha256": "65feb4f1af5f50030240d49941d09d9fc48ee314dc2acf9d2379e1feafb54bf1"
+      }
+    ]
+  },
+  "terms": {
+    "N/H/W/C/K": "activation [N,H,W,C], weight [C,K], output [N,H,W,K]; N is batch, W flattened spatial/token positions only for these fixed examples.",
+    "KC": "8 units in one group split C and their partial sums are combined; groups split K.",
+    "KW": "8 units in one group split W; groups split K.",
+    "K-cache": "weight address/layout organization used by this instruction path, not a promise of generic cross-command caching.",
+    "mini_tile": "PE 内一次 activation 供数/AL1 消费与信用回收的工作块，不等于用户矩阵 tile。",
+    "MTC_encoding": "72_pe_mt/envelope TSV: decoded count. int4_rtl/cases.tsv and PeOp: raw extent-1. Always show MTC_count and MTC_raw explicitly."
+  },
+  "bf16_mtc_sweep": {
+    "title": "同一 2×768 乘 768×128，为什么调大 MTC 先快后慢",
+    "boundary": "历史 RTL 台架真实 pe_ctrl + 8 real groups/64 units、sum、内部 DT 与 CDC；WL1 data always valid；L2 行为模型 in-order、1 txn/cycle、read/write latency 9；PE/core 各自400 MHz。",
+    "source_period_half_ps": 1250,
+    "bench_arithmetic_data": "activation return uses read address pattern (tb_pe_array.v:104), WL1 data ideal supply. This is a timing calibration microbenchmark, not a model numerical acceptance.",
+    "all_command_defaults": {
+      "source_shape_equals_tile": true,
+      "destination_shape": [
+        1,
+        1,
+        2,
+        128
+      ],
+      "weight_source_C": 768,
+      "weight_source_N": 1,
+      "source_base_bytes": 4096,
+      "destination_base_bytes": 262144,
+      "weight_base": 0,
+      "scale_base": 0,
+      "WBS": 7,
+      "UScale_enabled": false,
+      "UScale_group": 0,
+      "weight_storage_mode": 0,
+      "indexed": false,
+      "overwrite_mode": 0,
+      "weight_offsets_NCK": [
+        0,
+        0,
+        0
+      ],
+      "loop_read_end_size": [
+        127,
+        127
+      ],
+      "loop_write_end_size": [
+        127,
+        127
+      ]
+    },
+    "model_config_warning": "为解释理想 WL1 台架，人工公式将供数设为2048 B/PE-cycle，不挂 Wl1；默认生产工具 attach Wl1 且默认参数683并非这个台架。若误换成常量683，weight_cycles会变为72，部分行会改变瓶颈；不能混用。69/73是模型配置，不能把每行残差解释成新测固定延迟。",
+    "variants": [
+      {
+        "id": "mtc1",
+        "inputs": {
+          "N": 1,
+          "H": 1,
+          "W": 2,
+          "C": 768,
+          "K": 128,
+          "activation_dtype": "BF16",
+          "weight_dtype": "BF16",
+          "output_dtype": "FP32",
+          "mode": "KC",
+          "MTW_count": 2,
+          "MTK_count": 1,
+          "MTC_count": 1,
+          "MTC_raw": 0
+        },
+        "historical_rtl": {
+          "values": {
+            "case": "mtc1",
+            "tn": 1,
+            "th": 1,
+            "tw": 2,
+            "tc": 768,
+            "tk": 128,
+            "df_a": "bf16",
+            "df_w": "bf16",
+            "df_o": "fp32",
+            "ymode": 1,
+            "mtw": 2,
+            "mtk": 1,
+            "mtc": 1,
+            "A": 2,
+            "ii": 2.0,
+            "M": 2,
+            "nC": 12,
+            "nK": 1,
+            "nKB": 1,
+            "passes": 24,
+            "tw_pad": 2,
+            "T_comp": 48,
+            "T_wr": 8,
+            "T_rd": 24,
+            "rd_beats": 24,
+            "wr_beats": 8,
+            "act_words": 192,
+            "act_flags": 96,
+            "n_mt": 12,
+            "wpm": 2,
+            "rd_stall": 0,
+            "acc_first": 59,
+            "acc_last": 171,
+            "n_acc": 12,
+            "gout_first": 189,
+            "gout_last": 195,
+            "n_gout": 8,
+            "act_first": 41,
+            "act_last": 155,
+            "actb_first": 47,
+            "actb_last": 161,
+            "start_lat": 4,
+            "done_lat": 208,
+            "duration": 204,
+            "T_max": 48,
+            "env": 156
+          },
+          "source": {
+            "path": "dev_docs/sim/pe_weight/72_pe_envelope.tsv",
+            "line": 4,
+            "sha256": "5b4fe5bd2a397623d5656c85a88654287ed80e05ade61fd8182ddcf90be2bd29",
+            "raw_row": "mtc1\t1\t1\t2\t768\t128\tbf16\tbf16\tfp32\t1\t2\t1\t1\t2\t2.00\t2\t12\t1\t1\t24\t2\t48\t8\t24\t24\t8\t192\t96\t12\t2\t0\t59\t171\t12\t189\t195\t8\t41\t155\t47\t161\t4\t208\t204\t48\t156"
+          }
+        },
+        "current_model_manual": {
+          "weight_demand_scope": "per pegroup rate accounting; not DRAM physical bytes",
+          "basis": "当前 PeEngine 普通宏时序公式的人工算术展开；理想 WL1 供数以匹配该 RTL 台架，不是本次模型运行",
+          "config": {
+            "act_credit_rtt": 17,
+            "act_credit_capacity": 2,
+            "weight_bytes_per_cycle": 2048,
+            "wl1_attached": false,
+            "pipe_latency": 69,
+            "write_path_latency": 73,
+            "l2_read_latency": 9,
+            "l2_write_latency": 9,
+            "int4_path": false
+          },
+          "Ea": 64,
+          "Ek": 128,
+          "Eo": 32,
+          "padded_W": 2,
+          "C_beats": 12,
+          "K_passes": 1,
+          "K_write_blocks": 1,
+          "passes": 24,
+          "mini_W": 2,
+          "mini_C": 1,
+          "mini_K": 1,
+          "mini_tiles": 12,
+          "words_per_mini": 2,
+          "reads_per_mini": 2,
+          "A": 2,
+          "II": 2,
+          "cold_span": 2,
+          "short_burst_extra": 1,
+          "stream_array_floor": 48,
+          "stream_credit_numerator": 264,
+          "stream_credit_denominator": 2,
+          "stream_credit_ceil": 132,
+          "stream_selected": 132,
+          "first_mini_fill": 2,
+          "array_cycles": 134,
+          "compute_cycles_diagnostic_only": 48,
+          "read_cycles_diagnostic_only": 24,
+          "write_cycles": 8,
+          "weight_demand_bytes_rate_account": 49152,
+          "weight_cycles": 24,
+          "work_plus_envelope": 212,
+          "write_path_total": 92,
+          "cycles": 212,
+          "model_minus_rtl_cycles": 8,
+          "bound": "array/credit stream; KC output path not selected"
+        },
+        "timing_notes": {
+          "duration_definition": "inst_done - inst_start; start_lat/done_lat both subtract cmd_last",
+          "start_lat": 4,
+          "done_lat": 208,
+          "duration_cycles": 204,
+          "ms_at_400mhz": 0.00051,
+          "raw_event_origin": "acc/act/actb/gout timestamps are absolute testbench cyc; cmd_last absolute is not retained in TSV. Do not mix these with start_lat.",
+          "read_stall_cycles": 0
+        },
+        "shape_arithmetic": {
+          "matrix_input": [
+            2,
+            768
+          ],
+          "matrix_weight": [
+            768,
+            128
+          ],
+          "matrix_output": [
+            2,
+            128
+          ],
+          "multiply_accumulates": 196608,
+          "logical_activation_bytes": 3072,
+          "logical_weight_bytes": 196608,
+          "logical_output_bytes": 1024,
+          "actual_l2_read_beats_historical": 24,
+          "actual_l2_write_beats_historical": 8,
+          "activation_words_per_unit": 24,
+          "mini_tile_flags_per_unit": 12
+        },
+        "animation_steps": [
+          {
+            "step": 1,
+            "title": "固定计算任务",
+            "text": "2 个位置，每个归约 768 个 BF16 通道，产生 128 个 FP32 输出。矩阵形状 2×768 乘 768×128。"
+          },
+          {
+            "step": 2,
+            "title": "按硬件拍宽拆轴",
+            "text": "每个输入拍 64 个 BF16，C 轴共 12 拍；K 轴 128 个输出共 1 pass。总有效 pass=2×12×1=24。"
+          },
+          {
+            "step": 3,
+            "title": "选择 mini-tile",
+            "text": "MTC_count=1，每块 words=2×1=2，reads=2，共 12 块；A=2，II=2。"
+          },
+          {
+            "step": 4,
+            "title": "计算连续流",
+            "text": "array_floor=48；credit=ceil(12×(2+2+1+17)/2)=132；取 max=132。"
+          },
+          {
+            "step": 5,
+            "title": "补首次填充与输出路径",
+            "text": "array=2+132=134；工作路径=max(134,24)+69+9=212；输出路径=2+8+73+9=92。"
+          },
+          {
+            "step": 6,
+            "title": "对齐真实记录",
+            "text": "模型推导 212 拍；历史 RTL 204 拍；保留 +8 拍误差。此动画是计算展开，不是逐拍 RTL 回放。"
+          }
+        ]
+      },
+      {
+        "id": "mtc2",
+        "inputs": {
+          "N": 1,
+          "H": 1,
+          "W": 2,
+          "C": 768,
+          "K": 128,
+          "activation_dtype": "BF16",
+          "weight_dtype": "BF16",
+          "output_dtype": "FP32",
+          "mode": "KC",
+          "MTW_count": 2,
+          "MTK_count": 1,
+          "MTC_count": 2,
+          "MTC_raw": 1
+        },
+        "historical_rtl": {
+          "values": {
+            "case": "mtc2",
+            "tn": 1,
+            "th": 1,
+            "tw": 2,
+            "tc": 768,
+            "tk": 128,
+            "df_a": "bf16",
+            "df_w": "bf16",
+            "df_o": "fp32",
+            "ymode": 1,
+            "mtw": 2,
+            "mtk": 1,
+            "mtc": 2,
+            "A": 2,
+            "ii": 2.0,
+            "M": 2,
+            "nC": 12,
+            "nK": 1,
+            "nKB": 1,
+            "passes": 24,
+            "tw_pad": 2,
+            "T_comp": 48,
+            "T_wr": 8,
+            "T_rd": 24,
+            "rd_beats": 24,
+            "wr_beats": 8,
+            "act_words": 192,
+            "act_flags": 48,
+            "n_mt": 6,
+            "wpm": 4,
+            "rd_stall": 0,
+            "acc_first": 63,
+            "acc_last": 121,
+            "n_acc": 6,
+            "gout_first": 141,
+            "gout_last": 147,
+            "n_gout": 8,
+            "act_first": 41,
+            "act_last": 103,
+            "actb_first": 47,
+            "actb_last": 109,
+            "start_lat": 4,
+            "done_lat": 160,
+            "duration": 156,
+            "T_max": 48,
+            "env": 108
+          },
+          "source": {
+            "path": "dev_docs/sim/pe_weight/72_pe_envelope.tsv",
+            "line": 5,
+            "sha256": "5b4fe5bd2a397623d5656c85a88654287ed80e05ade61fd8182ddcf90be2bd29",
+            "raw_row": "mtc2\t1\t1\t2\t768\t128\tbf16\tbf16\tfp32\t1\t2\t1\t2\t2\t2.00\t2\t12\t1\t1\t24\t2\t48\t8\t24\t24\t8\t192\t48\t6\t4\t0\t63\t121\t6\t141\t147\t8\t41\t103\t47\t109\t4\t160\t156\t48\t108"
+          }
+        },
+        "current_model_manual": {
+          "weight_demand_scope": "per pegroup rate accounting; not DRAM physical bytes",
+          "basis": "当前 PeEngine 普通宏时序公式的人工算术展开；理想 WL1 供数以匹配该 RTL 台架，不是本次模型运行",
+          "config": {
+            "act_credit_rtt": 17,
+            "act_credit_capacity": 2,
+            "weight_bytes_per_cycle": 2048,
+            "wl1_attached": false,
+            "pipe_latency": 69,
+            "write_path_latency": 73,
+            "l2_read_latency": 9,
+            "l2_write_latency": 9,
+            "int4_path": false
+          },
+          "Ea": 64,
+          "Ek": 128,
+          "Eo": 32,
+          "padded_W": 2,
+          "C_beats": 12,
+          "K_passes": 1,
+          "K_write_blocks": 1,
+          "passes": 24,
+          "mini_W": 2,
+          "mini_C": 2,
+          "mini_K": 1,
+          "mini_tiles": 6,
+          "words_per_mini": 4,
+          "reads_per_mini": 4,
+          "A": 2,
+          "II": 2,
+          "cold_span": 4,
+          "short_burst_extra": 0,
+          "stream_array_floor": 48,
+          "stream_credit_numerator": 150,
+          "stream_credit_denominator": 2,
+          "stream_credit_ceil": 75,
+          "stream_selected": 75,
+          "first_mini_fill": 4,
+          "array_cycles": 79,
+          "compute_cycles_diagnostic_only": 48,
+          "read_cycles_diagnostic_only": 24,
+          "write_cycles": 8,
+          "weight_demand_bytes_rate_account": 49152,
+          "weight_cycles": 24,
+          "work_plus_envelope": 157,
+          "write_path_total": 94,
+          "cycles": 157,
+          "model_minus_rtl_cycles": 1,
+          "bound": "array/credit stream; KC output path not selected"
+        },
+        "timing_notes": {
+          "duration_definition": "inst_done - inst_start; start_lat/done_lat both subtract cmd_last",
+          "start_lat": 4,
+          "done_lat": 160,
+          "duration_cycles": 156,
+          "ms_at_400mhz": 0.00039,
+          "raw_event_origin": "acc/act/actb/gout timestamps are absolute testbench cyc; cmd_last absolute is not retained in TSV. Do not mix these with start_lat.",
+          "read_stall_cycles": 0
+        },
+        "shape_arithmetic": {
+          "matrix_input": [
+            2,
+            768
+          ],
+          "matrix_weight": [
+            768,
+            128
+          ],
+          "matrix_output": [
+            2,
+            128
+          ],
+          "multiply_accumulates": 196608,
+          "logical_activation_bytes": 3072,
+          "logical_weight_bytes": 196608,
+          "logical_output_bytes": 1024,
+          "actual_l2_read_beats_historical": 24,
+          "actual_l2_write_beats_historical": 8,
+          "activation_words_per_unit": 24,
+          "mini_tile_flags_per_unit": 6
+        },
+        "animation_steps": [
+          {
+            "step": 1,
+            "title": "固定计算任务",
+            "text": "2 个位置，每个归约 768 个 BF16 通道，产生 128 个 FP32 输出。矩阵形状 2×768 乘 768×128。"
+          },
+          {
+            "step": 2,
+            "title": "按硬件拍宽拆轴",
+            "text": "每个输入拍 64 个 BF16，C 轴共 12 拍；K 轴 128 个输出共 1 pass。总有效 pass=2×12×1=24。"
+          },
+          {
+            "step": 3,
+            "title": "选择 mini-tile",
+            "text": "MTC_count=2，每块 words=2×2=4，reads=4，共 6 块；A=2，II=2。"
+          },
+          {
+            "step": 4,
+            "title": "计算连续流",
+            "text": "array_floor=48；credit=ceil(6×(4+4+0+17)/2)=75；取 max=75。"
+          },
+          {
+            "step": 5,
+            "title": "补首次填充与输出路径",
+            "text": "array=4+75=79；工作路径=max(79,24)+69+9=157；输出路径=4+8+73+9=94。"
+          },
+          {
+            "step": 6,
+            "title": "对齐真实记录",
+            "text": "模型推导 157 拍；历史 RTL 156 拍；保留 +1 拍误差。此动画是计算展开，不是逐拍 RTL 回放。"
+          }
+        ]
+      },
+      {
+        "id": "mtc3",
+        "inputs": {
+          "N": 1,
+          "H": 1,
+          "W": 2,
+          "C": 768,
+          "K": 128,
+          "activation_dtype": "BF16",
+          "weight_dtype": "BF16",
+          "output_dtype": "FP32",
+          "mode": "KC",
+          "MTW_count": 2,
+          "MTK_count": 1,
+          "MTC_count": 3,
+          "MTC_raw": 2
+        },
+        "historical_rtl": {
+          "values": {
+            "case": "mtc3",
+            "tn": 1,
+            "th": 1,
+            "tw": 2,
+            "tc": 768,
+            "tk": 128,
+            "df_a": "bf16",
+            "df_w": "bf16",
+            "df_o": "fp32",
+            "ymode": 1,
+            "mtw": 2,
+            "mtk": 1,
+            "mtc": 3,
+            "A": 2,
+            "ii": 2.0,
+            "M": 2,
+            "nC": 12,
+            "nK": 1,
+            "nKB": 1,
+            "passes": 24,
+            "tw_pad": 2,
+            "T_comp": 48,
+            "T_wr": 8,
+            "T_rd": 24,
+            "rd_beats": 24,
+            "wr_beats": 8,
+            "act_words": 192,
+            "act_flags": 32,
+            "n_mt": 4,
+            "wpm": 6,
+            "rd_stall": 0,
+            "acc_first": 67,
+            "acc_last": 109,
+            "n_acc": 4,
+            "gout_first": 129,
+            "gout_last": 135,
+            "n_gout": 8,
+            "act_first": 41,
+            "act_last": 89,
+            "actb_first": 47,
+            "actb_last": 95,
+            "start_lat": 4,
+            "done_lat": 148,
+            "duration": 144,
+            "T_max": 48,
+            "env": 96
+          },
+          "source": {
+            "path": "dev_docs/sim/pe_weight/72_pe_envelope.tsv",
+            "line": 6,
+            "sha256": "5b4fe5bd2a397623d5656c85a88654287ed80e05ade61fd8182ddcf90be2bd29",
+            "raw_row": "mtc3\t1\t1\t2\t768\t128\tbf16\tbf16\tfp32\t1\t2\t1\t3\t2\t2.00\t2\t12\t1\t1\t24\t2\t48\t8\t24\t24\t8\t192\t32\t4\t6\t0\t67\t109\t4\t129\t135\t8\t41\t89\t47\t95\t4\t148\t144\t48\t96"
+          }
+        },
+        "current_model_manual": {
+          "weight_demand_scope": "per pegroup rate accounting; not DRAM physical bytes",
+          "basis": "当前 PeEngine 普通宏时序公式的人工算术展开；理想 WL1 供数以匹配该 RTL 台架，不是本次模型运行",
+          "config": {
+            "act_credit_rtt": 17,
+            "act_credit_capacity": 2,
+            "weight_bytes_per_cycle": 2048,
+            "wl1_attached": false,
+            "pipe_latency": 69,
+            "write_path_latency": 73,
+            "l2_read_latency": 9,
+            "l2_write_latency": 9,
+            "int4_path": false
+          },
+          "Ea": 64,
+          "Ek": 128,
+          "Eo": 32,
+          "padded_W": 2,
+          "C_beats": 12,
+          "K_passes": 1,
+          "K_write_blocks": 1,
+          "passes": 24,
+          "mini_W": 2,
+          "mini_C": 3,
+          "mini_K": 1,
+          "mini_tiles": 4,
+          "words_per_mini": 6,
+          "reads_per_mini": 6,
+          "A": 2,
+          "II": 2,
+          "cold_span": 6,
+          "short_burst_extra": 0,
+          "stream_array_floor": 48,
+          "stream_credit_numerator": 116,
+          "stream_credit_denominator": 2,
+          "stream_credit_ceil": 58,
+          "stream_selected": 58,
+          "first_mini_fill": 6,
+          "array_cycles": 64,
+          "compute_cycles_diagnostic_only": 48,
+          "read_cycles_diagnostic_only": 24,
+          "write_cycles": 8,
+          "weight_demand_bytes_rate_account": 49152,
+          "weight_cycles": 24,
+          "work_plus_envelope": 142,
+          "write_path_total": 96,
+          "cycles": 142,
+          "model_minus_rtl_cycles": -2,
+          "bound": "array/credit stream; KC output path not selected"
+        },
+        "timing_notes": {
+          "duration_definition": "inst_done - inst_start; start_lat/done_lat both subtract cmd_last",
+          "start_lat": 4,
+          "done_lat": 148,
+          "duration_cycles": 144,
+          "ms_at_400mhz": 0.00036,
+          "raw_event_origin": "acc/act/actb/gout timestamps are absolute testbench cyc; cmd_last absolute is not retained in TSV. Do not mix these with start_lat.",
+          "read_stall_cycles": 0
+        },
+        "shape_arithmetic": {
+          "matrix_input": [
+            2,
+            768
+          ],
+          "matrix_weight": [
+            768,
+            128
+          ],
+          "matrix_output": [
+            2,
+            128
+          ],
+          "multiply_accumulates": 196608,
+          "logical_activation_bytes": 3072,
+          "logical_weight_bytes": 196608,
+          "logical_output_bytes": 1024,
+          "actual_l2_read_beats_historical": 24,
+          "actual_l2_write_beats_historical": 8,
+          "activation_words_per_unit": 24,
+          "mini_tile_flags_per_unit": 4
+        },
+        "animation_steps": [
+          {
+            "step": 1,
+            "title": "固定计算任务",
+            "text": "2 个位置，每个归约 768 个 BF16 通道，产生 128 个 FP32 输出。矩阵形状 2×768 乘 768×128。"
+          },
+          {
+            "step": 2,
+            "title": "按硬件拍宽拆轴",
+            "text": "每个输入拍 64 个 BF16，C 轴共 12 拍；K 轴 128 个输出共 1 pass。总有效 pass=2×12×1=24。"
+          },
+          {
+            "step": 3,
+            "title": "选择 mini-tile",
+            "text": "MTC_count=3，每块 words=2×3=6，reads=6，共 4 块；A=2，II=2。"
+          },
+          {
+            "step": 4,
+            "title": "计算连续流",
+            "text": "array_floor=48；credit=ceil(4×(6+6+0+17)/2)=58；取 max=58。"
+          },
+          {
+            "step": 5,
+            "title": "补首次填充与输出路径",
+            "text": "array=6+58=64；工作路径=max(64,24)+69+9=142；输出路径=6+8+73+9=96。"
+          },
+          {
+            "step": 6,
+            "title": "对齐真实记录",
+            "text": "模型推导 142 拍；历史 RTL 144 拍；保留 -2 拍误差。此动画是计算展开，不是逐拍 RTL 回放。"
+          }
+        ]
+      },
+      {
+        "id": "mtc4",
+        "inputs": {
+          "N": 1,
+          "H": 1,
+          "W": 2,
+          "C": 768,
+          "K": 128,
+          "activation_dtype": "BF16",
+          "weight_dtype": "BF16",
+          "output_dtype": "FP32",
+          "mode": "KC",
+          "MTW_count": 2,
+          "MTK_count": 1,
+          "MTC_count": 4,
+          "MTC_raw": 3
+        },
+        "historical_rtl": {
+          "values": {
+            "case": "mtc4",
+            "tn": 1,
+            "th": 1,
+            "tw": 2,
+            "tc": 768,
+            "tk": 128,
+            "df_a": "bf16",
+            "df_w": "bf16",
+            "df_o": "fp32",
+            "ymode": 1,
+            "mtw": 2,
+            "mtk": 1,
+            "mtc": 4,
+            "A": 2,
+            "ii": 2.0,
+            "M": 2,
+            "nC": 12,
+            "nK": 1,
+            "nKB": 1,
+            "passes": 24,
+            "tw_pad": 2,
+            "T_comp": 48,
+            "T_wr": 8,
+            "T_rd": 24,
+            "rd_beats": 24,
+            "wr_beats": 8,
+            "act_words": 192,
+            "act_flags": 24,
+            "n_mt": 3,
+            "wpm": 8,
+            "rd_stall": 0,
+            "acc_first": 73,
+            "acc_last": 109,
+            "n_acc": 3,
+            "gout_first": 129,
+            "gout_last": 135,
+            "n_gout": 8,
+            "act_first": 41,
+            "act_last": 85,
+            "actb_first": 47,
+            "actb_last": 91,
+            "start_lat": 4,
+            "done_lat": 148,
+            "duration": 144,
+            "T_max": 48,
+            "env": 96
+          },
+          "source": {
+            "path": "dev_docs/sim/pe_weight/72_pe_envelope.tsv",
+            "line": 7,
+            "sha256": "5b4fe5bd2a397623d5656c85a88654287ed80e05ade61fd8182ddcf90be2bd29",
+            "raw_row": "mtc4\t1\t1\t2\t768\t128\tbf16\tbf16\tfp32\t1\t2\t1\t4\t2\t2.00\t2\t12\t1\t1\t24\t2\t48\t8\t24\t24\t8\t192\t24\t3\t8\t0\t73\t109\t3\t129\t135\t8\t41\t85\t47\t91\t4\t148\t144\t48\t96"
+          }
+        },
+        "current_model_manual": {
+          "weight_demand_scope": "per pegroup rate accounting; not DRAM physical bytes",
+          "basis": "当前 PeEngine 普通宏时序公式的人工算术展开；理想 WL1 供数以匹配该 RTL 台架，不是本次模型运行",
+          "config": {
+            "act_credit_rtt": 17,
+            "act_credit_capacity": 2,
+            "weight_bytes_per_cycle": 2048,
+            "wl1_attached": false,
+            "pipe_latency": 69,
+            "write_path_latency": 73,
+            "l2_read_latency": 9,
+            "l2_write_latency": 9,
+            "int4_path": false
+          },
+          "Ea": 64,
+          "Ek": 128,
+          "Eo": 32,
+          "padded_W": 2,
+          "C_beats": 12,
+          "K_passes": 1,
+          "K_write_blocks": 1,
+          "passes": 24,
+          "mini_W": 2,
+          "mini_C": 4,
+          "mini_K": 1,
+          "mini_tiles": 3,
+          "words_per_mini": 8,
+          "reads_per_mini": 8,
+          "A": 2,
+          "II": 2,
+          "cold_span": 10,
+          "short_burst_extra": 0,
+          "stream_array_floor": 48,
+          "stream_credit_numerator": 105,
+          "stream_credit_denominator": 2,
+          "stream_credit_ceil": 53,
+          "stream_selected": 53,
+          "first_mini_fill": 8,
+          "array_cycles": 61,
+          "compute_cycles_diagnostic_only": 48,
+          "read_cycles_diagnostic_only": 24,
+          "write_cycles": 8,
+          "weight_demand_bytes_rate_account": 49152,
+          "weight_cycles": 24,
+          "work_plus_envelope": 139,
+          "write_path_total": 98,
+          "cycles": 139,
+          "model_minus_rtl_cycles": -5,
+          "bound": "array/credit stream; KC output path not selected"
+        },
+        "timing_notes": {
+          "duration_definition": "inst_done - inst_start; start_lat/done_lat both subtract cmd_last",
+          "start_lat": 4,
+          "done_lat": 148,
+          "duration_cycles": 144,
+          "ms_at_400mhz": 0.00036,
+          "raw_event_origin": "acc/act/actb/gout timestamps are absolute testbench cyc; cmd_last absolute is not retained in TSV. Do not mix these with start_lat.",
+          "read_stall_cycles": 0
+        },
+        "shape_arithmetic": {
+          "matrix_input": [
+            2,
+            768
+          ],
+          "matrix_weight": [
+            768,
+            128
+          ],
+          "matrix_output": [
+            2,
+            128
+          ],
+          "multiply_accumulates": 196608,
+          "logical_activation_bytes": 3072,
+          "logical_weight_bytes": 196608,
+          "logical_output_bytes": 1024,
+          "actual_l2_read_beats_historical": 24,
+          "actual_l2_write_beats_historical": 8,
+          "activation_words_per_unit": 24,
+          "mini_tile_flags_per_unit": 3
+        },
+        "animation_steps": [
+          {
+            "step": 1,
+            "title": "固定计算任务",
+            "text": "2 个位置，每个归约 768 个 BF16 通道，产生 128 个 FP32 输出。矩阵形状 2×768 乘 768×128。"
+          },
+          {
+            "step": 2,
+            "title": "按硬件拍宽拆轴",
+            "text": "每个输入拍 64 个 BF16，C 轴共 12 拍；K 轴 128 个输出共 1 pass。总有效 pass=2×12×1=24。"
+          },
+          {
+            "step": 3,
+            "title": "选择 mini-tile",
+            "text": "MTC_count=4，每块 words=2×4=8，reads=8，共 3 块；A=2，II=2。"
+          },
+          {
+            "step": 4,
+            "title": "计算连续流",
+            "text": "array_floor=48；credit=ceil(3×(10+8+0+17)/2)=53；取 max=53。"
+          },
+          {
+            "step": 5,
+            "title": "补首次填充与输出路径",
+            "text": "array=8+53=61；工作路径=max(61,24)+69+9=139；输出路径=8+8+73+9=98。"
+          },
+          {
+            "step": 6,
+            "title": "对齐真实记录",
+            "text": "模型推导 139 拍；历史 RTL 144 拍；保留 -5 拍误差。此动画是计算展开，不是逐拍 RTL 回放。"
+          }
+        ]
+      },
+      {
+        "id": "mtc6",
+        "inputs": {
+          "N": 1,
+          "H": 1,
+          "W": 2,
+          "C": 768,
+          "K": 128,
+          "activation_dtype": "BF16",
+          "weight_dtype": "BF16",
+          "output_dtype": "FP32",
+          "mode": "KC",
+          "MTW_count": 2,
+          "MTK_count": 1,
+          "MTC_count": 6,
+          "MTC_raw": 5
+        },
+        "historical_rtl": {
+          "values": {
+            "case": "mtc6",
+            "tn": 1,
+            "th": 1,
+            "tw": 2,
+            "tc": 768,
+            "tk": 128,
+            "df_a": "bf16",
+            "df_w": "bf16",
+            "df_o": "fp32",
+            "ymode": 1,
+            "mtw": 2,
+            "mtk": 1,
+            "mtc": 6,
+            "A": 2,
+            "ii": 2.0,
+            "M": 2,
+            "nC": 12,
+            "nK": 1,
+            "nKB": 1,
+            "passes": 24,
+            "tw_pad": 2,
+            "T_comp": 48,
+            "T_wr": 8,
+            "T_rd": 24,
+            "rd_beats": 24,
+            "wr_beats": 8,
+            "act_words": 192,
+            "act_flags": 16,
+            "n_mt": 2,
+            "wpm": 12,
+            "rd_stall": 0,
+            "acc_first": 85,
+            "acc_last": 109,
+            "n_acc": 2,
+            "gout_first": 129,
+            "gout_last": 135,
+            "n_gout": 8,
+            "act_first": 41,
+            "act_last": 65,
+            "actb_first": 47,
+            "actb_last": 69,
+            "start_lat": 4,
+            "done_lat": 148,
+            "duration": 144,
+            "T_max": 48,
+            "env": 96
+          },
+          "source": {
+            "path": "dev_docs/sim/pe_weight/72_pe_envelope.tsv",
+            "line": 8,
+            "sha256": "5b4fe5bd2a397623d5656c85a88654287ed80e05ade61fd8182ddcf90be2bd29",
+            "raw_row": "mtc6\t1\t1\t2\t768\t128\tbf16\tbf16\tfp32\t1\t2\t1\t6\t2\t2.00\t2\t12\t1\t1\t24\t2\t48\t8\t24\t24\t8\t192\t16\t2\t12\t0\t85\t109\t2\t129\t135\t8\t41\t65\t47\t69\t4\t148\t144\t48\t96"
+          }
+        },
+        "current_model_manual": {
+          "weight_demand_scope": "per pegroup rate accounting; not DRAM physical bytes",
+          "basis": "当前 PeEngine 普通宏时序公式的人工算术展开；理想 WL1 供数以匹配该 RTL 台架，不是本次模型运行",
+          "config": {
+            "act_credit_rtt": 17,
+            "act_credit_capacity": 2,
+            "weight_bytes_per_cycle": 2048,
+            "wl1_attached": false,
+            "pipe_latency": 69,
+            "write_path_latency": 73,
+            "l2_read_latency": 9,
+            "l2_write_latency": 9,
+            "int4_path": false
+          },
+          "Ea": 64,
+          "Ek": 128,
+          "Eo": 32,
+          "padded_W": 2,
+          "C_beats": 12,
+          "K_passes": 1,
+          "K_write_blocks": 1,
+          "passes": 24,
+          "mini_W": 2,
+          "mini_C": 6,
+          "mini_K": 1,
+          "mini_tiles": 2,
+          "words_per_mini": 12,
+          "reads_per_mini": 12,
+          "A": 2,
+          "II": 2,
+          "cold_span": 18,
+          "short_burst_extra": 0,
+          "stream_array_floor": 48,
+          "stream_credit_numerator": 94,
+          "stream_credit_denominator": 2,
+          "stream_credit_ceil": 47,
+          "stream_selected": 48,
+          "first_mini_fill": 12,
+          "array_cycles": 60,
+          "compute_cycles_diagnostic_only": 48,
+          "read_cycles_diagnostic_only": 24,
+          "write_cycles": 8,
+          "weight_demand_bytes_rate_account": 49152,
+          "weight_cycles": 24,
+          "work_plus_envelope": 138,
+          "write_path_total": 102,
+          "cycles": 138,
+          "model_minus_rtl_cycles": -6,
+          "bound": "array/credit stream; KC output path not selected"
+        },
+        "timing_notes": {
+          "duration_definition": "inst_done - inst_start; start_lat/done_lat both subtract cmd_last",
+          "start_lat": 4,
+          "done_lat": 148,
+          "duration_cycles": 144,
+          "ms_at_400mhz": 0.00036,
+          "raw_event_origin": "acc/act/actb/gout timestamps are absolute testbench cyc; cmd_last absolute is not retained in TSV. Do not mix these with start_lat.",
+          "read_stall_cycles": 0
+        },
+        "shape_arithmetic": {
+          "matrix_input": [
+            2,
+            768
+          ],
+          "matrix_weight": [
+            768,
+            128
+          ],
+          "matrix_output": [
+            2,
+            128
+          ],
+          "multiply_accumulates": 196608,
+          "logical_activation_bytes": 3072,
+          "logical_weight_bytes": 196608,
+          "logical_output_bytes": 1024,
+          "actual_l2_read_beats_historical": 24,
+          "actual_l2_write_beats_historical": 8,
+          "activation_words_per_unit": 24,
+          "mini_tile_flags_per_unit": 2
+        },
+        "animation_steps": [
+          {
+            "step": 1,
+            "title": "固定计算任务",
+            "text": "2 个位置，每个归约 768 个 BF16 通道，产生 128 个 FP32 输出。矩阵形状 2×768 乘 768×128。"
+          },
+          {
+            "step": 2,
+            "title": "按硬件拍宽拆轴",
+            "text": "每个输入拍 64 个 BF16，C 轴共 12 拍；K 轴 128 个输出共 1 pass。总有效 pass=2×12×1=24。"
+          },
+          {
+            "step": 3,
+            "title": "选择 mini-tile",
+            "text": "MTC_count=6，每块 words=2×6=12，reads=12，共 2 块；A=2，II=2。"
+          },
+          {
+            "step": 4,
+            "title": "计算连续流",
+            "text": "array_floor=48；credit=ceil(2×(18+12+0+17)/2)=47；取 max=48。"
+          },
+          {
+            "step": 5,
+            "title": "补首次填充与输出路径",
+            "text": "array=12+48=60；工作路径=max(60,24)+69+9=138；输出路径=12+8+73+9=102。"
+          },
+          {
+            "step": 6,
+            "title": "对齐真实记录",
+            "text": "模型推导 138 拍；历史 RTL 144 拍；保留 -6 拍误差。此动画是计算展开，不是逐拍 RTL 回放。"
+          }
+        ]
+      },
+      {
+        "id": "mtc12",
+        "inputs": {
+          "N": 1,
+          "H": 1,
+          "W": 2,
+          "C": 768,
+          "K": 128,
+          "activation_dtype": "BF16",
+          "weight_dtype": "BF16",
+          "output_dtype": "FP32",
+          "mode": "KC",
+          "MTW_count": 2,
+          "MTK_count": 1,
+          "MTC_count": 12,
+          "MTC_raw": 11
+        },
+        "historical_rtl": {
+          "values": {
+            "case": "mtc12",
+            "tn": 1,
+            "th": 1,
+            "tw": 2,
+            "tc": 768,
+            "tk": 128,
+            "df_a": "bf16",
+            "df_w": "bf16",
+            "df_o": "fp32",
+            "ymode": 1,
+            "mtw": 2,
+            "mtk": 1,
+            "mtc": 12,
+            "A": 2,
+            "ii": 2.0,
+            "M": 2,
+            "nC": 12,
+            "nK": 1,
+            "nKB": 1,
+            "passes": 24,
+            "tw_pad": 2,
+            "T_comp": 48,
+            "T_wr": 8,
+            "T_rd": 24,
+            "rd_beats": 24,
+            "wr_beats": 8,
+            "act_words": 192,
+            "act_flags": 8,
+            "n_mt": 1,
+            "wpm": 24,
+            "rd_stall": 0,
+            "acc_first": 121,
+            "acc_last": 121,
+            "n_acc": 1,
+            "gout_first": 141,
+            "gout_last": 147,
+            "n_gout": 8,
+            "act_first": 41,
+            "act_last": 65,
+            "actb_first": 47,
+            "actb_last": 69,
+            "start_lat": 4,
+            "done_lat": 160,
+            "duration": 156,
+            "T_max": 48,
+            "env": 108
+          },
+          "source": {
+            "path": "dev_docs/sim/pe_weight/72_pe_envelope.tsv",
+            "line": 9,
+            "sha256": "5b4fe5bd2a397623d5656c85a88654287ed80e05ade61fd8182ddcf90be2bd29",
+            "raw_row": "mtc12\t1\t1\t2\t768\t128\tbf16\tbf16\tfp32\t1\t2\t1\t12\t2\t2.00\t2\t12\t1\t1\t24\t2\t48\t8\t24\t24\t8\t192\t8\t1\t24\t0\t121\t121\t1\t141\t147\t8\t41\t65\t47\t69\t4\t160\t156\t48\t108"
+          }
+        },
+        "current_model_manual": {
+          "weight_demand_scope": "per pegroup rate accounting; not DRAM physical bytes",
+          "basis": "当前 PeEngine 普通宏时序公式的人工算术展开；理想 WL1 供数以匹配该 RTL 台架，不是本次模型运行",
+          "config": {
+            "act_credit_rtt": 17,
+            "act_credit_capacity": 2,
+            "weight_bytes_per_cycle": 2048,
+            "wl1_attached": false,
+            "pipe_latency": 69,
+            "write_path_latency": 73,
+            "l2_read_latency": 9,
+            "l2_write_latency": 9,
+            "int4_path": false
+          },
+          "Ea": 64,
+          "Ek": 128,
+          "Eo": 32,
+          "padded_W": 2,
+          "C_beats": 12,
+          "K_passes": 1,
+          "K_write_blocks": 1,
+          "passes": 24,
+          "mini_W": 2,
+          "mini_C": 12,
+          "mini_K": 1,
+          "mini_tiles": 1,
+          "words_per_mini": 24,
+          "reads_per_mini": 24,
+          "A": 2,
+          "II": 2,
+          "cold_span": 42,
+          "short_burst_extra": 0,
+          "stream_array_floor": 48,
+          "stream_credit_numerator": 83,
+          "stream_credit_denominator": 2,
+          "stream_credit_ceil": 42,
+          "stream_selected": 48,
+          "first_mini_fill": 24,
+          "array_cycles": 72,
+          "compute_cycles_diagnostic_only": 48,
+          "read_cycles_diagnostic_only": 24,
+          "write_cycles": 8,
+          "weight_demand_bytes_rate_account": 49152,
+          "weight_cycles": 24,
+          "work_plus_envelope": 150,
+          "write_path_total": 114,
+          "cycles": 150,
+          "model_minus_rtl_cycles": -6,
+          "bound": "array/credit stream; KC output path not selected"
+        },
+        "timing_notes": {
+          "duration_definition": "inst_done - inst_start; start_lat/done_lat both subtract cmd_last",
+          "start_lat": 4,
+          "done_lat": 160,
+          "duration_cycles": 156,
+          "ms_at_400mhz": 0.00039,
+          "raw_event_origin": "acc/act/actb/gout timestamps are absolute testbench cyc; cmd_last absolute is not retained in TSV. Do not mix these with start_lat.",
+          "read_stall_cycles": 0
+        },
+        "shape_arithmetic": {
+          "matrix_input": [
+            2,
+            768
+          ],
+          "matrix_weight": [
+            768,
+            128
+          ],
+          "matrix_output": [
+            2,
+            128
+          ],
+          "multiply_accumulates": 196608,
+          "logical_activation_bytes": 3072,
+          "logical_weight_bytes": 196608,
+          "logical_output_bytes": 1024,
+          "actual_l2_read_beats_historical": 24,
+          "actual_l2_write_beats_historical": 8,
+          "activation_words_per_unit": 24,
+          "mini_tile_flags_per_unit": 1
+        },
+        "animation_steps": [
+          {
+            "step": 1,
+            "title": "固定计算任务",
+            "text": "2 个位置，每个归约 768 个 BF16 通道，产生 128 个 FP32 输出。矩阵形状 2×768 乘 768×128。"
+          },
+          {
+            "step": 2,
+            "title": "按硬件拍宽拆轴",
+            "text": "每个输入拍 64 个 BF16，C 轴共 12 拍；K 轴 128 个输出共 1 pass。总有效 pass=2×12×1=24。"
+          },
+          {
+            "step": 3,
+            "title": "选择 mini-tile",
+            "text": "MTC_count=12，每块 words=2×12=24，reads=24，共 1 块；A=2，II=2。"
+          },
+          {
+            "step": 4,
+            "title": "计算连续流",
+            "text": "array_floor=48；credit=ceil(1×(42+24+0+17)/2)=42；取 max=48。"
+          },
+          {
+            "step": 5,
+            "title": "补首次填充与输出路径",
+            "text": "array=24+48=72；工作路径=max(72,24)+69+9=150；输出路径=24+8+73+9=114。"
+          },
+          {
+            "step": 6,
+            "title": "对齐真实记录",
+            "text": "模型推导 150 拍；历史 RTL 156 拍；保留 -6 拍误差。此动画是计算展开，不是逐拍 RTL 回放。"
+          }
+        ]
+      }
+    ],
+    "counterfactuals": [
+      {
+        "change": "MTC_count 1→3; all shape/dtype/MTW/MTK fixed",
+        "rtl_before": 204,
+        "rtl_after": 144,
+        "saved_cycles": 60,
+        "saving_percent": 29.411764705882355,
+        "explanation": "有效 pass仍24；mini-tile从12变4，信用环往返摊薄。"
+      },
+      {
+        "change": "MTC_count 3→6",
+        "rtl_before": 144,
+        "rtl_after": 144,
+        "saved_cycles": 0,
+        "explanation": "进一步减少块数被更长的单块与填充开销抵消，真实最优形成平台；模型142→138差4拍不支持断言硬件更优。"
+      },
+      {
+        "change": "MTC_count 3→12",
+        "rtl_before": 144,
+        "rtl_after": 156,
+        "saved_cycles": -12,
+        "explanation": "单块变长，首次填充不能由后续块掩盖；相同MAC数量不能推出相同总周期。"
+      }
+    ]
+  },
+  "unit_credit_controls": {
+    "title": "先用单PE控制实验确定信用环，再带回完整阵列",
+    "boundary": "single real pe518_top, weights/scales always valid, OL1 ready high, synthetic synchronous activation driver; excludes pe_ctrl/group sum/internal DT/L2.",
+    "counter_quantity": "period = (acc_t[n_accept-1] - acc_t[3]) / (n_accept-4), per testbench actual indices; steady-state act_accept average, not instruction duration.",
+    "important": "源码注释称丢首尾区间，实际索引lo=3/hi=n_accept-1；本稿采用实际公式。13.5 是成对平均，不能每块先ceil成14再乘块数。",
+    "variants": [
+      {
+        "values": {
+          "name": "cl_mtk_r18",
+          "ymode": 1,
+          "tn": 1,
+          "th": 1,
+          "tw": 16,
+          "tc": 1024,
+          "tk": 128,
+          "df_a": 2,
+          "df_w": 2,
+          "df_o": 2,
+          "mtw": 2,
+          "mtk": 4,
+          "mtc": 2,
+          "A": 2,
+          "A_field": 8,
+          "words": 4,
+          "N": 4,
+          "span": 4,
+          "n_mt_pred": 32,
+          "max_mt": 16,
+          "rtt": 18,
+          "credit": 2,
+          "accepts": 16,
+          "al1_rd": 64,
+          "acc_first": 18,
+          "acc_last": 213,
+          "p_num": 162,
+          "p_den": 12,
+          "span1": 4,
+          "period": 13.5
+        },
+        "source": {
+          "path": "dev_docs/sim/pe_weight/72_pe_mt.tsv",
+          "line": 47,
+          "sha256": "949aad24a4aeadcf9ac4537d35c8735f48ccfceea49cb320fe3939a967f8f50f",
+          "raw_row": "cl_mtk_r18\t1\t1\t1\t16\t1024\t128\t2\t2\t2\t2\t4\t2\t2\t8\t4\t4\t4\t32\t16\t18\t2\t16\t64\t18\t213\t162\t12\t4\t13.5"
+        },
+        "inputs_decoded_note": "This TSV stores mtc as an extent; PeOp MTC raw = mtc - 1.",
+        "period_manual": {
+          "effective_external_latency": 19,
+          "span": 4,
+          "words": 4,
+          "effective_capacity": 2,
+          "loop_period": 13.5,
+          "array_floor": 8,
+          "period": 13.5,
+          "basis": "该短 mini 的 rtt>=12 控制区间；rtt+1 包含台架驱动寄存器，不能把它换成完整 pe_ctrl 的 rtt 配置。"
+        }
+      },
+      {
+        "values": {
+          "name": "cl_ref_r18",
+          "ymode": 1,
+          "tn": 1,
+          "th": 1,
+          "tw": 16,
+          "tc": 1024,
+          "tk": 128,
+          "df_a": 2,
+          "df_w": 2,
+          "df_o": 2,
+          "mtw": 2,
+          "mtk": 1,
+          "mtc": 2,
+          "A": 2,
+          "A_field": 2,
+          "words": 4,
+          "N": 4,
+          "span": 4,
+          "n_mt_pred": 32,
+          "max_mt": 16,
+          "rtt": 18,
+          "credit": 2,
+          "accepts": 16,
+          "al1_rd": 64,
+          "acc_first": 18,
+          "acc_last": 213,
+          "p_num": 162,
+          "p_den": 12,
+          "span1": 4,
+          "period": 13.5
+        },
+        "source": {
+          "path": "dev_docs/sim/pe_weight/72_pe_mt.tsv",
+          "line": 49,
+          "sha256": "949aad24a4aeadcf9ac4537d35c8735f48ccfceea49cb320fe3939a967f8f50f",
+          "raw_row": "cl_ref_r18\t1\t1\t1\t16\t1024\t128\t2\t2\t2\t2\t1\t2\t2\t2\t4\t4\t4\t32\t16\t18\t2\t16\t64\t18\t213\t162\t12\t4\t13.5"
+        },
+        "inputs_decoded_note": "This TSV stores mtc as an extent; PeOp MTC raw = mtc - 1.",
+        "period_manual": {
+          "effective_external_latency": 19,
+          "span": 4,
+          "words": 4,
+          "effective_capacity": 2,
+          "loop_period": 13.5,
+          "array_floor": 8,
+          "period": 13.5,
+          "basis": "该短 mini 的 rtt>=12 控制区间；rtt+1 包含台架驱动寄存器，不能把它换成完整 pe_ctrl 的 rtt 配置。"
+        }
+      },
+      {
+        "values": {
+          "name": "cr1_r18",
+          "ymode": 1,
+          "tn": 1,
+          "th": 1,
+          "tw": 16,
+          "tc": 256,
+          "tk": 128,
+          "df_a": 2,
+          "df_w": 2,
+          "df_o": 2,
+          "mtw": 2,
+          "mtk": 1,
+          "mtc": 2,
+          "A": 2,
+          "A_field": 2,
+          "words": 4,
+          "N": 4,
+          "span": 4,
+          "n_mt_pred": 8,
+          "max_mt": 24,
+          "rtt": 18,
+          "credit": 1,
+          "accepts": 8,
+          "al1_rd": 32,
+          "acc_first": 18,
+          "acc_last": 207,
+          "p_num": 108,
+          "p_den": 4,
+          "span1": 4,
+          "period": 27.0
+        },
+        "source": {
+          "path": "dev_docs/sim/pe_weight/72_pe_mt.tsv",
+          "line": 51,
+          "sha256": "949aad24a4aeadcf9ac4537d35c8735f48ccfceea49cb320fe3939a967f8f50f",
+          "raw_row": "cr1_r18\t1\t1\t1\t16\t256\t128\t2\t2\t2\t2\t1\t2\t2\t2\t4\t4\t4\t8\t24\t18\t1\t8\t32\t18\t207\t108\t4\t4\t27.0"
+        },
+        "inputs_decoded_note": "This TSV stores mtc as an extent; PeOp MTC raw = mtc - 1.",
+        "period_manual": {
+          "effective_external_latency": 19,
+          "span": 4,
+          "words": 4,
+          "effective_capacity": 1,
+          "loop_period": 27.0,
+          "array_floor": 8,
+          "period": 27.0,
+          "basis": "该短 mini 的 rtt>=12 控制区间；rtt+1 包含台架驱动寄存器，不能把它换成完整 pe_ctrl 的 rtt 配置。"
+        }
+      },
+      {
+        "values": {
+          "name": "cr2_r18",
+          "ymode": 1,
+          "tn": 1,
+          "th": 1,
+          "tw": 16,
+          "tc": 256,
+          "tk": 128,
+          "df_a": 2,
+          "df_w": 2,
+          "df_o": 2,
+          "mtw": 2,
+          "mtk": 1,
+          "mtc": 2,
+          "A": 2,
+          "A_field": 2,
+          "words": 4,
+          "N": 4,
+          "span": 4,
+          "n_mt_pred": 8,
+          "max_mt": 24,
+          "rtt": 18,
+          "credit": 2,
+          "accepts": 8,
+          "al1_rd": 32,
+          "acc_first": 18,
+          "acc_last": 105,
+          "p_num": 54,
+          "p_den": 4,
+          "span1": 4,
+          "period": 13.5
+        },
+        "source": {
+          "path": "dev_docs/sim/pe_weight/72_pe_mt.tsv",
+          "line": 53,
+          "sha256": "949aad24a4aeadcf9ac4537d35c8735f48ccfceea49cb320fe3939a967f8f50f",
+          "raw_row": "cr2_r18\t1\t1\t1\t16\t256\t128\t2\t2\t2\t2\t1\t2\t2\t2\t4\t4\t4\t8\t24\t18\t2\t8\t32\t18\t105\t54\t4\t4\t13.5"
+        },
+        "inputs_decoded_note": "This TSV stores mtc as an extent; PeOp MTC raw = mtc - 1.",
+        "period_manual": {
+          "effective_external_latency": 19,
+          "span": 4,
+          "words": 4,
+          "effective_capacity": 2,
+          "loop_period": 13.5,
+          "array_floor": 8,
+          "period": 13.5,
+          "basis": "该短 mini 的 rtt>=12 控制区间；rtt+1 包含台架驱动寄存器，不能把它换成完整 pe_ctrl 的 rtt 配置。"
+        }
+      },
+      {
+        "values": {
+          "name": "cr4_r18",
+          "ymode": 1,
+          "tn": 1,
+          "th": 1,
+          "tw": 16,
+          "tc": 256,
+          "tk": 128,
+          "df_a": 2,
+          "df_w": 2,
+          "df_o": 2,
+          "mtw": 2,
+          "mtk": 1,
+          "mtc": 2,
+          "A": 2,
+          "A_field": 2,
+          "words": 4,
+          "N": 4,
+          "span": 4,
+          "n_mt_pred": 8,
+          "max_mt": 24,
+          "rtt": 18,
+          "credit": 4,
+          "accepts": 8,
+          "al1_rd": 32,
+          "acc_first": 18,
+          "acc_last": 105,
+          "p_num": 54,
+          "p_den": 4,
+          "span1": 4,
+          "period": 13.5
+        },
+        "source": {
+          "path": "dev_docs/sim/pe_weight/72_pe_mt.tsv",
+          "line": 57,
+          "sha256": "949aad24a4aeadcf9ac4537d35c8735f48ccfceea49cb320fe3939a967f8f50f",
+          "raw_row": "cr4_r18\t1\t1\t1\t16\t256\t128\t2\t2\t2\t2\t1\t2\t2\t2\t4\t4\t4\t8\t24\t18\t4\t8\t32\t18\t105\t54\t4\t4\t13.5"
+        },
+        "inputs_decoded_note": "This TSV stores mtc as an extent; PeOp MTC raw = mtc - 1.",
+        "period_manual": {
+          "effective_external_latency": 19,
+          "span": 4,
+          "words": 4,
+          "effective_capacity": 2,
+          "loop_period": 13.5,
+          "array_floor": 8,
+          "period": 13.5,
+          "basis": "该短 mini 的 rtt>=12 控制区间；rtt+1 包含台架驱动寄存器，不能把它换成完整 pe_ctrl 的 rtt 配置。"
+        }
+      },
+      {
+        "values": {
+          "name": "rtt12",
+          "ymode": 1,
+          "tn": 1,
+          "th": 1,
+          "tw": 16,
+          "tc": 256,
+          "tk": 128,
+          "df_a": 2,
+          "df_w": 2,
+          "df_o": 2,
+          "mtw": 2,
+          "mtk": 1,
+          "mtc": 2,
+          "A": 2,
+          "A_field": 2,
+          "words": 4,
+          "N": 4,
+          "span": 4,
+          "n_mt_pred": 8,
+          "max_mt": 24,
+          "rtt": 12,
+          "credit": 2,
+          "accepts": 8,
+          "al1_rd": 32,
+          "acc_first": 18,
+          "acc_last": 87,
+          "p_num": 42,
+          "p_den": 4,
+          "span1": 4,
+          "period": 10.5
+        },
+        "source": {
+          "path": "dev_docs/sim/pe_weight/72_pe_mt.tsv",
+          "line": 96,
+          "sha256": "949aad24a4aeadcf9ac4537d35c8735f48ccfceea49cb320fe3939a967f8f50f",
+          "raw_row": "rtt12\t1\t1\t1\t16\t256\t128\t2\t2\t2\t2\t1\t2\t2\t2\t4\t4\t4\t8\t24\t12\t2\t8\t32\t18\t87\t42\t4\t4\t10.5"
+        },
+        "inputs_decoded_note": "This TSV stores mtc as an extent; PeOp MTC raw = mtc - 1.",
+        "period_manual": {
+          "effective_external_latency": 13,
+          "span": 4,
+          "words": 4,
+          "effective_capacity": 2,
+          "loop_period": 10.5,
+          "array_floor": 8,
+          "period": 10.5,
+          "basis": "该短 mini 的 rtt>=12 控制区间；rtt+1 包含台架驱动寄存器，不能把它换成完整 pe_ctrl 的 rtt 配置。"
+        }
+      },
+      {
+        "values": {
+          "name": "rtt18",
+          "ymode": 1,
+          "tn": 1,
+          "th": 1,
+          "tw": 16,
+          "tc": 256,
+          "tk": 128,
+          "df_a": 2,
+          "df_w": 2,
+          "df_o": 2,
+          "mtw": 2,
+          "mtk": 1,
+          "mtc": 2,
+          "A": 2,
+          "A_field": 2,
+          "words": 4,
+          "N": 4,
+          "span": 4,
+          "n_mt_pred": 8,
+          "max_mt": 24,
+          "rtt": 18,
+          "credit": 2,
+          "accepts": 8,
+          "al1_rd": 32,
+          "acc_first": 18,
+          "acc_last": 105,
+          "p_num": 54,
+          "p_den": 4,
+          "span1": 4,
+          "period": 13.5
+        },
+        "source": {
+          "path": "dev_docs/sim/pe_weight/72_pe_mt.tsv",
+          "line": 99,
+          "sha256": "949aad24a4aeadcf9ac4537d35c8735f48ccfceea49cb320fe3939a967f8f50f",
+          "raw_row": "rtt18\t1\t1\t1\t16\t256\t128\t2\t2\t2\t2\t1\t2\t2\t2\t4\t4\t4\t8\t24\t18\t2\t8\t32\t18\t105\t54\t4\t4\t13.5"
+        },
+        "inputs_decoded_note": "This TSV stores mtc as an extent; PeOp MTC raw = mtc - 1.",
+        "period_manual": {
+          "effective_external_latency": 19,
+          "span": 4,
+          "words": 4,
+          "effective_capacity": 2,
+          "loop_period": 13.5,
+          "array_floor": 8,
+          "period": 13.5,
+          "basis": "该短 mini 的 rtt>=12 控制区间；rtt+1 包含台架驱动寄存器，不能把它换成完整 pe_ctrl 的 rtt 配置。"
+        }
+      },
+      {
+        "values": {
+          "name": "rtt28",
+          "ymode": 1,
+          "tn": 1,
+          "th": 1,
+          "tw": 16,
+          "tc": 256,
+          "tk": 128,
+          "df_a": 2,
+          "df_w": 2,
+          "df_o": 2,
+          "mtw": 2,
+          "mtk": 1,
+          "mtc": 2,
+          "A": 2,
+          "A_field": 2,
+          "words": 4,
+          "N": 4,
+          "span": 4,
+          "n_mt_pred": 8,
+          "max_mt": 24,
+          "rtt": 28,
+          "credit": 2,
+          "accepts": 8,
+          "al1_rd": 32,
+          "acc_first": 18,
+          "acc_last": 135,
+          "p_num": 74,
+          "p_den": 4,
+          "span1": 4,
+          "period": 18.5
+        },
+        "source": {
+          "path": "dev_docs/sim/pe_weight/72_pe_mt.tsv",
+          "line": 102,
+          "sha256": "949aad24a4aeadcf9ac4537d35c8735f48ccfceea49cb320fe3939a967f8f50f",
+          "raw_row": "rtt28\t1\t1\t1\t16\t256\t128\t2\t2\t2\t2\t1\t2\t2\t2\t4\t4\t4\t8\t24\t28\t2\t8\t32\t18\t135\t74\t4\t4\t18.5"
+        },
+        "inputs_decoded_note": "This TSV stores mtc as an extent; PeOp MTC raw = mtc - 1.",
+        "period_manual": {
+          "effective_external_latency": 29,
+          "span": 4,
+          "words": 4,
+          "effective_capacity": 2,
+          "loop_period": 18.5,
+          "array_floor": 8,
+          "period": 18.5,
+          "basis": "该短 mini 的 rtt>=12 控制区间；rtt+1 包含台架驱动寄存器，不能把它换成完整 pe_ctrl 的 rtt 配置。"
+        }
+      }
+    ],
+    "counterfactuals": [
+      "固定shape和rtt，credit1→2:27→13.5；2→4:仍13.5，因为真实AL1只有两半。",
+      "固定shapeW16 C1024 K128，MTK1→4，实际K只1pass，所以mt_k=min(MTK,1)=1，A仍2，周期13.5不变。",
+      "固定shape/credit=2，rtt12→18→28，测得10.5→13.5→18.5，延迟每增1拍，平均mini周期增0.5拍。"
+    ]
+  },
+  "int4_live_cases": {
+    "title": "同一FP8×INT4 shape：权重、UScale与输出反压如何共同决定完成时间",
+    "qualified_profile": {
+      "PE_MHz": 400,
+      "AXI_MHz": 400,
+      "MC_MHz": 400,
+      "divider_MHz": 2000,
+      "divider_phase_ps": 250,
+      "splicing": 1,
+      "bank_map_hex": "e4",
+      "all_bank_active": 1,
+      "refresh": false,
+      "ECC": false,
+      "L2_write_response_cycles": 9,
+      "MC_lane_symmetry": "16 lanes identical; representative MC per hub in model",
+      "excluded": [
+        "concurrent DIN/LW",
+        "general L2 contention",
+        "unequal MC-lane state",
+        "other PHY/CSR profiles",
+        "cross-instruction shared MC state"
+      ],
+      "source": "dev_docs/sim/pe_weight/72_pe_calibration.md:1996-2034"
+    },
+    "variants": [
+      {
+        "id": "dense",
+        "source_job": "4e99ed9f5d1b",
+        "wave_repeat_job": "5a88fabf1bd4",
+        "historical_rtl": {
+          "values": {
+            "job": "4e99ed9f5d1b",
+            "cohort": "down-m4-dense",
+            "kind": "scan",
+            "rtl_cycles": 623,
+            "tw": 4,
+            "tc": 512,
+            "tk": 4096,
+            "mtw": 4,
+            "mtc": 3,
+            "mtk": 1,
+            "of": 7,
+            "wgt": 0,
+            "uen": 0,
+            "group": 0,
+            "usaddr": 0,
+            "sc": 512,
+            "sk": 4096,
+            "pic": 0,
+            "pik": 0,
+            "wbs": 12
+          },
+          "source": {
+            "path": "test/pe/int4_rtl/cases.tsv",
+            "line": 41,
+            "sha256": "5995dc892fb101c522f4736688f5e9ea2dd90e76d682d7200f8477caf510077e",
+            "raw_row": "4e99ed9f5d1b down-m4-dense scan 623 4 512 4096 4 3 1 7 0 0 0 0 512 4096 0 0 12"
+          }
+        },
+        "inputs": {
+          "N": 1,
+          "H": 1,
+          "W": 4,
+          "C": 512,
+          "K": 4096,
+          "activation_dtype": "FP8",
+          "weight_dtype": "INT4",
+          "output_dtype": "FP32",
+          "mode": "KC",
+          "indexed": false,
+          "wafer": "1+4/Wide",
+          "MTW_count": 4,
+          "MTC_raw": 3,
+          "MTC_count": 4,
+          "MTK_count": 1,
+          "UScale_enabled": false,
+          "UScale_group": 0,
+          "weight_base": 0,
+          "scale_base": 0,
+          "weight_source_C": 512,
+          "weight_source_K": 4096,
+          "PIC": 0,
+          "PIK": 0,
+          "WBS": 12
+        },
+        "derived_geometry": {
+          "activation_C_beats": 4,
+          "weight_K_passes": 16,
+          "mini_W": 4,
+          "mini_C": 4,
+          "mini_K": 1,
+          "mini_tiles": 16,
+          "words_per_full_mini": 16,
+          "reads_per_full_mini": 16,
+          "A": 4,
+          "total_mac_handshakes": 256,
+          "total_output_handshakes": 128,
+          "fp32_subwords_per_output": 4,
+          "serialized_DT_subwords": 512,
+          "logical_activation_bytes": 2048,
+          "logical_weight_bytes": 1048576,
+          "logical_scale_bytes": 0,
+          "logical_output_bytes": 65536,
+          "activation_word_warning": "words_per_full_mini * mini_tiles is not the actual AL1 send count. With MTC_count=4, first two K blocks fill two AL1 halves; remaining 14 blocks send flag-only. Observe 32 activation words and 16 flags. w1c1k2 has 128 words/128 flags instead."
+        },
+        "input_coverage": {
+          "timing_projection": "all geometry inputs to PeInt4Timing are specified; fixed default profile from recorded CSR source",
+          "full_vcs_reproduction": "original input tensor bytes, activation source address, destination address and full zbin are not contained in cases.tsv/control fixture; this artifact is a timing case study, not a self-contained numerical replay bundle"
+        },
+        "measurements": {
+          "basis": "MEASURED-RTL historical frozen VCS; no new run",
+          "quantity": "PE trace done edge - PE trace start edge",
+          "cycles": 623,
+          "ms_at_400mhz": 0.0015575,
+          "first_mac": 54,
+          "last_mac": 509,
+          "first_output": 78,
+          "last_output": 568,
+          "first_dt": 85,
+          "last_dt": 596,
+          "last_dt_to_trace_done": 27,
+          "pin_projection_totals": {
+            "weight_handshakes": 256,
+            "scale_handshakes": 0,
+            "mac_handshakes": 256,
+            "output_handshakes": 128,
+            "activation_words": 32,
+            "activation_flags": 16,
+            "serialized_dt_subwords": 512
+          },
+          "activation_wait_with_weight_absent_cycles": 2,
+          "output_backpressure_cycles": 358,
+          "credit_observed": false
+        },
+        "model_comparison": {
+          "historical_expected_model_cycles": 623,
+          "evidence": "test/pe/test_pe_int4_wave.cpp:8-28 asserts all 11 pins and last_transfer+27 for this fixture; this task reads the assertion and extracts the fixture, but does not rerun it.",
+          "not_closed_form": "PeEngine selects instruction-local coupled state model, so do not add independent scale/weight/ALU durations. Events overlap and backpressure changes upstream valid/ready."
+        },
+        "wave": {
+          "path": "test/wl1/int4_wave/dense-closed.txt",
+          "sha256": "7018794f7c62ac047f81c2a4b9f3795ac783eca8271c3aba0035b6cecba5245e",
+          "samples": 653,
+          "pin_order": [
+            "weight_valid",
+            "weight_ready",
+            "scale_valid",
+            "scale_ready",
+            "activation_valid",
+            "activation_ready",
+            "output_valid",
+            "output_handshake",
+            "activation_word",
+            "activation_flag",
+            "transfer_valid"
+          ],
+          "scope": "one representative PE control stream; output serialization is group path, not standalone DT engine; not full-chip all-lane waveform",
+          "sampling": "400 MHz, pre-edge control sampled every 2500 ps; fixture cycle 0 is PE trace-start reference. Cumulative event counters include handshake on the named edge. output_handshake column is valid&&ready, not raw ready.",
+          "credit_unavailable": true,
+          "frames": [
+            {
+              "cycle": 0,
+              "event": "pe_trace_start",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 0,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 0,
+                "activation_ready": 0,
+                "output_valid": 0,
+                "output_handshake": 0,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 0
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 0,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 0
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "独立case计时的PE trace起点；本帧不推断隐藏队列状态。"
+              ],
+              "source_line": 1,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 33,
+              "event": "first_activation_word",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 0,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 0,
+                "activation_ready": 0,
+                "output_valid": 0,
+                "output_handshake": 0,
+                "activation_word": 1,
+                "activation_flag": 0,
+                "transfer_valid": 0
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 1,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 0
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "本拍接收到首个activation word；后续装载与flag计数分别统计。"
+              ],
+              "source_line": 34,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 52,
+              "event": "first_observed_activation_wait_with_weight_absent",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 1,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 1,
+                "activation_ready": 0,
+                "output_valid": 0,
+                "output_handshake": 0,
+                "activation_word": 1,
+                "activation_flag": 0,
+                "transfer_valid": 0
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 20,
+                "activation_flags": 1,
+                "serialized_dt_subwords": 0
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "activation_valid=1, activation_ready=0：本拍 activation 未被消费。",
+                "同时 weight_valid=0：观察到 activation 等待且权重未就绪；此投影不能进一步区分 MC 行切换、仲裁或 buffer miss。"
+              ],
+              "source_line": 53,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 54,
+              "event": "first_mac_handshake",
+              "pins": {
+                "weight_valid": 1,
+                "weight_ready": 1,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 1,
+                "activation_ready": 1,
+                "output_valid": 0,
+                "output_handshake": 0,
+                "activation_word": 1,
+                "activation_flag": 0,
+                "transfer_valid": 0
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 1,
+                "scale_handshakes": 0,
+                "mac_handshakes": 1,
+                "output_handshakes": 0,
+                "activation_words": 22,
+                "activation_flags": 1,
+                "serialized_dt_subwords": 0
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "本拍发生一次 activation/ALU 握手。"
+              ],
+              "source_line": 55,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 78,
+              "event": "first_output_handshake",
+              "pins": {
+                "weight_valid": 1,
+                "weight_ready": 1,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 1,
+                "activation_ready": 1,
+                "output_valid": 1,
+                "output_handshake": 1,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 0
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 25,
+                "scale_handshakes": 0,
+                "mac_handshakes": 25,
+                "output_handshakes": 1,
+                "activation_words": 32,
+                "activation_flags": 2,
+                "serialized_dt_subwords": 0
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "本拍发生首个输出token握手；流水的其他级可以同时处于等待。",
+                "本拍发生一次 activation/ALU 握手。"
+              ],
+              "source_line": 79,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 85,
+              "event": "first_output_backpressure",
+              "pins": {
+                "weight_valid": 1,
+                "weight_ready": 1,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 1,
+                "activation_ready": 1,
+                "output_valid": 1,
+                "output_handshake": 0,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 1
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 32,
+                "scale_handshakes": 0,
+                "mac_handshakes": 32,
+                "output_handshakes": 7,
+                "activation_words": 32,
+                "activation_flags": 2,
+                "serialized_dt_subwords": 1
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "output_valid=1, output_handshake=0：输出本拍被下游反压。",
+                "本拍发生一次 activation/ALU 握手。",
+                "本拍串行输出一个 DT subword；FP32 输出每个 OL1 token 需要 4 个。"
+              ],
+              "source_line": 86,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 509,
+              "event": "last_mac_handshake",
+              "pins": {
+                "weight_valid": 1,
+                "weight_ready": 1,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 1,
+                "activation_ready": 1,
+                "output_valid": 1,
+                "output_handshake": 0,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 1
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 256,
+                "scale_handshakes": 0,
+                "mac_handshakes": 256,
+                "output_handshakes": 113,
+                "activation_words": 32,
+                "activation_flags": 16,
+                "serialized_dt_subwords": 425
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "output_valid=1, output_handshake=0：输出本拍被下游反压。",
+                "本拍发生一次 activation/ALU 握手。",
+                "本拍串行输出一个 DT subword；FP32 输出每个 OL1 token 需要 4 个。"
+              ],
+              "source_line": 510,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 568,
+              "event": "last_output_handshake",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 0,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 0,
+                "activation_ready": 0,
+                "output_valid": 1,
+                "output_handshake": 1,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 1
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 256,
+                "scale_handshakes": 0,
+                "mac_handshakes": 256,
+                "output_handshakes": 128,
+                "activation_words": 32,
+                "activation_flags": 16,
+                "serialized_dt_subwords": 484
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "本拍完成最后一次output握手；内部DT序列化和完成尾部仍需推进。"
+              ],
+              "source_line": 569,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 596,
+              "event": "last_serialized_dt_subword",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 0,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 0,
+                "activation_ready": 0,
+                "output_valid": 0,
+                "output_handshake": 0,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 1
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 256,
+                "scale_handshakes": 0,
+                "mac_handshakes": 256,
+                "output_handshakes": 128,
+                "activation_words": 32,
+                "activation_flags": 16,
+                "serialized_dt_subwords": 512
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "本拍串行输出一个 DT subword；FP32 输出每个 OL1 token 需要 4 个。"
+              ],
+              "source_line": 597,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 623,
+              "event": "pe_trace_done_boundary",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 0,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 0,
+                "activation_ready": 0,
+                "output_valid": 0,
+                "output_handshake": 0,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 0
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 256,
+                "scale_handshakes": 0,
+                "mac_handshakes": 256,
+                "output_handshakes": 128,
+                "activation_words": 32,
+                "activation_flags": 16,
+                "serialized_dt_subwords": 512
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "独立case计时保存的PE trace完成边界，末内部DT传输之后27拍；11pin不含done，本帧不推断隐藏内部状态。"
+              ],
+              "source_line": 624,
+              "event_basis": "historical cases.tsv trace span; trace_done pin is not one of these 11 columns"
+            }
+          ],
+          "intervals": [
+            {
+              "after_cycle": 0,
+              "through_cycle": 33,
+              "cycles": 33,
+              "counter_delta": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 1,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 0
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 0,
+              "observed_output_backpressure_cycles": 0,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 33,
+              "through_cycle": 52,
+              "cycles": 19,
+              "counter_delta": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 19,
+                "activation_flags": 1,
+                "serialized_dt_subwords": 0
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 1,
+              "observed_output_backpressure_cycles": 0,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 52,
+              "through_cycle": 54,
+              "cycles": 2,
+              "counter_delta": {
+                "weight_handshakes": 1,
+                "scale_handshakes": 0,
+                "mac_handshakes": 1,
+                "output_handshakes": 0,
+                "activation_words": 2,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 0
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 1,
+              "observed_output_backpressure_cycles": 0,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 54,
+              "through_cycle": 78,
+              "cycles": 24,
+              "counter_delta": {
+                "weight_handshakes": 24,
+                "scale_handshakes": 0,
+                "mac_handshakes": 24,
+                "output_handshakes": 1,
+                "activation_words": 10,
+                "activation_flags": 1,
+                "serialized_dt_subwords": 0
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 0,
+              "observed_output_backpressure_cycles": 0,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 78,
+              "through_cycle": 85,
+              "cycles": 7,
+              "counter_delta": {
+                "weight_handshakes": 7,
+                "scale_handshakes": 0,
+                "mac_handshakes": 7,
+                "output_handshakes": 6,
+                "activation_words": 0,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 1
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 0,
+              "observed_output_backpressure_cycles": 1,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 85,
+              "through_cycle": 509,
+              "cycles": 424,
+              "counter_delta": {
+                "weight_handshakes": 224,
+                "scale_handshakes": 0,
+                "mac_handshakes": 224,
+                "output_handshakes": 106,
+                "activation_words": 0,
+                "activation_flags": 14,
+                "serialized_dt_subwords": 424
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 0,
+              "observed_output_backpressure_cycles": 313,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 509,
+              "through_cycle": 568,
+              "cycles": 59,
+              "counter_delta": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 15,
+                "activation_words": 0,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 59
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 0,
+              "observed_output_backpressure_cycles": 44,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 568,
+              "through_cycle": 596,
+              "cycles": 28,
+              "counter_delta": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 0,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 28
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 0,
+              "observed_output_backpressure_cycles": 0,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 596,
+              "through_cycle": 623,
+              "cycles": 27,
+              "counter_delta": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 0,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 0
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 0,
+              "observed_output_backpressure_cycles": 0,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            }
+          ]
+        }
+      },
+      {
+        "id": "u16",
+        "source_job": "aa3d5ee4df58",
+        "wave_repeat_job": "7d1b993152be",
+        "historical_rtl": {
+          "values": {
+            "job": "aa3d5ee4df58",
+            "cohort": "down-m4-u16",
+            "kind": "scan",
+            "rtl_cycles": 1148,
+            "tw": 4,
+            "tc": 512,
+            "tk": 4096,
+            "mtw": 4,
+            "mtc": 3,
+            "mtk": 1,
+            "of": 7,
+            "wgt": 0,
+            "uen": 1,
+            "group": 16,
+            "usaddr": 1048576,
+            "sc": 512,
+            "sk": 4096,
+            "pic": 0,
+            "pik": 0,
+            "wbs": 12
+          },
+          "source": {
+            "path": "test/pe/int4_rtl/cases.tsv",
+            "line": 130,
+            "sha256": "5995dc892fb101c522f4736688f5e9ea2dd90e76d682d7200f8477caf510077e",
+            "raw_row": "aa3d5ee4df58 down-m4-u16 scan 1148 4 512 4096 4 3 1 7 0 1 16 1048576 512 4096 0 0 12"
+          }
+        },
+        "inputs": {
+          "N": 1,
+          "H": 1,
+          "W": 4,
+          "C": 512,
+          "K": 4096,
+          "activation_dtype": "FP8",
+          "weight_dtype": "INT4",
+          "output_dtype": "FP32",
+          "mode": "KC",
+          "indexed": false,
+          "wafer": "1+4/Wide",
+          "MTW_count": 4,
+          "MTC_raw": 3,
+          "MTC_count": 4,
+          "MTK_count": 1,
+          "UScale_enabled": true,
+          "UScale_group": 16,
+          "weight_base": 0,
+          "scale_base": 1048576,
+          "weight_source_C": 512,
+          "weight_source_K": 4096,
+          "PIC": 0,
+          "PIK": 0,
+          "WBS": 12
+        },
+        "derived_geometry": {
+          "activation_C_beats": 4,
+          "weight_K_passes": 16,
+          "mini_W": 4,
+          "mini_C": 4,
+          "mini_K": 1,
+          "mini_tiles": 16,
+          "words_per_full_mini": 16,
+          "reads_per_full_mini": 16,
+          "A": 4,
+          "total_mac_handshakes": 256,
+          "total_output_handshakes": 128,
+          "fp32_subwords_per_output": 4,
+          "serialized_DT_subwords": 512,
+          "logical_activation_bytes": 2048,
+          "logical_weight_bytes": 1048576,
+          "logical_scale_bytes": 262144,
+          "logical_output_bytes": 65536,
+          "activation_word_warning": "words_per_full_mini * mini_tiles is not the actual AL1 send count. With MTC_count=4, first two K blocks fill two AL1 halves; remaining 14 blocks send flag-only. Observe 32 activation words and 16 flags. w1c1k2 has 128 words/128 flags instead."
+        },
+        "input_coverage": {
+          "timing_projection": "all geometry inputs to PeInt4Timing are specified; fixed default profile from recorded CSR source",
+          "full_vcs_reproduction": "original input tensor bytes, activation source address, destination address and full zbin are not contained in cases.tsv/control fixture; this artifact is a timing case study, not a self-contained numerical replay bundle"
+        },
+        "measurements": {
+          "basis": "MEASURED-RTL historical frozen VCS; no new run",
+          "quantity": "PE trace done edge - PE trace start edge",
+          "cycles": 1148,
+          "ms_at_400mhz": 0.00287,
+          "first_mac": 73,
+          "last_mac": 1045,
+          "first_output": 123,
+          "last_output": 1093,
+          "first_dt": 130,
+          "last_dt": 1121,
+          "last_dt_to_trace_done": 27,
+          "pin_projection_totals": {
+            "weight_handshakes": 256,
+            "scale_handshakes": 256,
+            "mac_handshakes": 256,
+            "output_handshakes": 128,
+            "activation_words": 32,
+            "activation_flags": 16,
+            "serialized_dt_subwords": 512
+          },
+          "activation_wait_with_weight_absent_cycles": 734,
+          "output_backpressure_cycles": 95,
+          "credit_observed": false
+        },
+        "model_comparison": {
+          "historical_expected_model_cycles": 1148,
+          "evidence": "test/pe/test_pe_int4_wave.cpp:8-28 asserts all 11 pins and last_transfer+27 for this fixture; this task reads the assertion and extracts the fixture, but does not rerun it.",
+          "not_closed_form": "PeEngine selects instruction-local coupled state model, so do not add independent scale/weight/ALU durations. Events overlap and backpressure changes upstream valid/ready."
+        },
+        "wave": {
+          "path": "test/wl1/int4_wave/u16-closed.txt",
+          "sha256": "27033ebdc04d2a2de3fc6e49abdb2cba022b332f2c367c5662cb95fcc72c717c",
+          "samples": 1178,
+          "pin_order": [
+            "weight_valid",
+            "weight_ready",
+            "scale_valid",
+            "scale_ready",
+            "activation_valid",
+            "activation_ready",
+            "output_valid",
+            "output_handshake",
+            "activation_word",
+            "activation_flag",
+            "transfer_valid"
+          ],
+          "scope": "one representative PE control stream; output serialization is group path, not standalone DT engine; not full-chip all-lane waveform",
+          "sampling": "400 MHz, pre-edge control sampled every 2500 ps; fixture cycle 0 is PE trace-start reference. Cumulative event counters include handshake on the named edge. output_handshake column is valid&&ready, not raw ready.",
+          "credit_unavailable": true,
+          "frames": [
+            {
+              "cycle": 0,
+              "event": "pe_trace_start",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 0,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 0,
+                "activation_ready": 0,
+                "output_valid": 0,
+                "output_handshake": 0,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 0
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 0,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 0
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "独立case计时的PE trace起点；本帧不推断隐藏队列状态。"
+              ],
+              "source_line": 1,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 33,
+              "event": "first_activation_word",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 0,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 0,
+                "activation_ready": 0,
+                "output_valid": 0,
+                "output_handshake": 0,
+                "activation_word": 1,
+                "activation_flag": 0,
+                "transfer_valid": 0
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 1,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 0
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "本拍接收到首个activation word；后续装载与flag计数分别统计。"
+              ],
+              "source_line": 34,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 52,
+              "event": "first_observed_activation_wait_with_weight_absent",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 1,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 1,
+                "activation_ready": 0,
+                "output_valid": 0,
+                "output_handshake": 0,
+                "activation_word": 1,
+                "activation_flag": 0,
+                "transfer_valid": 0
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 20,
+                "activation_flags": 1,
+                "serialized_dt_subwords": 0
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "activation_valid=1, activation_ready=0：本拍 activation 未被消费。",
+                "同时 weight_valid=0：观察到 activation 等待且权重未就绪；此投影不能进一步区分 MC 行切换、仲裁或 buffer miss。"
+              ],
+              "source_line": 53,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 73,
+              "event": "first_mac_handshake",
+              "pins": {
+                "weight_valid": 1,
+                "weight_ready": 1,
+                "scale_valid": 1,
+                "scale_ready": 0,
+                "activation_valid": 1,
+                "activation_ready": 1,
+                "output_valid": 0,
+                "output_handshake": 0,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 0
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 1,
+                "scale_handshakes": 0,
+                "mac_handshakes": 1,
+                "output_handshakes": 0,
+                "activation_words": 32,
+                "activation_flags": 2,
+                "serialized_dt_subwords": 0
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "本拍发生一次 activation/ALU 握手。"
+              ],
+              "source_line": 74,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 123,
+              "event": "first_output_handshake",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 1,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 1,
+                "activation_ready": 0,
+                "output_valid": 1,
+                "output_handshake": 1,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 0
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 16,
+                "scale_handshakes": 16,
+                "mac_handshakes": 16,
+                "output_handshakes": 1,
+                "activation_words": 32,
+                "activation_flags": 2,
+                "serialized_dt_subwords": 0
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "本拍发生首个输出token握手；流水的其他级可以同时处于等待。",
+                "activation_valid=1, activation_ready=0：本拍 activation 未被消费。",
+                "同时 weight_valid=0：观察到 activation 等待且权重未就绪；此投影不能进一步区分 MC 行切换、仲裁或 buffer miss。"
+              ],
+              "source_line": 124,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 130,
+              "event": "first_output_backpressure",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 1,
+                "scale_valid": 1,
+                "scale_ready": 0,
+                "activation_valid": 1,
+                "activation_ready": 0,
+                "output_valid": 1,
+                "output_handshake": 0,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 1
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 16,
+                "scale_handshakes": 16,
+                "mac_handshakes": 16,
+                "output_handshakes": 7,
+                "activation_words": 32,
+                "activation_flags": 2,
+                "serialized_dt_subwords": 1
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "activation_valid=1, activation_ready=0：本拍 activation 未被消费。",
+                "同时 weight_valid=0：观察到 activation 等待且权重未就绪；此投影不能进一步区分 MC 行切换、仲裁或 buffer miss。",
+                "output_valid=1, output_handshake=0：输出本拍被下游反压。",
+                "本拍串行输出一个 DT subword；FP32 输出每个 OL1 token 需要 4 个。"
+              ],
+              "source_line": 131,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 1045,
+              "event": "last_mac_handshake",
+              "pins": {
+                "weight_valid": 1,
+                "weight_ready": 1,
+                "scale_valid": 1,
+                "scale_ready": 1,
+                "activation_valid": 1,
+                "activation_ready": 1,
+                "output_valid": 1,
+                "output_handshake": 1,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 1
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 256,
+                "scale_handshakes": 252,
+                "mac_handshakes": 256,
+                "output_handshakes": 116,
+                "activation_words": 32,
+                "activation_flags": 16,
+                "serialized_dt_subwords": 436
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "本拍发生一次 activation/ALU 握手。",
+                "本拍串行输出一个 DT subword；FP32 输出每个 OL1 token 需要 4 个。"
+              ],
+              "source_line": 1046,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 1093,
+              "event": "last_output_handshake",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 0,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 0,
+                "activation_ready": 0,
+                "output_valid": 1,
+                "output_handshake": 1,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 1
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 256,
+                "scale_handshakes": 256,
+                "mac_handshakes": 256,
+                "output_handshakes": 128,
+                "activation_words": 32,
+                "activation_flags": 16,
+                "serialized_dt_subwords": 484
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "本拍完成最后一次output握手；内部DT序列化和完成尾部仍需推进。"
+              ],
+              "source_line": 1094,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 1121,
+              "event": "last_serialized_dt_subword",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 0,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 0,
+                "activation_ready": 0,
+                "output_valid": 0,
+                "output_handshake": 0,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 1
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 256,
+                "scale_handshakes": 256,
+                "mac_handshakes": 256,
+                "output_handshakes": 128,
+                "activation_words": 32,
+                "activation_flags": 16,
+                "serialized_dt_subwords": 512
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "本拍串行输出一个 DT subword；FP32 输出每个 OL1 token 需要 4 个。"
+              ],
+              "source_line": 1122,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 1148,
+              "event": "pe_trace_done_boundary",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 0,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 0,
+                "activation_ready": 0,
+                "output_valid": 0,
+                "output_handshake": 0,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 0
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 256,
+                "scale_handshakes": 256,
+                "mac_handshakes": 256,
+                "output_handshakes": 128,
+                "activation_words": 32,
+                "activation_flags": 16,
+                "serialized_dt_subwords": 512
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "独立case计时保存的PE trace完成边界，末内部DT传输之后27拍；11pin不含done，本帧不推断隐藏内部状态。"
+              ],
+              "source_line": 1149,
+              "event_basis": "historical cases.tsv trace span; trace_done pin is not one of these 11 columns"
+            }
+          ],
+          "intervals": [
+            {
+              "after_cycle": 0,
+              "through_cycle": 33,
+              "cycles": 33,
+              "counter_delta": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 1,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 0
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 0,
+              "observed_output_backpressure_cycles": 0,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 33,
+              "through_cycle": 52,
+              "cycles": 19,
+              "counter_delta": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 19,
+                "activation_flags": 1,
+                "serialized_dt_subwords": 0
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 1,
+              "observed_output_backpressure_cycles": 0,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 52,
+              "through_cycle": 73,
+              "cycles": 21,
+              "counter_delta": {
+                "weight_handshakes": 1,
+                "scale_handshakes": 0,
+                "mac_handshakes": 1,
+                "output_handshakes": 0,
+                "activation_words": 12,
+                "activation_flags": 1,
+                "serialized_dt_subwords": 0
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 20,
+              "observed_output_backpressure_cycles": 0,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 73,
+              "through_cycle": 123,
+              "cycles": 50,
+              "counter_delta": {
+                "weight_handshakes": 15,
+                "scale_handshakes": 16,
+                "mac_handshakes": 15,
+                "output_handshakes": 1,
+                "activation_words": 0,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 0
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 35,
+              "observed_output_backpressure_cycles": 0,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 123,
+              "through_cycle": 130,
+              "cycles": 7,
+              "counter_delta": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 6,
+                "activation_words": 0,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 1
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 7,
+              "observed_output_backpressure_cycles": 1,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 130,
+              "through_cycle": 1045,
+              "cycles": 915,
+              "counter_delta": {
+                "weight_handshakes": 240,
+                "scale_handshakes": 236,
+                "mac_handshakes": 240,
+                "output_handshakes": 109,
+                "activation_words": 0,
+                "activation_flags": 14,
+                "serialized_dt_subwords": 435
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 671,
+              "observed_output_backpressure_cycles": 58,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 1045,
+              "through_cycle": 1093,
+              "cycles": 48,
+              "counter_delta": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 4,
+                "mac_handshakes": 0,
+                "output_handshakes": 12,
+                "activation_words": 0,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 48
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 0,
+              "observed_output_backpressure_cycles": 36,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 1093,
+              "through_cycle": 1121,
+              "cycles": 28,
+              "counter_delta": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 0,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 28
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 0,
+              "observed_output_backpressure_cycles": 0,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 1121,
+              "through_cycle": 1148,
+              "cycles": 27,
+              "counter_delta": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 0,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 0
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 0,
+              "observed_output_backpressure_cycles": 0,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            }
+          ]
+        }
+      },
+      {
+        "id": "u32",
+        "source_job": "99adae27c06f",
+        "wave_repeat_job": "2cab15f0f7aa",
+        "historical_rtl": {
+          "values": {
+            "job": "99adae27c06f",
+            "cohort": "down-m4-u32",
+            "kind": "scan",
+            "rtl_cycles": 835,
+            "tw": 4,
+            "tc": 512,
+            "tk": 4096,
+            "mtw": 4,
+            "mtc": 3,
+            "mtk": 1,
+            "of": 7,
+            "wgt": 0,
+            "uen": 1,
+            "group": 32,
+            "usaddr": 1048576,
+            "sc": 512,
+            "sk": 4096,
+            "pic": 0,
+            "pik": 0,
+            "wbs": 12
+          },
+          "source": {
+            "path": "test/pe/int4_rtl/cases.tsv",
+            "line": 196,
+            "sha256": "5995dc892fb101c522f4736688f5e9ea2dd90e76d682d7200f8477caf510077e",
+            "raw_row": "99adae27c06f down-m4-u32 scan 835 4 512 4096 4 3 1 7 0 1 32 1048576 512 4096 0 0 12"
+          }
+        },
+        "inputs": {
+          "N": 1,
+          "H": 1,
+          "W": 4,
+          "C": 512,
+          "K": 4096,
+          "activation_dtype": "FP8",
+          "weight_dtype": "INT4",
+          "output_dtype": "FP32",
+          "mode": "KC",
+          "indexed": false,
+          "wafer": "1+4/Wide",
+          "MTW_count": 4,
+          "MTC_raw": 3,
+          "MTC_count": 4,
+          "MTK_count": 1,
+          "UScale_enabled": true,
+          "UScale_group": 32,
+          "weight_base": 0,
+          "scale_base": 1048576,
+          "weight_source_C": 512,
+          "weight_source_K": 4096,
+          "PIC": 0,
+          "PIK": 0,
+          "WBS": 12
+        },
+        "derived_geometry": {
+          "activation_C_beats": 4,
+          "weight_K_passes": 16,
+          "mini_W": 4,
+          "mini_C": 4,
+          "mini_K": 1,
+          "mini_tiles": 16,
+          "words_per_full_mini": 16,
+          "reads_per_full_mini": 16,
+          "A": 4,
+          "total_mac_handshakes": 256,
+          "total_output_handshakes": 128,
+          "fp32_subwords_per_output": 4,
+          "serialized_DT_subwords": 512,
+          "logical_activation_bytes": 2048,
+          "logical_weight_bytes": 1048576,
+          "logical_scale_bytes": 131072,
+          "logical_output_bytes": 65536,
+          "activation_word_warning": "words_per_full_mini * mini_tiles is not the actual AL1 send count. With MTC_count=4, first two K blocks fill two AL1 halves; remaining 14 blocks send flag-only. Observe 32 activation words and 16 flags. w1c1k2 has 128 words/128 flags instead."
+        },
+        "input_coverage": {
+          "timing_projection": "all geometry inputs to PeInt4Timing are specified; fixed default profile from recorded CSR source",
+          "full_vcs_reproduction": "original input tensor bytes, activation source address, destination address and full zbin are not contained in cases.tsv/control fixture; this artifact is a timing case study, not a self-contained numerical replay bundle"
+        },
+        "measurements": {
+          "basis": "MEASURED-RTL historical frozen VCS; no new run",
+          "quantity": "PE trace done edge - PE trace start edge",
+          "cycles": 835,
+          "ms_at_400mhz": 0.0020875,
+          "first_mac": 91,
+          "last_mac": 720,
+          "first_output": 116,
+          "last_output": 780,
+          "first_dt": 123,
+          "last_dt": 808,
+          "last_dt_to_trace_done": 27,
+          "pin_projection_totals": {
+            "weight_handshakes": 256,
+            "scale_handshakes": 256,
+            "mac_handshakes": 256,
+            "output_handshakes": 128,
+            "activation_words": 32,
+            "activation_flags": 16,
+            "serialized_dt_subwords": 512
+          },
+          "activation_wait_with_weight_absent_cycles": 395,
+          "output_backpressure_cycles": 195,
+          "credit_observed": false
+        },
+        "model_comparison": {
+          "historical_expected_model_cycles": 835,
+          "evidence": "test/pe/test_pe_int4_wave.cpp:8-28 asserts all 11 pins and last_transfer+27 for this fixture; this task reads the assertion and extracts the fixture, but does not rerun it.",
+          "not_closed_form": "PeEngine selects instruction-local coupled state model, so do not add independent scale/weight/ALU durations. Events overlap and backpressure changes upstream valid/ready."
+        },
+        "wave": {
+          "path": "test/wl1/int4_wave/u32-closed.txt",
+          "sha256": "0cd3f4a886948c75c5ab463e5b5b1c0178b14f79df7714ce66fe41ae9ae07a1b",
+          "samples": 865,
+          "pin_order": [
+            "weight_valid",
+            "weight_ready",
+            "scale_valid",
+            "scale_ready",
+            "activation_valid",
+            "activation_ready",
+            "output_valid",
+            "output_handshake",
+            "activation_word",
+            "activation_flag",
+            "transfer_valid"
+          ],
+          "scope": "one representative PE control stream; output serialization is group path, not standalone DT engine; not full-chip all-lane waveform",
+          "sampling": "400 MHz, pre-edge control sampled every 2500 ps; fixture cycle 0 is PE trace-start reference. Cumulative event counters include handshake on the named edge. output_handshake column is valid&&ready, not raw ready.",
+          "credit_unavailable": true,
+          "frames": [
+            {
+              "cycle": 0,
+              "event": "pe_trace_start",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 0,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 0,
+                "activation_ready": 0,
+                "output_valid": 0,
+                "output_handshake": 0,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 0
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 0,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 0
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "独立case计时的PE trace起点；本帧不推断隐藏队列状态。"
+              ],
+              "source_line": 1,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 33,
+              "event": "first_activation_word",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 0,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 0,
+                "activation_ready": 0,
+                "output_valid": 0,
+                "output_handshake": 0,
+                "activation_word": 1,
+                "activation_flag": 0,
+                "transfer_valid": 0
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 1,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 0
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "本拍接收到首个activation word；后续装载与flag计数分别统计。"
+              ],
+              "source_line": 34,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 52,
+              "event": "first_observed_activation_wait_with_weight_absent",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 1,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 1,
+                "activation_ready": 0,
+                "output_valid": 0,
+                "output_handshake": 0,
+                "activation_word": 1,
+                "activation_flag": 0,
+                "transfer_valid": 0
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 20,
+                "activation_flags": 1,
+                "serialized_dt_subwords": 0
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "activation_valid=1, activation_ready=0：本拍 activation 未被消费。",
+                "同时 weight_valid=0：观察到 activation 等待且权重未就绪；此投影不能进一步区分 MC 行切换、仲裁或 buffer miss。"
+              ],
+              "source_line": 53,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 91,
+              "event": "first_mac_handshake",
+              "pins": {
+                "weight_valid": 1,
+                "weight_ready": 1,
+                "scale_valid": 1,
+                "scale_ready": 0,
+                "activation_valid": 1,
+                "activation_ready": 1,
+                "output_valid": 0,
+                "output_handshake": 0,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 0
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 1,
+                "scale_handshakes": 0,
+                "mac_handshakes": 1,
+                "output_handshakes": 0,
+                "activation_words": 32,
+                "activation_flags": 2,
+                "serialized_dt_subwords": 0
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "本拍发生一次 activation/ALU 握手。"
+              ],
+              "source_line": 92,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 116,
+              "event": "first_output_handshake",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 1,
+                "scale_valid": 1,
+                "scale_ready": 0,
+                "activation_valid": 1,
+                "activation_ready": 0,
+                "output_valid": 1,
+                "output_handshake": 1,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 0
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 16,
+                "scale_handshakes": 16,
+                "mac_handshakes": 16,
+                "output_handshakes": 1,
+                "activation_words": 32,
+                "activation_flags": 2,
+                "serialized_dt_subwords": 0
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "本拍发生首个输出token握手；流水的其他级可以同时处于等待。",
+                "activation_valid=1, activation_ready=0：本拍 activation 未被消费。",
+                "同时 weight_valid=0：观察到 activation 等待且权重未就绪；此投影不能进一步区分 MC 行切换、仲裁或 buffer miss。"
+              ],
+              "source_line": 117,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 123,
+              "event": "first_output_backpressure",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 1,
+                "scale_valid": 1,
+                "scale_ready": 0,
+                "activation_valid": 1,
+                "activation_ready": 0,
+                "output_valid": 1,
+                "output_handshake": 0,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 1
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 16,
+                "scale_handshakes": 16,
+                "mac_handshakes": 16,
+                "output_handshakes": 7,
+                "activation_words": 32,
+                "activation_flags": 2,
+                "serialized_dt_subwords": 1
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "activation_valid=1, activation_ready=0：本拍 activation 未被消费。",
+                "同时 weight_valid=0：观察到 activation 等待且权重未就绪；此投影不能进一步区分 MC 行切换、仲裁或 buffer miss。",
+                "output_valid=1, output_handshake=0：输出本拍被下游反压。",
+                "本拍串行输出一个 DT subword；FP32 输出每个 OL1 token 需要 4 个。"
+              ],
+              "source_line": 124,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 720,
+              "event": "last_mac_handshake",
+              "pins": {
+                "weight_valid": 1,
+                "weight_ready": 1,
+                "scale_valid": 1,
+                "scale_ready": 1,
+                "activation_valid": 1,
+                "activation_ready": 1,
+                "output_valid": 1,
+                "output_handshake": 1,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 1
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 256,
+                "scale_handshakes": 252,
+                "mac_handshakes": 256,
+                "output_handshakes": 113,
+                "activation_words": 32,
+                "activation_flags": 16,
+                "serialized_dt_subwords": 424
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "本拍发生一次 activation/ALU 握手。",
+                "本拍串行输出一个 DT subword；FP32 输出每个 OL1 token 需要 4 个。"
+              ],
+              "source_line": 721,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 780,
+              "event": "last_output_handshake",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 0,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 0,
+                "activation_ready": 0,
+                "output_valid": 1,
+                "output_handshake": 1,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 1
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 256,
+                "scale_handshakes": 256,
+                "mac_handshakes": 256,
+                "output_handshakes": 128,
+                "activation_words": 32,
+                "activation_flags": 16,
+                "serialized_dt_subwords": 484
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "本拍完成最后一次output握手；内部DT序列化和完成尾部仍需推进。"
+              ],
+              "source_line": 781,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 808,
+              "event": "last_serialized_dt_subword",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 0,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 0,
+                "activation_ready": 0,
+                "output_valid": 0,
+                "output_handshake": 0,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 1
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 256,
+                "scale_handshakes": 256,
+                "mac_handshakes": 256,
+                "output_handshakes": 128,
+                "activation_words": 32,
+                "activation_flags": 16,
+                "serialized_dt_subwords": 512
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "本拍串行输出一个 DT subword；FP32 输出每个 OL1 token 需要 4 个。"
+              ],
+              "source_line": 809,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 835,
+              "event": "pe_trace_done_boundary",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 0,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 0,
+                "activation_ready": 0,
+                "output_valid": 0,
+                "output_handshake": 0,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 0
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 256,
+                "scale_handshakes": 256,
+                "mac_handshakes": 256,
+                "output_handshakes": 128,
+                "activation_words": 32,
+                "activation_flags": 16,
+                "serialized_dt_subwords": 512
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "独立case计时保存的PE trace完成边界，末内部DT传输之后27拍；11pin不含done，本帧不推断隐藏内部状态。"
+              ],
+              "source_line": 836,
+              "event_basis": "historical cases.tsv trace span; trace_done pin is not one of these 11 columns"
+            }
+          ],
+          "intervals": [
+            {
+              "after_cycle": 0,
+              "through_cycle": 33,
+              "cycles": 33,
+              "counter_delta": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 1,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 0
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 0,
+              "observed_output_backpressure_cycles": 0,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 33,
+              "through_cycle": 52,
+              "cycles": 19,
+              "counter_delta": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 19,
+                "activation_flags": 1,
+                "serialized_dt_subwords": 0
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 1,
+              "observed_output_backpressure_cycles": 0,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 52,
+              "through_cycle": 91,
+              "cycles": 39,
+              "counter_delta": {
+                "weight_handshakes": 1,
+                "scale_handshakes": 0,
+                "mac_handshakes": 1,
+                "output_handshakes": 0,
+                "activation_words": 12,
+                "activation_flags": 1,
+                "serialized_dt_subwords": 0
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 38,
+              "observed_output_backpressure_cycles": 0,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 91,
+              "through_cycle": 116,
+              "cycles": 25,
+              "counter_delta": {
+                "weight_handshakes": 15,
+                "scale_handshakes": 16,
+                "mac_handshakes": 15,
+                "output_handshakes": 1,
+                "activation_words": 0,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 0
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 10,
+              "observed_output_backpressure_cycles": 0,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 116,
+              "through_cycle": 123,
+              "cycles": 7,
+              "counter_delta": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 6,
+                "activation_words": 0,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 1
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 7,
+              "observed_output_backpressure_cycles": 1,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 123,
+              "through_cycle": 720,
+              "cycles": 597,
+              "counter_delta": {
+                "weight_handshakes": 240,
+                "scale_handshakes": 236,
+                "mac_handshakes": 240,
+                "output_handshakes": 106,
+                "activation_words": 0,
+                "activation_flags": 14,
+                "serialized_dt_subwords": 423
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 339,
+              "observed_output_backpressure_cycles": 149,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 720,
+              "through_cycle": 780,
+              "cycles": 60,
+              "counter_delta": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 4,
+                "mac_handshakes": 0,
+                "output_handshakes": 15,
+                "activation_words": 0,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 60
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 0,
+              "observed_output_backpressure_cycles": 45,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 780,
+              "through_cycle": 808,
+              "cycles": 28,
+              "counter_delta": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 0,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 28
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 0,
+              "observed_output_backpressure_cycles": 0,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 808,
+              "through_cycle": 835,
+              "cycles": 27,
+              "counter_delta": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 0,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 0
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 0,
+              "observed_output_backpressure_cycles": 0,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            }
+          ]
+        }
+      },
+      {
+        "id": "c501",
+        "source_job": "c501174f10a8",
+        "wave_repeat_job": "6ce2b2c0830d",
+        "historical_rtl": {
+          "values": {
+            "job": "c501174f10a8",
+            "cohort": "down-m4-u32",
+            "kind": "scan",
+            "rtl_cycles": 2008,
+            "tw": 4,
+            "tc": 512,
+            "tk": 4096,
+            "mtw": 1,
+            "mtc": 0,
+            "mtk": 2,
+            "of": 7,
+            "wgt": 0,
+            "uen": 1,
+            "group": 32,
+            "usaddr": 1048576,
+            "sc": 512,
+            "sk": 4096,
+            "pic": 0,
+            "pik": 0,
+            "wbs": 12
+          },
+          "source": {
+            "path": "test/pe/int4_rtl/cases.tsv",
+            "line": 257,
+            "sha256": "5995dc892fb101c522f4736688f5e9ea2dd90e76d682d7200f8477caf510077e",
+            "raw_row": "c501174f10a8 down-m4-u32 scan 2008 4 512 4096 1 0 2 7 0 1 32 1048576 512 4096 0 0 12"
+          }
+        },
+        "inputs": {
+          "N": 1,
+          "H": 1,
+          "W": 4,
+          "C": 512,
+          "K": 4096,
+          "activation_dtype": "FP8",
+          "weight_dtype": "INT4",
+          "output_dtype": "FP32",
+          "mode": "KC",
+          "indexed": false,
+          "wafer": "1+4/Wide",
+          "MTW_count": 1,
+          "MTC_raw": 0,
+          "MTC_count": 1,
+          "MTK_count": 2,
+          "UScale_enabled": true,
+          "UScale_group": 32,
+          "weight_base": 0,
+          "scale_base": 1048576,
+          "weight_source_C": 512,
+          "weight_source_K": 4096,
+          "PIC": 0,
+          "PIK": 0,
+          "WBS": 12
+        },
+        "derived_geometry": {
+          "activation_C_beats": 4,
+          "weight_K_passes": 16,
+          "mini_W": 1,
+          "mini_C": 1,
+          "mini_K": 2,
+          "mini_tiles": 128,
+          "words_per_full_mini": 1,
+          "reads_per_full_mini": 2,
+          "A": 2,
+          "total_mac_handshakes": 256,
+          "total_output_handshakes": 128,
+          "fp32_subwords_per_output": 4,
+          "serialized_DT_subwords": 512,
+          "logical_activation_bytes": 2048,
+          "logical_weight_bytes": 1048576,
+          "logical_scale_bytes": 131072,
+          "logical_output_bytes": 65536,
+          "activation_word_warning": "words_per_full_mini * mini_tiles is not the actual AL1 send count. With MTC_count=4, first two K blocks fill two AL1 halves; remaining 14 blocks send flag-only. Observe 32 activation words and 16 flags. w1c1k2 has 128 words/128 flags instead."
+        },
+        "input_coverage": {
+          "timing_projection": "all geometry inputs to PeInt4Timing are specified; fixed default profile from recorded CSR source",
+          "full_vcs_reproduction": "original input tensor bytes, activation source address, destination address and full zbin are not contained in cases.tsv/control fixture; this artifact is a timing case study, not a self-contained numerical replay bundle"
+        },
+        "measurements": {
+          "basis": "MEASURED-RTL historical frozen VCS; no new run",
+          "quantity": "PE trace done edge - PE trace start edge",
+          "cycles": 2008,
+          "ms_at_400mhz": 0.00502,
+          "first_mac": 110,
+          "last_mac": 1949,
+          "first_output": 182,
+          "last_output": 1962,
+          "first_dt": 189,
+          "last_dt": 1981,
+          "last_dt_to_trace_done": 27,
+          "pin_projection_totals": {
+            "weight_handshakes": 256,
+            "scale_handshakes": 256,
+            "mac_handshakes": 256,
+            "output_handshakes": 128,
+            "activation_words": 128,
+            "activation_flags": 128,
+            "serialized_dt_subwords": 512
+          },
+          "activation_wait_with_weight_absent_cycles": 676,
+          "output_backpressure_cycles": 0,
+          "credit_observed": false
+        },
+        "model_comparison": {
+          "historical_expected_model_cycles": 2008,
+          "evidence": "test/pe/test_pe_int4_wave.cpp:8-28 asserts all 11 pins and last_transfer+27 for this fixture; this task reads the assertion and extracts the fixture, but does not rerun it.",
+          "not_closed_form": "PeEngine selects instruction-local coupled state model, so do not add independent scale/weight/ALU durations. Events overlap and backpressure changes upstream valid/ready."
+        },
+        "wave": {
+          "path": "test/wl1/int4_wave/c501-closed.txt",
+          "sha256": "176b31ff30d044d65c4d29c44f7cecad6d3c38cbf5f7e38e04f826998eb60873",
+          "samples": 2038,
+          "pin_order": [
+            "weight_valid",
+            "weight_ready",
+            "scale_valid",
+            "scale_ready",
+            "activation_valid",
+            "activation_ready",
+            "output_valid",
+            "output_handshake",
+            "activation_word",
+            "activation_flag",
+            "transfer_valid"
+          ],
+          "scope": "one representative PE control stream; output serialization is group path, not standalone DT engine; not full-chip all-lane waveform",
+          "sampling": "400 MHz, pre-edge control sampled every 2500 ps; fixture cycle 0 is PE trace-start reference. Cumulative event counters include handshake on the named edge. output_handshake column is valid&&ready, not raw ready.",
+          "credit_unavailable": true,
+          "frames": [
+            {
+              "cycle": 0,
+              "event": "pe_trace_start",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 0,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 0,
+                "activation_ready": 0,
+                "output_valid": 0,
+                "output_handshake": 0,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 0
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 0,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 0
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "独立case计时的PE trace起点；本帧不推断隐藏队列状态。"
+              ],
+              "source_line": 1,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 33,
+              "event": "first_activation_word",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 0,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 0,
+                "activation_ready": 0,
+                "output_valid": 0,
+                "output_handshake": 0,
+                "activation_word": 1,
+                "activation_flag": 1,
+                "transfer_valid": 0
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 1,
+                "activation_flags": 1,
+                "serialized_dt_subwords": 0
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "本拍接收到首个activation word；后续装载与flag计数分别统计。"
+              ],
+              "source_line": 34,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 37,
+              "event": "first_observed_activation_wait_with_weight_absent",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 1,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 1,
+                "activation_ready": 0,
+                "output_valid": 0,
+                "output_handshake": 0,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 0
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 2,
+                "activation_flags": 2,
+                "serialized_dt_subwords": 0
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "activation_valid=1, activation_ready=0：本拍 activation 未被消费。",
+                "同时 weight_valid=0：观察到 activation 等待且权重未就绪；此投影不能进一步区分 MC 行切换、仲裁或 buffer miss。"
+              ],
+              "source_line": 38,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 110,
+              "event": "first_mac_handshake",
+              "pins": {
+                "weight_valid": 1,
+                "weight_ready": 1,
+                "scale_valid": 1,
+                "scale_ready": 0,
+                "activation_valid": 1,
+                "activation_ready": 1,
+                "output_valid": 0,
+                "output_handshake": 0,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 0
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 1,
+                "scale_handshakes": 0,
+                "mac_handshakes": 1,
+                "output_handshakes": 0,
+                "activation_words": 2,
+                "activation_flags": 2,
+                "serialized_dt_subwords": 0
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "本拍发生一次 activation/ALU 握手。"
+              ],
+              "source_line": 111,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 182,
+              "event": "first_output_handshake",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 1,
+                "scale_valid": 1,
+                "scale_ready": 0,
+                "activation_valid": 1,
+                "activation_ready": 0,
+                "output_valid": 1,
+                "output_handshake": 1,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 0
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 8,
+                "scale_handshakes": 8,
+                "mac_handshakes": 8,
+                "output_handshakes": 1,
+                "activation_words": 5,
+                "activation_flags": 5,
+                "serialized_dt_subwords": 0
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "本拍发生首个输出token握手；流水的其他级可以同时处于等待。",
+                "activation_valid=1, activation_ready=0：本拍 activation 未被消费。",
+                "同时 weight_valid=0：观察到 activation 等待且权重未就绪；此投影不能进一步区分 MC 行切换、仲裁或 buffer miss。"
+              ],
+              "source_line": 183,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 1112,
+              "event": "midpoint_mac_handshake",
+              "pins": {
+                "weight_valid": 1,
+                "weight_ready": 1,
+                "scale_valid": 1,
+                "scale_ready": 0,
+                "activation_valid": 1,
+                "activation_ready": 1,
+                "output_valid": 0,
+                "output_handshake": 0,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 1
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 129,
+                "scale_handshakes": 128,
+                "mac_handshakes": 129,
+                "output_handshakes": 64,
+                "activation_words": 65,
+                "activation_flags": 65,
+                "serialized_dt_subwords": 241
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "本拍发生一次 activation/ALU 握手。",
+                "本拍串行输出一个 DT subword；FP32 输出每个 OL1 token 需要 4 个。"
+              ],
+              "source_line": 1113,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 1949,
+              "event": "last_mac_handshake",
+              "pins": {
+                "weight_valid": 1,
+                "weight_ready": 1,
+                "scale_valid": 1,
+                "scale_ready": 1,
+                "activation_valid": 1,
+                "activation_ready": 1,
+                "output_valid": 0,
+                "output_handshake": 0,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 0
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 256,
+                "scale_handshakes": 254,
+                "mac_handshakes": 256,
+                "output_handshakes": 124,
+                "activation_words": 128,
+                "activation_flags": 128,
+                "serialized_dt_subwords": 496
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "本拍发生一次 activation/ALU 握手。"
+              ],
+              "source_line": 1950,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 1962,
+              "event": "last_output_handshake",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 0,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 0,
+                "activation_ready": 0,
+                "output_valid": 1,
+                "output_handshake": 1,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 0
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 256,
+                "scale_handshakes": 256,
+                "mac_handshakes": 256,
+                "output_handshakes": 128,
+                "activation_words": 128,
+                "activation_flags": 128,
+                "serialized_dt_subwords": 496
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "本拍完成最后一次output握手；内部DT序列化和完成尾部仍需推进。"
+              ],
+              "source_line": 1963,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 1981,
+              "event": "last_serialized_dt_subword",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 0,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 0,
+                "activation_ready": 0,
+                "output_valid": 0,
+                "output_handshake": 0,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 1
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 256,
+                "scale_handshakes": 256,
+                "mac_handshakes": 256,
+                "output_handshakes": 128,
+                "activation_words": 128,
+                "activation_flags": 128,
+                "serialized_dt_subwords": 512
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "本拍串行输出一个 DT subword；FP32 输出每个 OL1 token 需要 4 个。"
+              ],
+              "source_line": 1982,
+              "event_basis": "direct frozen control projection"
+            },
+            {
+              "cycle": 2008,
+              "event": "pe_trace_done_boundary",
+              "pins": {
+                "weight_valid": 0,
+                "weight_ready": 0,
+                "scale_valid": 0,
+                "scale_ready": 0,
+                "activation_valid": 0,
+                "activation_ready": 0,
+                "output_valid": 0,
+                "output_handshake": 0,
+                "activation_word": 0,
+                "activation_flag": 0,
+                "transfer_valid": 0
+              },
+              "cumulative_including_this_edge": {
+                "weight_handshakes": 256,
+                "scale_handshakes": 256,
+                "mac_handshakes": 256,
+                "output_handshakes": 128,
+                "activation_words": 128,
+                "activation_flags": 128,
+                "serialized_dt_subwords": 512
+              },
+              "credit": {
+                "value": null,
+                "basis": "DECLARED-UNKNOWN",
+                "reason": "11-pin control projection has no credit register or return pulse; do not label a reconstructed model credit as a measured RTL credit."
+              },
+              "observations": [
+                "独立case计时保存的PE trace完成边界，末内部DT传输之后27拍；11pin不含done，本帧不推断隐藏内部状态。"
+              ],
+              "source_line": 2009,
+              "event_basis": "historical cases.tsv trace span; trace_done pin is not one of these 11 columns"
+            }
+          ],
+          "intervals": [
+            {
+              "after_cycle": 0,
+              "through_cycle": 33,
+              "cycles": 33,
+              "counter_delta": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 1,
+                "activation_flags": 1,
+                "serialized_dt_subwords": 0
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 0,
+              "observed_output_backpressure_cycles": 0,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 33,
+              "through_cycle": 37,
+              "cycles": 4,
+              "counter_delta": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 1,
+                "activation_flags": 1,
+                "serialized_dt_subwords": 0
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 1,
+              "observed_output_backpressure_cycles": 0,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 37,
+              "through_cycle": 110,
+              "cycles": 73,
+              "counter_delta": {
+                "weight_handshakes": 1,
+                "scale_handshakes": 0,
+                "mac_handshakes": 1,
+                "output_handshakes": 0,
+                "activation_words": 0,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 0
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 72,
+              "observed_output_backpressure_cycles": 0,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 110,
+              "through_cycle": 182,
+              "cycles": 72,
+              "counter_delta": {
+                "weight_handshakes": 7,
+                "scale_handshakes": 8,
+                "mac_handshakes": 7,
+                "output_handshakes": 1,
+                "activation_words": 3,
+                "activation_flags": 3,
+                "serialized_dt_subwords": 0
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 47,
+              "observed_output_backpressure_cycles": 0,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 182,
+              "through_cycle": 1112,
+              "cycles": 930,
+              "counter_delta": {
+                "weight_handshakes": 121,
+                "scale_handshakes": 120,
+                "mac_handshakes": 121,
+                "output_handshakes": 63,
+                "activation_words": 60,
+                "activation_flags": 60,
+                "serialized_dt_subwords": 241
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 376,
+              "observed_output_backpressure_cycles": 0,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 1112,
+              "through_cycle": 1949,
+              "cycles": 837,
+              "counter_delta": {
+                "weight_handshakes": 127,
+                "scale_handshakes": 126,
+                "mac_handshakes": 127,
+                "output_handshakes": 60,
+                "activation_words": 63,
+                "activation_flags": 63,
+                "serialized_dt_subwords": 255
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 180,
+              "observed_output_backpressure_cycles": 0,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 1949,
+              "through_cycle": 1962,
+              "cycles": 13,
+              "counter_delta": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 2,
+                "mac_handshakes": 0,
+                "output_handshakes": 4,
+                "activation_words": 0,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 0
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 0,
+              "observed_output_backpressure_cycles": 0,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 1962,
+              "through_cycle": 1981,
+              "cycles": 19,
+              "counter_delta": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 0,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 16
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 0,
+              "observed_output_backpressure_cycles": 0,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            },
+            {
+              "after_cycle": 1981,
+              "through_cycle": 2008,
+              "cycles": 27,
+              "counter_delta": {
+                "weight_handshakes": 0,
+                "scale_handshakes": 0,
+                "mac_handshakes": 0,
+                "output_handshakes": 0,
+                "activation_words": 0,
+                "activation_flags": 0,
+                "serialized_dt_subwords": 0
+              },
+              "observed_activation_wait_with_weight_absent_cycles": 0,
+              "observed_output_backpressure_cycles": 0,
+              "note": "只统计窗口中的真实信号；两个锚点间不线性插值伪造拍级状态。"
+            }
+          ]
+        }
+      }
+    ],
+    "counterfactuals": [
+      {
+        "change": "Only UScale group 16→32, same shape and MTW/MTC/MTK",
+        "rtl_before": 1148,
+        "rtl_after": 835,
+        "saving_cycles": 313,
+        "saving_percent": 27.264808362369337,
+        "qualification": "量化group本身影响算术语义/精度；这是同shape时序受控比较，不是允许无条件替换量化方案。",
+        "observed": "activation等待且weight_valid=0拍数734→395；output backpressure95→195，瓶颈移动。首个MAC u16=73反而早于u32=91，不能用首包时间推断总完成。"
+      },
+      {
+        "change": "u32 w4c4k1→w1c1k2",
+        "rtl_before": 835,
+        "rtl_after": 2008,
+        "qualification": "同时改变三个MT参数，非单变量因果实验；保持shape/精度/UScale不变。",
+        "observed": "MAC=256、output=128、DT=512不变；activation words32→128、flags16→128，控制与重读路径不同。"
+      }
+    ]
+  },
+  "alignment_recipe": [
+    "先确认被测模块与替身：单unit稳态period、阵列台架span、实际VCS PE trace span是三个不同量。",
+    "固定每行geometry、raw编码、数值格式、CSR/clock/L2/profile；固定输入摘要与source hash。",
+    "从shape算工作量，列出能观察的握手数/标记数/序列化数，不靠最终总cycle反推常数。",
+    "对齐时间原点与采样边沿。INT4用trace-start=0、pre-edge pins；BF16 TSV保留自身时间域，不混用绝对cyc和start_lat。",
+    "比较每个事件的first/last/count，再看第一个valid/ready分歧；只从观测宣布停顿，内部原因需要额外信号。",
+    "同shape单旋钮对照，保留所有最优并列与残差；生产模型与理想台架切换时明确挂载路径。",
+    "没有运行就写历史记录/源码推导，不把冻结测试断言当本次通过。"
+  ]
+}

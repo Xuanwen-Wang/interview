@@ -36,6 +36,9 @@ jobs:
           node --check web/attention-lab.js
           node --check web/sync-explorer.js
           node --check web/lowering-explorer.js
+          node --check web/cyclesim-model.js
+          node --check web/cyclesim-diagrams.js
+          node --check web/cyclesim-explorer.js
           node scripts/check_pe_model.js
           node scripts/check_moe_model.js
           node scripts/check_interviews.js
@@ -43,6 +46,7 @@ jobs:
           node scripts/check_decode_model.js
           node scripts/check_attention_lab.js
           node scripts/check_sync_model.js
+          node scripts/check_cyclesim_model.js
       - name: Verify original coding references
         run: |
           python3 -m unittest discover -s practice -v

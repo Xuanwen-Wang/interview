@@ -52,10 +52,11 @@ def build():
     template = (ROOT / 'web/index.html').read_text(encoding='utf-8')
     payload = {'CHAPTERS': chapters, 'CATALOG': json.loads((ROOT / 'config/navigation.json').read_text(encoding='utf-8')), 'REPORTS': json.loads((ROOT / 'config/interviews.json').read_text(encoding='utf-8')), 'COMPANIES': json.loads((ROOT / 'config/companies.json').read_text(encoding='utf-8'))}
     payload['JOBS'] = json.loads((ROOT / 'config/jobs.json').read_text(encoding='utf-8'))
+    payload['CYCLESIM_CASES'] = json.loads((ROOT / 'config/cyclesim-cases.json').read_text(encoding='utf-8'))
     data = '\n'.join(f'const {name} = ' + json.dumps(value, ensure_ascii=False).replace('</', '<\\/') + ';' for name, value in payload.items())
-    result = template.replace('/* INLINE_STYLE */', '\n'.join((ROOT / 'web' / name).read_text(encoding='utf-8') for name in ['style.css', 'catalog.css', 'pe-explorer.css', 'moe-explorer.css', 'performance-explorer.css', 'decode-explorer.css', 'attention-lab.css', 'lowering-explorer.css', 'sync-explorer.css', 'reading.css', 'jobs.css']))
+    result = template.replace('/* INLINE_STYLE */', '\n'.join((ROOT / 'web' / name).read_text(encoding='utf-8') for name in ['style.css', 'catalog.css', 'pe-explorer.css', 'moe-explorer.css', 'performance-explorer.css', 'decode-explorer.css', 'attention-lab.css', 'lowering-explorer.css', 'sync-explorer.css', 'cyclesim-explorer.css', 'reading.css', 'jobs.css']))
     result = result.replace('/* INLINE_DATA */', data)
-    result = result.replace('/* INLINE_APP */', '\n'.join((ROOT / 'web' / name).read_text(encoding='utf-8') for name in ['catalog.js', 'reading.js', 'pe-model.js', 'pe-explorer.js', 'moe-explorer.js', 'performance-explorer.js', 'decode-explorer.js', 'attention-lab.js', 'lowering-explorer.js', 'sync-explorer.js', 'jobs.js', 'app.js']))
+    result = result.replace('/* INLINE_APP */', '\n'.join((ROOT / 'web' / name).read_text(encoding='utf-8') for name in ['catalog.js', 'reading.js', 'pe-model.js', 'pe-explorer.js', 'moe-explorer.js', 'performance-explorer.js', 'decode-explorer.js', 'attention-lab.js', 'lowering-explorer.js', 'sync-explorer.js', 'cyclesim-model.js', 'cyclesim-diagrams.js', 'cyclesim-explorer.js', 'jobs.js', 'app.js']))
     assert not re.search(r'/\* INLINE_\w+ \*/', result)
     out = ROOT / 'dist'
     from check_public_artifact import check_artifact_layout, expected_files

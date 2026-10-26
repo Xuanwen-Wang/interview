@@ -194,10 +194,14 @@ class PublicArtifactTests(unittest.TestCase):
             ('COMPANIES', [{'description': '<p>synthetic.person<span>@</span>example.invalid</p>'}], 'email address'),
             ('CATALOG', {'modules': [{'description': '<p>synthetic.person<span>@</span>example.invalid</p>'}]},
              'email address'),
+            ('CYCLESIM_CASES', {'groups': {'ld': {'cases': [{'frames': [
+                {'text': '<p>synthetic.person<span>@</span>example.invalid</p>'},
+            ]}]}}}, 'email address'),
         ]
         for name, value, category in examples:
             with self.subTest(payload=name, category=category):
-                payloads = dict.fromkeys(['CHAPTERS', 'CATALOG', 'REPORTS', 'COMPANIES', 'JOBS'], [])
+                payloads = dict.fromkeys(
+                    ['CHAPTERS', 'CATALOG', 'REPORTS', 'COMPANIES', 'JOBS', 'CYCLESIM_CASES'], [])
                 payloads[name] = value
                 # Match build.py's JSON serialization and separate app script.
                 data = '\n'.join('const ' + key + ' = ' + json.dumps(item, ensure_ascii=False).replace('</', '<\\/')
@@ -207,16 +211,83 @@ class PublicArtifactTests(unittest.TestCase):
                     '<script>const comparison = left < right && right > 0;</script></body>')
                 self.assertEqual(self.check(), [category])
 
+    def test_clean_cyclesim_payload_preserves_relative_sources_and_equations(self):
+        value = {'groups': {'ld': {'cases': [{
+            'id': 'synthetic-ld',
+            'shape': [1, 1, 1, 4096],
+            'stats': [{'value': 68, 'unit': 'core cycles'}],
+            'frames': [{'text': '<p>Read <code>valid &amp;&amp; ready</code>.</p>',
+                        'equation': '32 + 76 + 13 + 17 + 1 = 139'}],
+            'sources': [{'path': 'simulator/include/zeus3/core/lsu.h'},
+                        {'path': 'test/memory/rmw_st_rtl/st_16/source.json'},
+                        {'url': 'https://example.invalid/public/cyclesim'}],
+        }]}}}
+        data = json.dumps(value, ensure_ascii=False).replace('</', '<\\/')
+        (self.directory / 'index.html').write_text(
+            '<script>const CYCLESIM_CASES = ' + data + ';</script>')
+        self.assertEqual(self.check(), [])
+
+    def test_cyclesim_payload_rejects_nested_private_rendered_text(self):
+        examples = [
+            ('<p>synthetic.person<span>@</span>example.invalid</p>', 'email address'),
+            ('<p><span>138</span>-<b>0000</b>-<i>0000</i></p>', 'phone number'),
+            ('<p>/re<span>sume/</span>synthetic.pdf</p>', 'private document reference'),
+        ]
+        for text, category in examples:
+            with self.subTest(category=category):
+                value = {'groups': {'partial': {'cases': [{'frames': [{'text': text}]}]}}}
+                data = json.dumps(value, ensure_ascii=False).replace('</', '<\\/')
+                (self.directory / 'index.html').write_text(
+                    '<script>const CYCLESIM_CASES = ' + data + ';</script>')
+                self.assertEqual(self.check(), [category])
+
+    def test_cyclesim_payload_rejects_local_paths_and_internal_hosts(self):
+        examples = [
+            ('/data/wangxw/synthetic/input.bin', 'local filesystem path'),
+            ('/home/wangxw/synthetic/trace.json', 'local filesystem path'),
+            ('%2Fdata%2Fwangxw%2Fsynthetic%2Finput.bin', 'local filesystem path'),
+            (r'\u002fhome\u002fwangxw\u002fsynthetic', 'local filesystem path'),
+            ('<p>/da<span>ta/wangxw</span>/synthetic</p>', 'local filesystem path'),
+            ('https://172.16.4.8/synthetic', 'internal host address'),
+            ('http://127.0.0.1:8765/synthetic', 'internal host address'),
+            ('http://%31%37%32%2E16.4.8/synthetic', 'internal host address'),
+            (r'http:\/\/127.0.0.1:8765\/synthetic', 'internal host address'),
+            ('<p>172.<span>16.</span>4.8</p>', 'internal host address'),
+        ]
+        html_files = sorted(name for name in self.expected if name.endswith('.html'))
+        for number, (text, category) in enumerate(examples):
+            with self.subTest(example=number, category=category):
+                value = {'groups': {'ld': {'cases': [{'source': {'note': text}}]}}}
+                data = json.dumps(value, ensure_ascii=False).replace('</', '<\\/')
+                path = self.directory / html_files[number % len(html_files)]
+                old = path.read_text()
+                path.write_text('<script>const CYCLESIM_CASES = ' + data + ';</script>')
+                self.assertEqual(self.check(), [category])
+                path.write_text(old)
+
     def test_unknown_javascript_payload_is_not_parsed_as_html(self):
         data = json.dumps([{'html': '<p>synthetic.person<span>@</span>example.invalid</p>'}])
         (self.directory / 'index.html').write_text('<script>const EXAMPLE = ' + data + ';</script>')
         self.assertEqual(self.check(), [])
 
     def test_known_payload_must_be_json_not_a_javascript_expression(self):
-        for declaration in ['const CHAPTERS = getChapters();', 'const CHAPTERS = [].concat(extra);']:
-            with self.subTest(declaration=declaration):
-                (self.directory / 'index.html').write_text('<script>' + declaration + '</script>')
-                self.assertEqual(self.check(), ['invalid known inline payload'])
+        for name in ['CHAPTERS', 'CYCLESIM_CASES']:
+            for expression in ['getChapters()', '[].concat(extra)', 'null', '42']:
+                declaration = 'const ' + name + ' = ' + expression + ';'
+                with self.subTest(declaration=declaration):
+                    (self.directory / 'index.html').write_text('<script>' + declaration + '</script>')
+                    self.assertEqual(self.check(), ['invalid known inline payload'])
+
+    def test_cyclesim_payload_failure_does_not_echo_private_source(self):
+        secret = '/data/wangxw/synthetic/private-trace.bin'
+        data = json.dumps({'groups': {'ld': {'cases': [{'source': secret}]}}})
+        (self.directory / 'index.html').write_text(
+            '<script>const CYCLESIM_CASES = ' + data + ';</script>')
+        with patch.object(sys, 'argv', ['check_public_artifact.py', '--dist', str(self.directory)]):
+            with self.assertRaises(SystemExit) as result:
+                main()
+        self.assertIn('local filesystem path', str(result.exception))
+        self.assertNotIn(secret, str(result.exception))
 
     def test_failure_diagnostics_do_not_echo_sensitive_value(self):
         secret = 'synthetic.person@example.invalid'

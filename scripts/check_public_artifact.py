@@ -20,8 +20,13 @@ MANIFEST_KEYS = {
     'sections', 'questions', 'characters', 'bytes', 'jobs',
 }
 PAYLOAD_DECLARATION = re.compile(
-    r'^\s*const\s+(?:CHAPTERS|CATALOG|REPORTS|COMPANIES|JOBS)\s*=\s*', re.M)
+    r'^\s*const\s+(?:CHAPTERS|CATALOG|REPORTS|COMPANIES|JOBS|CYCLESIM_CASES)\s*=\s*', re.M)
 PATTERNS = {
+    'local filesystem path': re.compile(
+        r'/(?:data/wangxw|home/wangxw)(?=/|[\s"\'<>]|$)', re.I),
+    'internal host address': re.compile(
+        r'(?<![\d.])(?:127\.(?:\d{1,3}\.){2}\d{1,3}'
+        r'|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(?![\d.])'),
     'private document reference': re.compile(
         r'[/\\#]resume(?=[/\\.#?\s"\'<>]|$)|\bresume[/\\]'
         r'|\b(?:resume|cv)(?:[-_][^<>"\'\s/]*)?\.(?:html?|pdf|tex|md)\b'

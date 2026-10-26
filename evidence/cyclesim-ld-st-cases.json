@@ -1,0 +1,3618 @@
+{
+  "schemaVersion": 1,
+  "capturedOn": "2026-10-26",
+  "sourceVersion": {
+    "CycleSimHEAD": "382c4f151fb8a6b59227f7a168ab231484b0864c",
+    "dirty": [
+      "PROGRESS.md"
+    ],
+    "rtlRevision": "unknown; per-file SHA256",
+    "newExperiment": false
+  },
+  "presentationRules": [
+    "局部RTL台架、当前解析公式、真实描述符几何分别标色",
+    "动画只绘已知时间点；未知间隔显示因果步骤，不造cycle",
+    "LD/ST单命令时间轴均从各自inst_start归零，可显示原始origin数据",
+    "重建误差0表示对同一记录完成算术分解，不宣称独立验证达到0误差",
+    "本轮只读源代码/记录；不运行业务模型、编译器或RTL"
+  ],
+  "sources": {
+    "CycleSim/dev_docs/sim/memory/35_load_dma.log": {
+      "repository": "CycleSim",
+      "path": "dev_docs/sim/memory/35_load_dma.log",
+      "sha256": "cd0854f1c82d0b846e3ca7d68ac54cd8b7a3690e4c80d0bb653b620c28ad9469",
+      "revision": "382c4f151fb8a6b59227f7a168ab231484b0864c",
+      "lines": [
+        276,
+        281,
+        369,
+        383
+      ]
+    },
+    "CycleSim/dev_docs/sim/memory/34_sdma_store.log": {
+      "repository": "CycleSim",
+      "path": "dev_docs/sim/memory/34_sdma_store.log",
+      "sha256": "20da835c0ce08288ceb39b3da93ae9a287214c278f09f660666b41156b6c4bce",
+      "revision": "382c4f151fb8a6b59227f7a168ab231484b0864c",
+      "lines": [
+        609,
+        614,
+        615,
+        681
+      ]
+    },
+    "CycleSim/test/lsu/rtl_tb/tb_load_dma.v": {
+      "repository": "CycleSim",
+      "path": "test/lsu/rtl_tb/tb_load_dma.v",
+      "sha256": "14718dbd8852de019afc3cb4e8003071caedc6ca45d81a1f9f7a77aa469d5cbc",
+      "revision": "382c4f151fb8a6b59227f7a168ab231484b0864c",
+      "lines": [
+        376,
+        399,
+        409,
+        459,
+        487,
+        492
+      ]
+    },
+    "CycleSim/test/lsu/rtl_tb/tb_sdma_store.v": {
+      "repository": "CycleSim",
+      "path": "test/lsu/rtl_tb/tb_sdma_store.v",
+      "sha256": "554af26b27e96fed28b7a25ed56b860ac490222dc2973ac22ace1e76155ca894",
+      "revision": "382c4f151fb8a6b59227f7a168ab231484b0864c",
+      "lines": [
+        405,
+        428,
+        437,
+        495,
+        547,
+        553
+      ]
+    },
+    "CycleSim/simulator/include/zeus3/core/lsu.h": {
+      "repository": "CycleSim",
+      "path": "simulator/include/zeus3/core/lsu.h",
+      "sha256": "1bccf671e6a23cf5a6b32ab2c8442a69981ea6291debe935c5c5ddeb2b5dda49",
+      "revision": "382c4f151fb8a6b59227f7a168ab231484b0864c",
+      "lines": [
+        1170,
+        1258
+      ]
+    },
+    "CycleSim/tools/src/model_run.h": {
+      "repository": "CycleSim",
+      "path": "tools/src/model_run.h",
+      "sha256": "06c9abd39f8c93dd27736aac44dfe871eda5258b288621057e0d08a334c09be7",
+      "revision": "382c4f151fb8a6b59227f7a168ab231484b0864c",
+      "lines": [
+        115,
+        126
+      ]
+    },
+    "CycleSim/simulator/include/zeus3/memory/gdg_top_rmw.h": {
+      "repository": "CycleSim",
+      "path": "simulator/include/zeus3/memory/gdg_top_rmw.h",
+      "sha256": "b4f0469fc51dcccbb11825d46613ac23dc4b64b98f7360de17897d901417b2e5",
+      "revision": "382c4f151fb8a6b59227f7a168ab231484b0864c",
+      "lines": [
+        59,
+        114
+      ]
+    },
+    "CycleSim/test/memory/test_gdg_top_rmw.cpp": {
+      "repository": "CycleSim",
+      "path": "test/memory/test_gdg_top_rmw.cpp",
+      "sha256": "55619b39a513f718b4a7fac4ce65e9eee834e3716b4d8e3307159b0c2df5429f",
+      "revision": "382c4f151fb8a6b59227f7a168ab231484b0864c",
+      "lines": [
+        76,
+        150
+      ]
+    },
+    "CycleSim/test/memory/gdg_top_rmw_rtl.inc": {
+      "repository": "CycleSim",
+      "path": "test/memory/gdg_top_rmw_rtl.inc",
+      "sha256": "4715a54a01519814b06f6a9494e8a330df608241df6cc2227773b05236ec8c74",
+      "revision": "382c4f151fb8a6b59227f7a168ab231484b0864c",
+      "lines": [
+        1,
+        10
+      ]
+    },
+    "CycleSim/test/front/dma_queue_rtl/reference.json": {
+      "repository": "CycleSim",
+      "path": "test/front/dma_queue_rtl/reference.json",
+      "sha256": "bc812b6955287cad5eadc5b97a8cc21cf2216a7803f6097415aff29f235035ea",
+      "revision": "382c4f151fb8a6b59227f7a168ab231484b0864c"
+    },
+    "CycleSim/test/front/dma_queue_rtl/probe.cpp": {
+      "repository": "CycleSim",
+      "path": "test/front/dma_queue_rtl/probe.cpp",
+      "sha256": "d9395dbbd2de3f82ec53e9c46cea83633803e26a7d7e0ace02e932d431bcc27d",
+      "revision": "382c4f151fb8a6b59227f7a168ab231484b0864c",
+      "lines": [
+        18,
+        53
+      ]
+    },
+    "CycleSim/PROGRESS.md": {
+      "repository": "CycleSim",
+      "path": "PROGRESS.md",
+      "sha256": "963eca71ed0b3d30e25979a222021eb7ede515fc28d41f18f69e2b38fa7c8b3c",
+      "revision": "382c4f151fb8a6b59227f7a168ab231484b0864c",
+      "lines": [
+        8313,
+        8468,
+        8797,
+        8905
+      ]
+    },
+    "rtl/zeus518/load_dma/load_dma_518_write_to_l2_ctrl.v": {
+      "repository": "RTL",
+      "path": "zeus518/load_dma/load_dma_518_write_to_l2_ctrl.v",
+      "sha256": "50548834adb349448ee1630c096fe5f221a67eea8015d08e7ae2f6511a0869a4",
+      "revision": "unknown",
+      "lines": [
+        163,
+        165,
+        470,
+        491
+      ]
+    },
+    "rtl/zeus518/load_dma/load_dma_518_load_to_l2_read_ctrl.v": {
+      "repository": "RTL",
+      "path": "zeus518/load_dma/load_dma_518_load_to_l2_read_ctrl.v",
+      "sha256": "1d0f832bb7186e5e9b806214f70592b772cf928efa62e2bf92f86ce5e3f4fd55",
+      "revision": "unknown",
+      "lines": [
+        86,
+        113
+      ]
+    },
+    "rtl/zeus518/sdma/sdma_st_get_l2_cal.v": {
+      "repository": "RTL",
+      "path": "zeus518/sdma/sdma_st_get_l2_cal.v",
+      "sha256": "e9d665c33fe2fae2ce4d49e7dfbe043f0c96f14df22318654c2d1d653cb2feb5",
+      "revision": "unknown",
+      "lines": [
+        527,
+        534,
+        606,
+        637
+      ]
+    },
+    "rtl/zeus518/sdma/sdma_st_cmd_decode.v": {
+      "repository": "RTL",
+      "path": "zeus518/sdma/sdma_st_cmd_decode.v",
+      "sha256": "b786072bbe0b9d979e693b47e1b016ebd550812c5928a58c7a65eff01bff0bed",
+      "revision": "unknown",
+      "lines": [
+        303,
+        314,
+        358,
+        361
+      ]
+    },
+    "rtl/gdg/gdg_top_rew_processor.v": {
+      "repository": "RTL",
+      "path": "gdg/gdg_top_rew_processor.v",
+      "sha256": "97ab202ddaddebf43cc559b6d0e2e4dc02bd8a27bcdba6c6d7950f23c836e1d9",
+      "revision": "unknown",
+      "lines": [
+        102,
+        116,
+        136,
+        148
+      ]
+    },
+    "CycleSim/test/memory/rmw_st_rtl/st_16/source.json": {
+      "repository": "CycleSim",
+      "path": "test/memory/rmw_st_rtl/st_16/source.json",
+      "sha256": "1a2af50e514d39c3f629da780bdaaee25b039d1347c2a05f9bf359d6958ce988",
+      "revision": "382c4f151fb8a6b59227f7a168ab231484b0864c"
+    },
+    "CycleSim/test/memory/rmw_st_rtl/st_16/aw.hex": {
+      "repository": "CycleSim",
+      "path": "test/memory/rmw_st_rtl/st_16/aw.hex",
+      "sha256": "2cdfb896c17683ecc0a7cae3eb769b7fe6b4f6899564f9405554a2da305d7452",
+      "revision": "382c4f151fb8a6b59227f7a168ab231484b0864c"
+    },
+    "CycleSim/test/memory/rmw_st_rtl/st_16/w.hex": {
+      "repository": "CycleSim",
+      "path": "test/memory/rmw_st_rtl/st_16/w.hex",
+      "sha256": "5dbd58f8bc13daa4eb45ed50d3a4074c33dbf434ed126e08b63f525e4af892bd",
+      "revision": "382c4f151fb8a6b59227f7a168ab231484b0864c"
+    },
+    "CycleSim/test/memory/rmw_st_rtl/st_15/source.json": {
+      "repository": "CycleSim",
+      "path": "test/memory/rmw_st_rtl/st_15/source.json",
+      "sha256": "215498c5c20870022ef5277f0b7bc3feece393aab8aa44417314965fb4c42837",
+      "revision": "382c4f151fb8a6b59227f7a168ab231484b0864c"
+    },
+    "CycleSim/test/memory/rmw_st_rtl/st_15/aw.hex": {
+      "repository": "CycleSim",
+      "path": "test/memory/rmw_st_rtl/st_15/aw.hex",
+      "sha256": "10d2079c427eb6d424376443fd2056029657294042aa0c11a694a4a215d29778",
+      "revision": "382c4f151fb8a6b59227f7a168ab231484b0864c"
+    },
+    "CycleSim/test/memory/rmw_st_rtl/st_15/w.hex": {
+      "repository": "CycleSim",
+      "path": "test/memory/rmw_st_rtl/st_15/w.hex",
+      "sha256": "2de085871b04c762c7bf79354398a5641554ffa2543100c0e4a90f3ef3ccc3e9",
+      "revision": "382c4f151fb8a6b59227f7a168ab231484b0864c"
+    }
+  },
+  "cases": [
+    {
+      "id": "ld-4096-recorded",
+      "title": "4 KiB 连续 LD：从32个beat算到68拍",
+      "kind": "historical-module-RTL-with-fixed-latency-stubs",
+      "source": [
+        "CycleSim/dev_docs/sim/memory/35_load_dma.log",
+        "CycleSim/test/lsu/rtl_tb/tb_load_dma.v",
+        "CycleSim/simulator/include/zeus3/core/lsu.h",
+        "rtl/zeus518/load_dma/load_dma_518_write_to_l2_ctrl.v",
+        "rtl/zeus518/load_dma/load_dma_518_load_to_l2_read_ctrl.v"
+      ],
+      "rawRecord": {
+        "path": "dev_docs/sim/memory/35_load_dma.log",
+        "line": 281,
+        "text": "RESULT runs=1 rbytes=64 bytes=4096 saddr=0 r_lat=10 r_rate=1 l2_lat=9 max_len=31 | ar=1 r=32 l2w=32 araddr0=0 arlen0=31 araddrN=0 arlenN=31 | start=16 ar0=23 r0=34 rlast=71 l2w0=42 l2wlast=73 rsplast=82 done=84 span=68 rgap=119 | ar0cc=18 r0cc=27 rlastcc=56 | ncmd=1 ndone=1 done1=84 period_x100=-1"
+      },
+      "formulaInputs": {
+        "shape": [
+          1,
+          1,
+          1,
+          4096
+        ],
+        "dimensionOrder": "N,H,W,C",
+        "dtype": "DF8 / byte-oriented raw data，8-bit；不冒称FP8算术",
+        "elementBytes": 1,
+        "usefulBytes": 4096,
+        "sourceAddress": 0,
+        "destinationL2Address": 0,
+        "strideBytes": {
+          "C": 1,
+          "W": 4096
+        },
+        "runs": 1,
+        "maxBeatsPerBurst": 32,
+        "beatBytes": 128,
+        "boundaryBytes": 4096,
+        "rLatencyAxi": 10,
+        "rRateAxi": 1,
+        "l2ResponseCore": 9,
+        "ncmd": 1,
+        "clocks": {
+          "coreMHz": 400,
+          "dmaMHz": 400,
+          "axiMHz": 500,
+          "corePeriodNs": 2.5,
+          "axiPeriodNs": 2,
+          "corePerAxi": 0.8,
+          "origin": "首个描述符字发出时刻；JSON 时间点中的 coreFloor 是 floor((t-t_cmd)/2.5ns)，不宣称 AXI 事件恰落在 core 上升沿",
+          "phase": "历史台架默认相位；理想时钟"
+        }
+      },
+      "geometry": {
+        "beats": 32,
+        "bursts": 1,
+        "arlen": [
+          31
+        ],
+        "returnedBytes": 4096,
+        "l2Writes": 32,
+        "efficiency": 1
+      },
+      "boundary": {
+        "start": "o_ldma2inst_ld_inst_start",
+        "end": "o_ldma2inst_ld_inst_done",
+        "stubbed": [
+          "NoC+GDG+MC全由固定返回AXI slave替代",
+          "L2为固定9 core-cycle无竞争响应",
+          "app0取指/app2 SI空闲",
+          "SRAM宏行为实现；ECC关闭"
+        ],
+        "scope": "真实load DMA模块；不是现场默认NoC/MC路径"
+      },
+      "events": [
+        {
+          "event": "LD start",
+          "coreFloor": 16
+        },
+        {
+          "event": "AR handshake",
+          "axiFloor": 23,
+          "coreFloor": 18
+        },
+        {
+          "event": "first R handshake",
+          "axiFloor": 34,
+          "coreFloor": 27
+        },
+        {
+          "event": "first L2 write",
+          "coreFloor": 42
+        },
+        {
+          "event": "last R handshake",
+          "axiFloor": 71,
+          "coreFloor": 56
+        },
+        {
+          "event": "last L2 write",
+          "coreFloor": 73
+        },
+        {
+          "event": "last L2 response",
+          "coreFloor": 82
+        },
+        {
+          "event": "LD done",
+          "coreFloor": 84
+        }
+      ],
+      "steps": [
+        {
+          "id": "geometry",
+          "title": "把4096个字节放入128B传输格",
+          "expression": "4096 / 128 = 32; ARLEN = 32 - 1 = 31",
+          "state": {
+            "beats": 32,
+            "bursts": 1,
+            "acceptedL2WriteRequests": 0
+          }
+        },
+        {
+          "id": "issue-ar",
+          "title": "LD启动后推出读地址",
+          "fromCore": 16,
+          "toCore": 18,
+          "cycles": 2,
+          "expression": "18 - 16 = 2",
+          "state": {
+            "arAccepted": 1,
+            "returnedBeats": 0
+          }
+        },
+        {
+          "id": "first-return",
+          "title": "等待固定延迟slave首个返回",
+          "fromCore": 18,
+          "toCore": 27,
+          "cycles": 9,
+          "expression": "34 - 23 = 11 aclk；core 时间桶差 27 - 18 = 9",
+          "state": {
+            "returnedBeatsAtLeast": 1
+          }
+        },
+        {
+          "id": "realign",
+          "title": "返回数据经过CDC、重排及L2输出通路",
+          "fromCore": 27,
+          "toCore": 42,
+          "cycles": 15,
+          "expression": "42 - 27 = 15；与后续R数据并行，不能再加整条R流时间",
+          "state": {
+            "acceptedL2WriteRequests": 1
+          }
+        },
+        {
+          "id": "stream",
+          "title": "L2写流持续输出剩下31个beat",
+          "fromCore": 42,
+          "toCore": 73,
+          "cycles": 31,
+          "expression": "32个写事件之间只有31个间隔；73 - 42 = 31",
+          "state": {
+            "acceptedL2WriteRequests": 32
+          }
+        },
+        {
+          "id": "l2-response",
+          "title": "最后一次L2写等待确认",
+          "fromCore": 73,
+          "toCore": 82,
+          "cycles": 9,
+          "expression": "82 - 73 = 9",
+          "state": {
+            "allL2ResponsesReturned": true
+          }
+        },
+        {
+          "id": "done",
+          "title": "完成脉冲回到指令侧",
+          "fromCore": 82,
+          "toCore": 84,
+          "cycles": 2,
+          "expression": "84 - 82 = 2",
+          "state": {
+            "done": true
+          }
+        }
+      ],
+      "model": {
+        "stageReconstructionCore": 68,
+        "stageExpression": "2 + 9 + 15 + 31 + 9 + 2 = 68",
+        "basis": "同一历史记录的事件差分；是可复算分解，不是独立CycleSim新跑",
+        "currentDefaultAnalyticCore0": 139,
+        "currentDefaultExpression": "32 + 76 + 13 + 17 + 1 = 139",
+        "defaultComparableToThisBench": false,
+        "reason": "默认GDG往返76和L2 13，与台架固定slave/L2 9不同；默认解析成本还不等于UnitQueue svc/trc",
+        "restrictedBenchLaw": {
+          "formula": "B + 35 + (B >= 2 ? 1 : 0)",
+          "inputs": {
+            "B": 32
+          },
+          "predictionCore": 68,
+          "scope": "只覆盖这组固定r_lat=10 aclk、l2_lat=9 core、连续对齐tile/默认台架相位；来自历史size sweep与单beat bypass分支，不是任意NoC/MC延迟模型",
+          "testedHistoricalPoints": [
+            {
+              "B": 1,
+              "predicted": 36,
+              "rtl": 36,
+              "errorCycles": 0
+            },
+            {
+              "B": 2,
+              "predicted": 38,
+              "rtl": 38,
+              "errorCycles": 0
+            },
+            {
+              "B": 4,
+              "predicted": 40,
+              "rtl": 40,
+              "errorCycles": 0
+            },
+            {
+              "B": 8,
+              "predicted": 44,
+              "rtl": 44,
+              "errorCycles": 0
+            },
+            {
+              "B": 16,
+              "predicted": 52,
+              "rtl": 52,
+              "errorCycles": 0
+            },
+            {
+              "B": 32,
+              "predicted": 68,
+              "rtl": 68,
+              "errorCycles": 0
+            },
+            {
+              "B": 64,
+              "predicted": 100,
+              "rtl": 100,
+              "errorCycles": 0
+            }
+          ]
+        }
+      },
+      "rtl": {
+        "durationCore": 68,
+        "durationNs": 170,
+        "newRun": false,
+        "stageReconstructionMinusRtl": 0,
+        "stageErrorPercent": 0
+      },
+      "controls": [
+        {
+          "usefulBytes": 128,
+          "beats": 1,
+          "rtlCore": 36,
+          "line": 276,
+          "expression": "2+9+14+0+9+2=36"
+        },
+        {
+          "usefulBytes": 1024,
+          "beats": 8,
+          "rtlCore": 44,
+          "line": 279,
+          "expression": "2+9+15+7+9+2=44"
+        },
+        {
+          "ncmd": 8,
+          "bytesPerCommand": 4096,
+          "firstDoneCore": 84,
+          "lastDoneCore": 315,
+          "firstStartCore": 16,
+          "donePeriodCore": 33,
+          "totalSpanCore": 299,
+          "expression": "68 + (8-1)*33 = 299",
+          "scope": "记录只足以确定done间隔；不可把33当命令start间隔"
+        }
+      ],
+      "cautions": [
+        "35_load_dma.log把2+14+2写为17，算术不成立。这里采用原始时间戳差分，不照抄该句。",
+        "每步播放表示事件/时间桶，不凭空补每一拍RVALID。原始摘要只有首尾R时间。"
+      ]
+    },
+    {
+      "id": "st-4096-recorded",
+      "title": "同样4 KiB，ST为什么是102拍",
+      "kind": "historical-module-RTL-with-fixed-latency-stubs",
+      "source": [
+        "CycleSim/dev_docs/sim/memory/34_sdma_store.log",
+        "CycleSim/test/lsu/rtl_tb/tb_sdma_store.v",
+        "CycleSim/simulator/include/zeus3/core/lsu.h",
+        "rtl/zeus518/sdma/sdma_st_get_l2_cal.v",
+        "rtl/zeus518/sdma/sdma_st_cmd_decode.v"
+      ],
+      "rawRecord": {
+        "path": "dev_docs/sim/memory/34_sdma_store.log",
+        "line": 614,
+        "text": "RESULT runs=1 rbytes=64 bytes=4096 daddr=0 b_lat=10 l2_lat=9 w_rate=1 rival=0 | aw=1 w=32 b=1 bytes_w=4096 part=0 ldma_aw=0 awaddr0=0 awlen0=31 awaddrN=0 awlenN=31 | start=14 l2req=17 l2dat=26 aw0=85 w0=86 wlast=125 b0=135 blast=135 done=116 span=102 wgap=125 ok=1 | aw0cc=68 blastcc=108 tail=8 | ncmd=1 ndone=1 done1=116 period_x100=-1"
+      },
+      "formulaInputs": {
+        "shape": [
+          1,
+          1,
+          1,
+          4096
+        ],
+        "dimensionOrder": "N,H,W,C",
+        "dtype": "SDMA局部命令df_byte=0，源码按1 byte元素处理；该编码不可与LD的DF8值1混用",
+        "elementBytes": 1,
+        "usefulBytes": 4096,
+        "sourceL2Address": 0,
+        "destinationAddress": 0,
+        "strideBytes": {
+          "C": 1,
+          "W": 4096
+        },
+        "runs": 1,
+        "maxBeatsPerBurst": 32,
+        "beatBytes": 128,
+        "boundaryBytes": 4096,
+        "bLatencyAxi": 10,
+        "wRateAxi": 1,
+        "l2ReadCore": 9,
+        "ncmd": 1,
+        "clocks": {
+          "coreMHz": 400,
+          "dmaMHz": 400,
+          "axiMHz": 500,
+          "corePeriodNs": 2.5,
+          "axiPeriodNs": 2,
+          "corePerAxi": 0.8,
+          "origin": "首个描述符字发出时刻；JSON 时间点中的 coreFloor 是 floor((t-t_cmd)/2.5ns)，不宣称 AXI 事件恰落在 core 上升沿",
+          "phase": "历史台架默认相位；理想时钟"
+        }
+      },
+      "geometry": {
+        "beats": 32,
+        "bursts": 1,
+        "awlen": [
+          31
+        ],
+        "wstrb": "全部128 byte-enable为1",
+        "partialBeats": 0,
+        "writeBytes": 4096,
+        "responses": 1
+      },
+      "boundary": {
+        "start": "o_sdma2inst_st_inst_start",
+        "end": "o_sdma2inst_st_inst_done",
+        "stubbed": [
+          "NoC+GDG+MC全由固定B响应AXI slave替代",
+          "L2固定9 core-cycle且always-ready",
+          "SO和LDMA写peer空闲",
+          "SRAM宏行为实现；ECC关闭"
+        ],
+        "scope": "真实完整SDMA模块；无GDG RMW，不是全芯片写延迟"
+      },
+      "events": [
+        {
+          "event": "ST start",
+          "coreFloor": 14
+        },
+        {
+          "event": "first L2 read request",
+          "coreFloor": 17
+        },
+        {
+          "event": "first L2 data",
+          "coreFloor": 26
+        },
+        {
+          "event": "first AW handshake",
+          "axiFloor": 85,
+          "coreFloor": 68
+        },
+        {
+          "event": "first W handshake",
+          "axiFloor": 86
+        },
+        {
+          "event": "last W handshake",
+          "axiFloor": 125
+        },
+        {
+          "event": "B handshake",
+          "axiFloor": 135,
+          "coreFloor": 108
+        },
+        {
+          "event": "ST done",
+          "coreFloor": 116
+        }
+      ],
+      "steps": [
+        {
+          "id": "geometry",
+          "title": "32个完整beat，1个AW，1个B",
+          "expression": "4096 / 128 = 32; AWLEN=31",
+          "state": {
+            "beats": 32,
+            "bursts": 1,
+            "partial": false
+          }
+        },
+        {
+          "id": "read-request",
+          "title": "ST先向L2发读请求",
+          "fromCore": 14,
+          "toCore": 17,
+          "cycles": 3,
+          "expression": "17-14=3",
+          "state": {
+            "l2ReadStarted": true
+          }
+        },
+        {
+          "id": "first-l2-data",
+          "title": "L2返回第一份数据",
+          "fromCore": 17,
+          "toCore": 26,
+          "cycles": 9,
+          "expression": "26-17=9",
+          "state": {
+            "l2DataAtLeast": 1
+          }
+        },
+        {
+          "id": "gather-and-address",
+          "title": "攒齐一个burst后发布长度与地址",
+          "fromCore": 26,
+          "toCore": 68,
+          "cycles": 42,
+          "expression": "68-26=42；相对1-beat控制(36-26=10)增加32拍，受计数/时钟相位影响，不能硬写成31拍",
+          "state": {
+            "firstBurstBuffered": true,
+            "awAccepted": 1
+          },
+          "mechanism": "len_fifo空则不发AW；wlen_fifo_en在burst计数到尾或tile尾时置位"
+        },
+        {
+          "id": "send-and-response",
+          "title": "发32个W并等待最后一个W对应的B",
+          "fromCore": 68,
+          "toCore": 108,
+          "cycles": 40,
+          "expression": "(W0-AW)=1 aclk；(Wlast-W0)=39 aclk；(B-Wlast)=10 aclk；(1+39+10)*0.8=40",
+          "state": {
+            "writeBeatsAccepted": 32,
+            "bAccepted": 1
+          }
+        },
+        {
+          "id": "done",
+          "title": "B经过回程CDC与完成通路",
+          "fromCore": 108,
+          "toCore": 116,
+          "cycles": 8,
+          "expression": "116-108=8；1-beat控制为9，不能把每种相位都写死为9",
+          "state": {
+            "done": true
+          }
+        }
+      ],
+      "model": {
+        "stageReconstructionCore": 102,
+        "stageExpression": "3 + 9 + 42 + 40 + 8 = 102",
+        "basis": "历史事件差分+真实AXI区间单位换算；不是新跑完整CycleSim",
+        "currentDefaultAnalyticCore0": 183,
+        "currentDefaultExpression": "ceil(32*2.48) + 67 + 13 + 22 + 1 = 183",
+        "defaultComparableToThisBench": false,
+        "reason": "2.48是历史整芯片写服务率参数，67是全局写往返残差，不能拿它直接评固定10 aclk的AXI slave；store_gathers_burst默认false也不能擅自打开后声称修复",
+        "restrictedBenchLaw": {
+          "formula": "38 + B + min(B,32)",
+          "inputs": {
+            "B": 32
+          },
+          "predictionCore": 102,
+          "scope": "只覆盖该固定b_lat=10 aclk、l2_lat=9 core、单run完整WSTRB、对齐地址、最多64beat的历史size sweep；38为局部记录的剩余项，不能拿它冒充已证明的固定硬件级数",
+          "mechanism": "先攒首个burst，再发送数据；后续burst填充可与前一burst传输重叠。独立stage分解见steps。",
+          "testedHistoricalPoints": [
+            {
+              "B": 1,
+              "predicted": 40,
+              "rtl": 40,
+              "errorCycles": 0
+            },
+            {
+              "B": 2,
+              "predicted": 42,
+              "rtl": 42,
+              "errorCycles": 0
+            },
+            {
+              "B": 4,
+              "predicted": 46,
+              "rtl": 46,
+              "errorCycles": 0
+            },
+            {
+              "B": 8,
+              "predicted": 54,
+              "rtl": 54,
+              "errorCycles": 0
+            },
+            {
+              "B": 16,
+              "predicted": 70,
+              "rtl": 70,
+              "errorCycles": 0
+            },
+            {
+              "B": 32,
+              "predicted": 102,
+              "rtl": 102,
+              "errorCycles": 0
+            },
+            {
+              "B": 64,
+              "predicted": 134,
+              "rtl": 134,
+              "errorCycles": 0
+            }
+          ]
+        },
+        "wrongCandidates": [
+          {
+            "name": "只把一beat延迟40加剩余发送beat",
+            "expression": "40 + (32-1)",
+            "predictedCore": 71,
+            "rtlCore": 102,
+            "errorCycles": -31,
+            "errorPercent": -30.392156862745097,
+            "diagnosis": "忽略首burst填充随shape增长，错误出现在firstAW之前。是教学反例，未声称历史CycleSim实际采用此公式。"
+          },
+          {
+            "name": "每个burst都串行计完整填充和发送",
+            "inputBytes": 8192,
+            "expression": "38+64+64",
+            "predictedCore": 166,
+            "rtlCore": 134,
+            "errorCycles": 32,
+            "errorPercent": 23.88059701492537,
+            "diagnosis": "忽略后续burst填充与发送重叠。当前局部law用min(B,32)得134。是教学反例。"
+          }
+        ]
+      },
+      "rtl": {
+        "durationCore": 102,
+        "durationNs": 255,
+        "newRun": false,
+        "stageReconstructionMinusRtl": 0,
+        "stageErrorPercent": 0
+      },
+      "controls": [
+        {
+          "usefulBytes": 128,
+          "beats": 1,
+          "rtlCore": 40,
+          "line": 609,
+          "expression": "3+9+10+9+9=40",
+          "eventsCoreFloor": {
+            "start": 14,
+            "l2req": 17,
+            "l2data": 26,
+            "aw": 36,
+            "b": 45,
+            "done": 54
+          }
+        },
+        {
+          "usefulBytes": 1024,
+          "beats": 8,
+          "rtlCore": 54,
+          "line": 612
+        },
+        {
+          "usefulBytes": 8192,
+          "beats": 64,
+          "rtlCore": 134,
+          "line": 615,
+          "bursts": 2,
+          "expression": "第二burst与前一burst发送有重叠，102+32=134；不可给每个burst串行再加一次完整填充"
+        },
+        {
+          "destinationAddress": 2048,
+          "bursts": [
+            16,
+            16
+          ],
+          "rtlCore": 102,
+          "scope": "4KiB拆分在该SDMA固定slave台架未增加总span；到GDG后不能保证免费",
+          "line": 681
+        }
+      ]
+    },
+    {
+      "id": "st-16-partial",
+      "title": "128 B偏移64 B：2个partial beat、2次读旧值",
+      "kind": "frozen-real-descriptor-geometry-plus-historical-component-RTL-gate",
+      "source": [
+        "CycleSim/test/memory/rmw_st_rtl/st_16/source.json",
+        "CycleSim/test/memory/rmw_st_rtl/st_16/aw.hex",
+        "CycleSim/test/memory/rmw_st_rtl/st_16/w.hex",
+        "CycleSim/simulator/include/zeus3/memory/gdg_top_rmw.h",
+        "CycleSim/test/memory/test_gdg_top_rmw.cpp",
+        "CycleSim/test/memory/gdg_top_rmw_rtl.inc",
+        "CycleSim/simulator/include/zeus3/core/lsu.h",
+        "CycleSim/tools/src/model_run.h",
+        "rtl/gdg/gdg_top_rew_processor.v"
+      ],
+      "formulaInputs": {
+        "sourceShape": [
+          1,
+          1,
+          1,
+          64
+        ],
+        "destShape": [
+          1,
+          8,
+          1,
+          72
+        ],
+        "tile": [
+          1,
+          1,
+          1,
+          64
+        ],
+        "dimensionOrder": "N,H,W,C",
+        "dtype": "DF2 / 16-bit raw元素，fixture未提供浮点/整数语义",
+        "elementBytes": 2,
+        "usefulBytes": 128,
+        "rowBytes": 128,
+        "rowCount": 1,
+        "destRowStrideBytes": 144,
+        "addressNormalized": 576,
+        "normalization": "只保留原全局地址mod4096，保持本例128B对齐与4KiB拆分；不宣称NoC路由等价",
+        "l2Aligned128": true,
+        "dde": 1,
+        "beatBytes": 128,
+        "maxBeatsPerBurst": 32,
+        "boundaryBytes": 4096,
+        "producerClocks": {
+          "coreMHz": 400,
+          "axiMHz": 500
+        },
+        "arrivalTimes": "fixture只保留有序AW/W向量，不保留原业务到达时间"
+      },
+      "geometry": {
+        "usefulBytes": 128,
+        "beats": 2,
+        "bursts": 1,
+        "partialBeats": 2,
+        "partialBursts": 1,
+        "fakeReadBeats": 2,
+        "downstreamFullWriteBytes": 256,
+        "fakeReadBytes": 256,
+        "byteWorkAtRmwBoundary": 512,
+        "efficiencyBeforeFakeRead": 0.5,
+        "rows": [
+          {
+            "row": 0,
+            "address": 576,
+            "offset128": 64,
+            "bursts": [
+              {
+                "address": 512,
+                "beats": 2,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 512,
+                "enabledStartByte": 64,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 64,
+                "partial": true
+              },
+              {
+                "address": 640,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 64,
+                "enabledBytes": 64,
+                "partial": true
+              }
+            ]
+          }
+        ]
+      },
+      "steps": [
+        {
+          "id": "row-address",
+          "title": "从shape和目标stride生成每行地址",
+          "expression": "addr(row)=576+row*144; rowBytes=64*2=128"
+        },
+        {
+          "id": "pack",
+          "title": "对每行向128B格子两端扩展",
+          "expression": "first=floor(addr/128); last=floor((addr+rowBytes-1)/128); beats=last-first+1",
+          "state": {
+            "beats": 2,
+            "partialBeats": 2
+          }
+        },
+        {
+          "id": "split",
+          "title": "在4KiB边界拆分burst，保留每beat的byte-enable",
+          "state": {
+            "bursts": 1,
+            "partialBursts": 1
+          }
+        },
+        {
+          "id": "read-old",
+          "title": "部分写握手时生成对齐地址的单beat fake AR",
+          "state": {
+            "fakeReadBeats": 2
+          },
+          "timeMode": "因果步骤，未提供原业务cycle值"
+        },
+        {
+          "id": "merge",
+          "title": "WSTRB为1选新字节，为0保留读回旧字节；下游WSTRB全部置1",
+          "expression": "newLine[i]=WSTRB[i]?newByte[i]:oldByte[i]",
+          "state": {
+            "fullWriteBeats": 2
+          }
+        },
+        {
+          "id": "wait-b",
+          "title": "此前burst的B未返回，后续partial W会被W_B计数门控",
+          "state": {
+            "completionRule": "partial可接收需pendingWriteBursts=0；计数在upstream WLAST增、B减"
+          },
+          "timeMode": "不能为unknown的MC返回时间填固定拍数"
+        }
+      ],
+      "model": {
+        "currentAnalyticCore1": 186,
+        "currentAnalyticCore0": 130,
+        "expression": "ceil(2*2.48)+(1-1)*36+22 +67+13+22+1 +pathExtra",
+        "core1PathExtra": 56,
+        "beatTermLatency": 27,
+        "occupancyCore": 41,
+        "scope": "按当前源码手算，未运行；raw LsuEngine analyse，非业务svc/trc或完整physical-RMW时长",
+        "stageDifference": "历史组件gate验证边沿状态与数据合并；解析标量模型用于默认路径，二者不是同一个输出量"
+      },
+      "rtl": {
+        "gateScenario": 5,
+        "fixedFNV64": "a450a9d2ae490017",
+        "snapshots": 10000,
+        "fieldsPerSnapshot": 76,
+        "newRun": false,
+        "cycleDuration": null,
+        "durationError": null,
+        "reason": "入库fixture和digest未携带原业务arrival或完整timing；5000个台架cycle是测试预算，不是指令latency",
+        "geometryDifference": {
+          "beats": 0,
+          "bursts": 0,
+          "partialBeats": 0,
+          "partialBursts": 0
+        }
+      },
+      "boundary": {
+        "data": "deterministic synthetic physical-L2-address pattern，不是原tensor",
+        "gate": "RMW单组件每AXI边沿状态比对，独立周期性ready/B/R刺激，未使用MC实际服务",
+        "fullChipTiming": "unknown"
+      }
+    },
+    {
+      "id": "st-15-partial",
+      "title": "72行×256 B、行距288 B：198 beat与76 burst如何产生",
+      "kind": "frozen-real-descriptor-geometry-plus-historical-component-RTL-gate",
+      "source": [
+        "CycleSim/test/memory/rmw_st_rtl/st_15/source.json",
+        "CycleSim/test/memory/rmw_st_rtl/st_15/aw.hex",
+        "CycleSim/test/memory/rmw_st_rtl/st_15/w.hex",
+        "CycleSim/simulator/include/zeus3/memory/gdg_top_rmw.h",
+        "CycleSim/test/memory/test_gdg_top_rmw.cpp",
+        "CycleSim/test/memory/gdg_top_rmw_rtl.inc",
+        "CycleSim/simulator/include/zeus3/core/lsu.h",
+        "CycleSim/tools/src/model_run.h",
+        "rtl/gdg/gdg_top_rew_processor.v"
+      ],
+      "formulaInputs": {
+        "sourceShape": [
+          1,
+          1,
+          72,
+          64
+        ],
+        "destShape": [
+          1,
+          8,
+          72,
+          72
+        ],
+        "tile": [
+          1,
+          1,
+          72,
+          64
+        ],
+        "dimensionOrder": "N,H,W,C",
+        "dtype": "DF3 / 32-bit raw元素，fixture未提供浮点/整数语义",
+        "elementBytes": 4,
+        "usefulBytes": 18432,
+        "rowBytes": 256,
+        "rowCount": 72,
+        "destRowStrideBytes": 288,
+        "addressNormalized": 3840,
+        "normalization": "只保留原全局地址mod4096，保持本例128B对齐与4KiB拆分；不宣称NoC路由等价",
+        "l2Aligned128": true,
+        "dde": 1,
+        "beatBytes": 128,
+        "maxBeatsPerBurst": 32,
+        "boundaryBytes": 4096,
+        "producerClocks": {
+          "coreMHz": 400,
+          "axiMHz": 500
+        },
+        "arrivalTimes": "fixture只保留有序AW/W向量，不保留原业务到达时间"
+      },
+      "geometry": {
+        "usefulBytes": 18432,
+        "beats": 198,
+        "bursts": 76,
+        "partialBeats": 108,
+        "partialBursts": 58,
+        "fakeReadBeats": 108,
+        "downstreamFullWriteBytes": 25344,
+        "fakeReadBytes": 13824,
+        "byteWorkAtRmwBoundary": 39168,
+        "efficiencyBeforeFakeRead": 0.7272727272727273,
+        "rows": [
+          {
+            "row": 0,
+            "address": 3840,
+            "offset128": 0,
+            "bursts": [
+              {
+                "address": 3840,
+                "beats": 2,
+                "partial": false
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 3840,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 3968,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              }
+            ]
+          },
+          {
+            "row": 1,
+            "address": 4128,
+            "offset128": 32,
+            "bursts": [
+              {
+                "address": 4096,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 4096,
+                "enabledStartByte": 32,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 96,
+                "partial": true
+              },
+              {
+                "address": 4224,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 4352,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 32,
+                "enabledBytes": 32,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 2,
+            "address": 4416,
+            "offset128": 64,
+            "bursts": [
+              {
+                "address": 4352,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 4352,
+                "enabledStartByte": 64,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 64,
+                "partial": true
+              },
+              {
+                "address": 4480,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 4608,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 64,
+                "enabledBytes": 64,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 3,
+            "address": 4704,
+            "offset128": 96,
+            "bursts": [
+              {
+                "address": 4608,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 4608,
+                "enabledStartByte": 96,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 32,
+                "partial": true
+              },
+              {
+                "address": 4736,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 4864,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 96,
+                "enabledBytes": 96,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 4,
+            "address": 4992,
+            "offset128": 0,
+            "bursts": [
+              {
+                "address": 4992,
+                "beats": 2,
+                "partial": false
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 4992,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 5120,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              }
+            ]
+          },
+          {
+            "row": 5,
+            "address": 5280,
+            "offset128": 32,
+            "bursts": [
+              {
+                "address": 5248,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 5248,
+                "enabledStartByte": 32,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 96,
+                "partial": true
+              },
+              {
+                "address": 5376,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 5504,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 32,
+                "enabledBytes": 32,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 6,
+            "address": 5568,
+            "offset128": 64,
+            "bursts": [
+              {
+                "address": 5504,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 5504,
+                "enabledStartByte": 64,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 64,
+                "partial": true
+              },
+              {
+                "address": 5632,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 5760,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 64,
+                "enabledBytes": 64,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 7,
+            "address": 5856,
+            "offset128": 96,
+            "bursts": [
+              {
+                "address": 5760,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 5760,
+                "enabledStartByte": 96,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 32,
+                "partial": true
+              },
+              {
+                "address": 5888,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 6016,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 96,
+                "enabledBytes": 96,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 8,
+            "address": 6144,
+            "offset128": 0,
+            "bursts": [
+              {
+                "address": 6144,
+                "beats": 2,
+                "partial": false
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 6144,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 6272,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              }
+            ]
+          },
+          {
+            "row": 9,
+            "address": 6432,
+            "offset128": 32,
+            "bursts": [
+              {
+                "address": 6400,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 6400,
+                "enabledStartByte": 32,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 96,
+                "partial": true
+              },
+              {
+                "address": 6528,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 6656,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 32,
+                "enabledBytes": 32,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 10,
+            "address": 6720,
+            "offset128": 64,
+            "bursts": [
+              {
+                "address": 6656,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 6656,
+                "enabledStartByte": 64,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 64,
+                "partial": true
+              },
+              {
+                "address": 6784,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 6912,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 64,
+                "enabledBytes": 64,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 11,
+            "address": 7008,
+            "offset128": 96,
+            "bursts": [
+              {
+                "address": 6912,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 6912,
+                "enabledStartByte": 96,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 32,
+                "partial": true
+              },
+              {
+                "address": 7040,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 7168,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 96,
+                "enabledBytes": 96,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 12,
+            "address": 7296,
+            "offset128": 0,
+            "bursts": [
+              {
+                "address": 7296,
+                "beats": 2,
+                "partial": false
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 7296,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 7424,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              }
+            ]
+          },
+          {
+            "row": 13,
+            "address": 7584,
+            "offset128": 32,
+            "bursts": [
+              {
+                "address": 7552,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 7552,
+                "enabledStartByte": 32,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 96,
+                "partial": true
+              },
+              {
+                "address": 7680,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 7808,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 32,
+                "enabledBytes": 32,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 14,
+            "address": 7872,
+            "offset128": 64,
+            "bursts": [
+              {
+                "address": 7808,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 7808,
+                "enabledStartByte": 64,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 64,
+                "partial": true
+              },
+              {
+                "address": 7936,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 8064,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 64,
+                "enabledBytes": 64,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 15,
+            "address": 8160,
+            "offset128": 96,
+            "bursts": [
+              {
+                "address": 8064,
+                "beats": 1,
+                "partial": true
+              },
+              {
+                "address": 8192,
+                "beats": 2,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 8064,
+                "enabledStartByte": 96,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 32,
+                "partial": true
+              },
+              {
+                "address": 8192,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 8320,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 96,
+                "enabledBytes": 96,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 16,
+            "address": 8448,
+            "offset128": 0,
+            "bursts": [
+              {
+                "address": 8448,
+                "beats": 2,
+                "partial": false
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 8448,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 8576,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              }
+            ]
+          },
+          {
+            "row": 17,
+            "address": 8736,
+            "offset128": 32,
+            "bursts": [
+              {
+                "address": 8704,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 8704,
+                "enabledStartByte": 32,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 96,
+                "partial": true
+              },
+              {
+                "address": 8832,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 8960,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 32,
+                "enabledBytes": 32,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 18,
+            "address": 9024,
+            "offset128": 64,
+            "bursts": [
+              {
+                "address": 8960,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 8960,
+                "enabledStartByte": 64,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 64,
+                "partial": true
+              },
+              {
+                "address": 9088,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 9216,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 64,
+                "enabledBytes": 64,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 19,
+            "address": 9312,
+            "offset128": 96,
+            "bursts": [
+              {
+                "address": 9216,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 9216,
+                "enabledStartByte": 96,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 32,
+                "partial": true
+              },
+              {
+                "address": 9344,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 9472,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 96,
+                "enabledBytes": 96,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 20,
+            "address": 9600,
+            "offset128": 0,
+            "bursts": [
+              {
+                "address": 9600,
+                "beats": 2,
+                "partial": false
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 9600,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 9728,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              }
+            ]
+          },
+          {
+            "row": 21,
+            "address": 9888,
+            "offset128": 32,
+            "bursts": [
+              {
+                "address": 9856,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 9856,
+                "enabledStartByte": 32,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 96,
+                "partial": true
+              },
+              {
+                "address": 9984,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 10112,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 32,
+                "enabledBytes": 32,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 22,
+            "address": 10176,
+            "offset128": 64,
+            "bursts": [
+              {
+                "address": 10112,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 10112,
+                "enabledStartByte": 64,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 64,
+                "partial": true
+              },
+              {
+                "address": 10240,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 10368,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 64,
+                "enabledBytes": 64,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 23,
+            "address": 10464,
+            "offset128": 96,
+            "bursts": [
+              {
+                "address": 10368,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 10368,
+                "enabledStartByte": 96,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 32,
+                "partial": true
+              },
+              {
+                "address": 10496,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 10624,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 96,
+                "enabledBytes": 96,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 24,
+            "address": 10752,
+            "offset128": 0,
+            "bursts": [
+              {
+                "address": 10752,
+                "beats": 2,
+                "partial": false
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 10752,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 10880,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              }
+            ]
+          },
+          {
+            "row": 25,
+            "address": 11040,
+            "offset128": 32,
+            "bursts": [
+              {
+                "address": 11008,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 11008,
+                "enabledStartByte": 32,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 96,
+                "partial": true
+              },
+              {
+                "address": 11136,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 11264,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 32,
+                "enabledBytes": 32,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 26,
+            "address": 11328,
+            "offset128": 64,
+            "bursts": [
+              {
+                "address": 11264,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 11264,
+                "enabledStartByte": 64,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 64,
+                "partial": true
+              },
+              {
+                "address": 11392,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 11520,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 64,
+                "enabledBytes": 64,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 27,
+            "address": 11616,
+            "offset128": 96,
+            "bursts": [
+              {
+                "address": 11520,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 11520,
+                "enabledStartByte": 96,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 32,
+                "partial": true
+              },
+              {
+                "address": 11648,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 11776,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 96,
+                "enabledBytes": 96,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 28,
+            "address": 11904,
+            "offset128": 0,
+            "bursts": [
+              {
+                "address": 11904,
+                "beats": 2,
+                "partial": false
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 11904,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 12032,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              }
+            ]
+          },
+          {
+            "row": 29,
+            "address": 12192,
+            "offset128": 32,
+            "bursts": [
+              {
+                "address": 12160,
+                "beats": 1,
+                "partial": true
+              },
+              {
+                "address": 12288,
+                "beats": 2,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 12160,
+                "enabledStartByte": 32,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 96,
+                "partial": true
+              },
+              {
+                "address": 12288,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 12416,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 32,
+                "enabledBytes": 32,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 30,
+            "address": 12480,
+            "offset128": 64,
+            "bursts": [
+              {
+                "address": 12416,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 12416,
+                "enabledStartByte": 64,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 64,
+                "partial": true
+              },
+              {
+                "address": 12544,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 12672,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 64,
+                "enabledBytes": 64,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 31,
+            "address": 12768,
+            "offset128": 96,
+            "bursts": [
+              {
+                "address": 12672,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 12672,
+                "enabledStartByte": 96,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 32,
+                "partial": true
+              },
+              {
+                "address": 12800,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 12928,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 96,
+                "enabledBytes": 96,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 32,
+            "address": 13056,
+            "offset128": 0,
+            "bursts": [
+              {
+                "address": 13056,
+                "beats": 2,
+                "partial": false
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 13056,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 13184,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              }
+            ]
+          },
+          {
+            "row": 33,
+            "address": 13344,
+            "offset128": 32,
+            "bursts": [
+              {
+                "address": 13312,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 13312,
+                "enabledStartByte": 32,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 96,
+                "partial": true
+              },
+              {
+                "address": 13440,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 13568,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 32,
+                "enabledBytes": 32,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 34,
+            "address": 13632,
+            "offset128": 64,
+            "bursts": [
+              {
+                "address": 13568,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 13568,
+                "enabledStartByte": 64,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 64,
+                "partial": true
+              },
+              {
+                "address": 13696,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 13824,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 64,
+                "enabledBytes": 64,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 35,
+            "address": 13920,
+            "offset128": 96,
+            "bursts": [
+              {
+                "address": 13824,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 13824,
+                "enabledStartByte": 96,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 32,
+                "partial": true
+              },
+              {
+                "address": 13952,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 14080,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 96,
+                "enabledBytes": 96,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 36,
+            "address": 14208,
+            "offset128": 0,
+            "bursts": [
+              {
+                "address": 14208,
+                "beats": 2,
+                "partial": false
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 14208,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 14336,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              }
+            ]
+          },
+          {
+            "row": 37,
+            "address": 14496,
+            "offset128": 32,
+            "bursts": [
+              {
+                "address": 14464,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 14464,
+                "enabledStartByte": 32,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 96,
+                "partial": true
+              },
+              {
+                "address": 14592,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 14720,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 32,
+                "enabledBytes": 32,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 38,
+            "address": 14784,
+            "offset128": 64,
+            "bursts": [
+              {
+                "address": 14720,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 14720,
+                "enabledStartByte": 64,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 64,
+                "partial": true
+              },
+              {
+                "address": 14848,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 14976,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 64,
+                "enabledBytes": 64,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 39,
+            "address": 15072,
+            "offset128": 96,
+            "bursts": [
+              {
+                "address": 14976,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 14976,
+                "enabledStartByte": 96,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 32,
+                "partial": true
+              },
+              {
+                "address": 15104,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 15232,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 96,
+                "enabledBytes": 96,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 40,
+            "address": 15360,
+            "offset128": 0,
+            "bursts": [
+              {
+                "address": 15360,
+                "beats": 2,
+                "partial": false
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 15360,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 15488,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              }
+            ]
+          },
+          {
+            "row": 41,
+            "address": 15648,
+            "offset128": 32,
+            "bursts": [
+              {
+                "address": 15616,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 15616,
+                "enabledStartByte": 32,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 96,
+                "partial": true
+              },
+              {
+                "address": 15744,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 15872,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 32,
+                "enabledBytes": 32,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 42,
+            "address": 15936,
+            "offset128": 64,
+            "bursts": [
+              {
+                "address": 15872,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 15872,
+                "enabledStartByte": 64,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 64,
+                "partial": true
+              },
+              {
+                "address": 16000,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 16128,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 64,
+                "enabledBytes": 64,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 43,
+            "address": 16224,
+            "offset128": 96,
+            "bursts": [
+              {
+                "address": 16128,
+                "beats": 2,
+                "partial": true
+              },
+              {
+                "address": 16384,
+                "beats": 1,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 16128,
+                "enabledStartByte": 96,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 32,
+                "partial": true
+              },
+              {
+                "address": 16256,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 16384,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 96,
+                "enabledBytes": 96,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 44,
+            "address": 16512,
+            "offset128": 0,
+            "bursts": [
+              {
+                "address": 16512,
+                "beats": 2,
+                "partial": false
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 16512,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 16640,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              }
+            ]
+          },
+          {
+            "row": 45,
+            "address": 16800,
+            "offset128": 32,
+            "bursts": [
+              {
+                "address": 16768,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 16768,
+                "enabledStartByte": 32,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 96,
+                "partial": true
+              },
+              {
+                "address": 16896,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 17024,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 32,
+                "enabledBytes": 32,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 46,
+            "address": 17088,
+            "offset128": 64,
+            "bursts": [
+              {
+                "address": 17024,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 17024,
+                "enabledStartByte": 64,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 64,
+                "partial": true
+              },
+              {
+                "address": 17152,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 17280,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 64,
+                "enabledBytes": 64,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 47,
+            "address": 17376,
+            "offset128": 96,
+            "bursts": [
+              {
+                "address": 17280,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 17280,
+                "enabledStartByte": 96,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 32,
+                "partial": true
+              },
+              {
+                "address": 17408,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 17536,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 96,
+                "enabledBytes": 96,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 48,
+            "address": 17664,
+            "offset128": 0,
+            "bursts": [
+              {
+                "address": 17664,
+                "beats": 2,
+                "partial": false
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 17664,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 17792,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              }
+            ]
+          },
+          {
+            "row": 49,
+            "address": 17952,
+            "offset128": 32,
+            "bursts": [
+              {
+                "address": 17920,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 17920,
+                "enabledStartByte": 32,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 96,
+                "partial": true
+              },
+              {
+                "address": 18048,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 18176,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 32,
+                "enabledBytes": 32,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 50,
+            "address": 18240,
+            "offset128": 64,
+            "bursts": [
+              {
+                "address": 18176,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 18176,
+                "enabledStartByte": 64,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 64,
+                "partial": true
+              },
+              {
+                "address": 18304,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 18432,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 64,
+                "enabledBytes": 64,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 51,
+            "address": 18528,
+            "offset128": 96,
+            "bursts": [
+              {
+                "address": 18432,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 18432,
+                "enabledStartByte": 96,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 32,
+                "partial": true
+              },
+              {
+                "address": 18560,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 18688,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 96,
+                "enabledBytes": 96,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 52,
+            "address": 18816,
+            "offset128": 0,
+            "bursts": [
+              {
+                "address": 18816,
+                "beats": 2,
+                "partial": false
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 18816,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 18944,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              }
+            ]
+          },
+          {
+            "row": 53,
+            "address": 19104,
+            "offset128": 32,
+            "bursts": [
+              {
+                "address": 19072,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 19072,
+                "enabledStartByte": 32,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 96,
+                "partial": true
+              },
+              {
+                "address": 19200,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 19328,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 32,
+                "enabledBytes": 32,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 54,
+            "address": 19392,
+            "offset128": 64,
+            "bursts": [
+              {
+                "address": 19328,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 19328,
+                "enabledStartByte": 64,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 64,
+                "partial": true
+              },
+              {
+                "address": 19456,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 19584,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 64,
+                "enabledBytes": 64,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 55,
+            "address": 19680,
+            "offset128": 96,
+            "bursts": [
+              {
+                "address": 19584,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 19584,
+                "enabledStartByte": 96,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 32,
+                "partial": true
+              },
+              {
+                "address": 19712,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 19840,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 96,
+                "enabledBytes": 96,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 56,
+            "address": 19968,
+            "offset128": 0,
+            "bursts": [
+              {
+                "address": 19968,
+                "beats": 2,
+                "partial": false
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 19968,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 20096,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              }
+            ]
+          },
+          {
+            "row": 57,
+            "address": 20256,
+            "offset128": 32,
+            "bursts": [
+              {
+                "address": 20224,
+                "beats": 2,
+                "partial": true
+              },
+              {
+                "address": 20480,
+                "beats": 1,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 20224,
+                "enabledStartByte": 32,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 96,
+                "partial": true
+              },
+              {
+                "address": 20352,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 20480,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 32,
+                "enabledBytes": 32,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 58,
+            "address": 20544,
+            "offset128": 64,
+            "bursts": [
+              {
+                "address": 20480,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 20480,
+                "enabledStartByte": 64,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 64,
+                "partial": true
+              },
+              {
+                "address": 20608,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 20736,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 64,
+                "enabledBytes": 64,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 59,
+            "address": 20832,
+            "offset128": 96,
+            "bursts": [
+              {
+                "address": 20736,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 20736,
+                "enabledStartByte": 96,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 32,
+                "partial": true
+              },
+              {
+                "address": 20864,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 20992,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 96,
+                "enabledBytes": 96,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 60,
+            "address": 21120,
+            "offset128": 0,
+            "bursts": [
+              {
+                "address": 21120,
+                "beats": 2,
+                "partial": false
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 21120,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 21248,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              }
+            ]
+          },
+          {
+            "row": 61,
+            "address": 21408,
+            "offset128": 32,
+            "bursts": [
+              {
+                "address": 21376,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 21376,
+                "enabledStartByte": 32,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 96,
+                "partial": true
+              },
+              {
+                "address": 21504,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 21632,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 32,
+                "enabledBytes": 32,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 62,
+            "address": 21696,
+            "offset128": 64,
+            "bursts": [
+              {
+                "address": 21632,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 21632,
+                "enabledStartByte": 64,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 64,
+                "partial": true
+              },
+              {
+                "address": 21760,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 21888,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 64,
+                "enabledBytes": 64,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 63,
+            "address": 21984,
+            "offset128": 96,
+            "bursts": [
+              {
+                "address": 21888,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 21888,
+                "enabledStartByte": 96,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 32,
+                "partial": true
+              },
+              {
+                "address": 22016,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 22144,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 96,
+                "enabledBytes": 96,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 64,
+            "address": 22272,
+            "offset128": 0,
+            "bursts": [
+              {
+                "address": 22272,
+                "beats": 2,
+                "partial": false
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 22272,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 22400,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              }
+            ]
+          },
+          {
+            "row": 65,
+            "address": 22560,
+            "offset128": 32,
+            "bursts": [
+              {
+                "address": 22528,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 22528,
+                "enabledStartByte": 32,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 96,
+                "partial": true
+              },
+              {
+                "address": 22656,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 22784,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 32,
+                "enabledBytes": 32,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 66,
+            "address": 22848,
+            "offset128": 64,
+            "bursts": [
+              {
+                "address": 22784,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 22784,
+                "enabledStartByte": 64,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 64,
+                "partial": true
+              },
+              {
+                "address": 22912,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 23040,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 64,
+                "enabledBytes": 64,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 67,
+            "address": 23136,
+            "offset128": 96,
+            "bursts": [
+              {
+                "address": 23040,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 23040,
+                "enabledStartByte": 96,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 32,
+                "partial": true
+              },
+              {
+                "address": 23168,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 23296,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 96,
+                "enabledBytes": 96,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 68,
+            "address": 23424,
+            "offset128": 0,
+            "bursts": [
+              {
+                "address": 23424,
+                "beats": 2,
+                "partial": false
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 23424,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 23552,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              }
+            ]
+          },
+          {
+            "row": 69,
+            "address": 23712,
+            "offset128": 32,
+            "bursts": [
+              {
+                "address": 23680,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 23680,
+                "enabledStartByte": 32,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 96,
+                "partial": true
+              },
+              {
+                "address": 23808,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 23936,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 32,
+                "enabledBytes": 32,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 70,
+            "address": 24000,
+            "offset128": 64,
+            "bursts": [
+              {
+                "address": 23936,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 23936,
+                "enabledStartByte": 64,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 64,
+                "partial": true
+              },
+              {
+                "address": 24064,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 24192,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 64,
+                "enabledBytes": 64,
+                "partial": true
+              }
+            ]
+          },
+          {
+            "row": 71,
+            "address": 24288,
+            "offset128": 96,
+            "bursts": [
+              {
+                "address": 24192,
+                "beats": 3,
+                "partial": true
+              }
+            ],
+            "writeBeats": [
+              {
+                "address": 24192,
+                "enabledStartByte": 96,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 32,
+                "partial": true
+              },
+              {
+                "address": 24320,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 128,
+                "enabledBytes": 128,
+                "partial": false
+              },
+              {
+                "address": 24448,
+                "enabledStartByte": 0,
+                "enabledEndByteExclusive": 96,
+                "enabledBytes": 96,
+                "partial": true
+              }
+            ]
+          }
+        ]
+      },
+      "steps": [
+        {
+          "id": "row-address",
+          "title": "从shape和目标stride生成每行地址",
+          "expression": "addr(row)=3840+row*288; rowBytes=64*4=256"
+        },
+        {
+          "id": "pack",
+          "title": "对每行向128B格子两端扩展",
+          "expression": "first=floor(addr/128); last=floor((addr+rowBytes-1)/128); beats=last-first+1",
+          "state": {
+            "beats": 198,
+            "partialBeats": 108
+          }
+        },
+        {
+          "id": "split",
+          "title": "在4KiB边界拆分burst，保留每beat的byte-enable",
+          "state": {
+            "bursts": 76,
+            "partialBursts": 58
+          }
+        },
+        {
+          "id": "read-old",
+          "title": "部分写握手时生成对齐地址的单beat fake AR",
+          "state": {
+            "fakeReadBeats": 108
+          },
+          "timeMode": "因果步骤，未提供原业务cycle值"
+        },
+        {
+          "id": "merge",
+          "title": "WSTRB为1选新字节，为0保留读回旧字节；下游WSTRB全部置1",
+          "expression": "newLine[i]=WSTRB[i]?newByte[i]:oldByte[i]",
+          "state": {
+            "fullWriteBeats": 198
+          }
+        },
+        {
+          "id": "wait-b",
+          "title": "此前burst的B未返回，后续partial W会被W_B计数门控",
+          "state": {
+            "completionRule": "partial可接收需pendingWriteBursts=0；计数在upstream WLAST增、B减"
+          },
+          "timeMode": "不能为unknown的MC返回时间填固定拍数"
+        }
+      ],
+      "model": {
+        "currentAnalyticCore1": 2725,
+        "currentAnalyticCore0": 2669,
+        "expression": "ceil(198*2.48)+(58-1)*36+22 +67+13+22+1 +pathExtra",
+        "core1PathExtra": 56,
+        "beatTermLatency": 2566,
+        "occupancyCore": 2580,
+        "scope": "按当前源码手算，未运行；raw LsuEngine analyse，非业务svc/trc或完整physical-RMW时长",
+        "stageDifference": "历史组件gate验证边沿状态与数据合并；解析标量模型用于默认路径，二者不是同一个输出量"
+      },
+      "rtl": {
+        "gateScenario": 4,
+        "fixedFNV64": "770778426d85fbb8",
+        "snapshots": 10000,
+        "fieldsPerSnapshot": 76,
+        "newRun": false,
+        "cycleDuration": null,
+        "durationError": null,
+        "reason": "入库fixture和digest未携带原业务arrival或完整timing；5000个台架cycle是测试预算，不是指令latency",
+        "geometryDifference": {
+          "beats": 0,
+          "bursts": 0,
+          "partialBeats": 0,
+          "partialBursts": 0
+        }
+      },
+      "boundary": {
+        "data": "deterministic synthetic physical-L2-address pattern，不是原tensor",
+        "gate": "RMW单组件每AXI边沿状态比对，独立周期性ready/B/R刺激，未使用MC实际服务",
+        "fullChipTiming": "unknown"
+      }
+    }
+  ],
+  "queueSupplement": {
+    "source": [
+      "CycleSim/test/front/dma_queue_rtl/reference.json",
+      "CycleSim/test/front/dma_queue_rtl/probe.cpp"
+    ],
+    "historicalGateCases": 40,
+    "edgesPerCase": 1600,
+    "commandsPerCase": 24,
+    "note": "输入没有shape，也不测数据搬运服务；start/accept/done是按terminal pin推出的独立test-slave延迟，不能作为真实LD/ST耗时",
+    "stimulusDelays": {
+      "mode0": {
+        "start": 1,
+        "accept": 73,
+        "done": 95
+      },
+      "mode1": {
+        "start": 1,
+        "accept": 3,
+        "done": 241
+      },
+      "mode2": {
+        "start": 1,
+        "accept": 17,
+        "done": 42
+      },
+      "mode3": {
+        "start": 1,
+        "accept": 3,
+        "done": 19
+      }
+    }
+  }
+}
