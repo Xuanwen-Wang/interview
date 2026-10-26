@@ -2,6 +2,34 @@
 
 导航分成三层：**知识域（module）→ 专题（group）→ 章节（chapter）**。目录关系由 `config/navigation.json` 管理，正文文件不决定菜单结构。新增几十篇文章也不需要在侧边栏平铺几十个链接。
 
+开始任务先读根 [AGENTS.md](../AGENTS.md)。编译器、算子、LLVM 的本机查阅入口见 [源码导航](source-navigation.md)；并行协作、证据与发布完成标准见 [协作与验收](agent-workflow.md)。
+
+## 先按读者的知识顺序讲清楚
+
+算法篇默认读者只懂简单 Attention 与 MoE。每个方法按“已有方法遇到什么问题 → 新增什么概念或状态 → 一次输入到输出的数据流 → 节省与代价 → 实现和优化”展开。编译器篇先给输入 IR、目标变换和合法性条件，再解释分析与 pass，不直接堆类名。
+
+- 名词、符号和数字首次出现时解释其含义、轴和来源。例：先定义 MLA 的压缩 KV 向量，再说明 DeepSeek-V2 把它配置为 512 维；不能先用“512维底稿”代替定义。
+- 一个主线例子固定模型、batch、query/history 长度、head 数、head dim 和精度。切换玩具算例、真实配置或反事实对照时重新说明条件。N 是 query 长度还是历史长度必须写明。
+- 按计算顺序解释中间量的形状、生成者、消费者和寿命：哪些是权重，哪些跨步缓存，哪些只是临时值。head 数、每 head 维度、共享方式、RoPE 的位置维度分别说明。
+- 分开计算量、缓存容量、逻辑读写量和实测流量。说明省掉什么、增加什么，以及 prefill/decode、batch 和上下文增长对结论的影响。全量 GQA/MLA 仍访问全部可见历史，不能把压缩每行说成跳过历史位置。
+- 公式服务于数据流。主文保留理解流程所必需的内容，完整推导和实现细节放入可展开补充，打印仍完整显示。优化方法之间的组合、替代和独立关系必须有依据。
+
+## 图与动画的验收标准
+
+每张图至少要让读者能回答：画的是什么、输入输出是什么、每个轴表示什么、箭头传什么、这张图证明了什么。图题和图注不能依赖另一页才能解释比较对象。
+
+| 图的类型 | 必须明确 |
+| --- | --- |
+| 容量或计算对照 | 两侧对象、共同条件、单位和归一化口径；模型之间的对比与同模型两种表示分开 |
+| shape 数据流 | 轴名与尺寸、分支/合流、数据与控制依赖；多个输入不能漏箭头 |
+| 模型结构 | 输入到输出的顺序、重复层范围、残差、缓存、层类型；并列分类不能画成执行先后 |
+| 比例与分布 | 相同坐标和比例；若块宽或格数不按真实比例，直接标“结构示意” |
+| 动画 | 当前步骤、变化的数据、未变化的状态；能前后步进、暂停、重置，静态末帧与打印仍可理解 |
+
+采用统一颜色区分语义，不能只靠颜色传达含义；避免一张大色块塞满文字。桌面实际截图检查文字、箭头、对齐和留白，手机检查是否能阅读或放大，打印检查是否截断。边界检测无法识别“线穿字”或“比较对象不明”，仍须人工看图。
+
+技术审稿之外，另按读者视角从头读一次：新术语是否已定义、能否沿一条真实输入走完整个流程、是否能说出优化的收益和代价。构建通过和算术测试通过不能代替这项审查。
+
 ## 添加章节
 
 1. 在 `content/` 的现有 JSON 或一个新 JSON 数组中添加章节。参考相邻章节的 schema：`id/title/part/order/subtitle/minutes/level/tags/lead/sections/questions/sources/takeaways`。
@@ -72,15 +100,22 @@ Attention、FFN、PE、VP、MoE 部署与性能分析分别使用一个 chapter�
 ```bash
 python3 scripts/build.py
 python3 scripts/check.py
+python3 scripts/check_public_artifact.py
+python3 -m unittest discover -s scripts -p 'test_public_artifact.py' -v
 node --check web/app.js
 node --check web/catalog.js
 node --check web/reading.js
 node --check web/pe-explorer.js
 node --check web/moe-explorer.js
 node --check web/decode-explorer.js
+node --check web/attention-lab.js
+node --check web/performance-explorer.js
+node --check web/jobs.js
 node scripts/check_pe_model.js
 node scripts/check_moe_model.js
 node scripts/check_decode_model.js
+node scripts/check_attention_lab.js
+node scripts/check_performance_model.js
 python3 -m unittest discover -s practice -v
 TMPDIR=/data/wangxw/tmp g++ -std=c++17 -Wall -Wextra -Werror \
   -fsanitize=address,undefined practice/coding.cpp \
@@ -89,6 +124,8 @@ TMPDIR=/data/wangxw/tmp g++ -std=c++17 -Wall -Wextra -Werror \
 ```
 
 浏览器验收包括主题/专题、旧深链接、目录筛选、公司来源筛选、全文搜索、图示放大、实验计算、笔记、问答、移动端与打印。构建产物 `dist/` 不提交；push 到 `main` 后由 GitHub Actions 构建并发布，发布完成再核验线上内容。
+
+以上是检查入口索引，按修改范围选择对应模型与界面检查；[CI](../.github/workflows/pages.yml) 执行完整清单。仅文档调整且构建结果逐字节不变时，验证文档链接与命令即可，不必重录所有页面交互。公开产物检查在每次发布前必跑，构建成功并不表示整个 `dist/` 都可以公开。
 
 ## PE 交互演示
 

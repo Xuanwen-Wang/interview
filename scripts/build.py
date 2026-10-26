@@ -58,6 +58,10 @@ def build():
     result = result.replace('/* INLINE_APP */', '\n'.join((ROOT / 'web' / name).read_text(encoding='utf-8') for name in ['catalog.js', 'reading.js', 'pe-model.js', 'pe-explorer.js', 'moe-explorer.js', 'performance-explorer.js', 'decode-explorer.js', 'attention-lab.js', 'jobs.js', 'app.js']))
     assert not re.search(r'/\* INLINE_\w+ \*/', result)
     out = ROOT / 'dist'
+    from check_public_artifact import check_artifact_layout, expected_files
+    layout_errors = check_artifact_layout(out, expected_files(ROOT), allow_missing=True)
+    if layout_errors:
+        raise SystemExit('Refusing to overwrite dist: ' + '; '.join(sorted(set(layout_errors))))
     out.mkdir(exist_ok=True)
     (out / 'index.html').write_text(result, encoding='utf-8')
     (out / 'jobs.html').write_text(result.replace('<body>', '<body data-default-route="jobs">'), encoding='utf-8')

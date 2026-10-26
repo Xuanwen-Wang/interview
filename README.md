@@ -56,6 +56,7 @@
 ```bash
 python3 scripts/build.py
 python3 scripts/check.py
+python3 scripts/check_public_artifact.py
 python3 -m http.server 8768 --bind 127.0.0.1 --directory dist
 ```
 
@@ -64,6 +65,8 @@ python3 -m http.server 8768 --bind 127.0.0.1 --directory dist
 `dist/jobs.html` 可单独保存并离线查看岗位要求；岗位来源和状态边界见 [岗位核验记录](evidence/job-sources.md)。
 
 ## 维护
+
+Agent 从 [AGENTS.md](AGENTS.md) 开始，按任务查阅 [源码导航](docs/source-navigation.md)、[编写与审稿规范](docs/authoring.md) 和 [协作与验收](docs/agent-workflow.md)。本机源码绝对路径放在被 Git 忽略的 `AGENTS.local.md`，不进入公开网页。
 
 ```text
 config/              主题/专题结构、公司与面经来源索引
@@ -83,6 +86,6 @@ scripts/check.py     检查内容与站内引用
 
 第一版于2026-10-23建立，第二版于2026-10-24扩展，PE专题于2026-10-25按真实数据路径重构。内部 GLM5Next 与公开 GLM-5 不是同一个模型配置。CycleSim、VCS、局部 kernel、Graph 回放与硅上端到端是不同层级。历史性能仅按原记录范围转述；本仓库构建与网页验收不意味着重新运行了芯片测试。
 
-用户已明确选择公开仓库与公开 GitHub Pages。本仓库只发布指南、必要技术概述和来源定位，不包含业务仓库全量源码、模型权重、原始业务数据、凭据或运行环境文件。
+发布要求以 2026-10-26 的用户最新确认为准：GitHub 指南仓库与 GitHub Pages 均保持公开，简历独立管理。Pages 发布前运行 `python3 scripts/check_public_artifact.py`，仅上传通过检查的 `dist/`，不上传仓库根目录。公开仓库与 Pages 不得包含或引用私人简历、其 LaTeX 源码、编辑说明及联系方式；业务源码全量、模型权重、原始数据、凭据和运行环境也不属于发布内容。本地 `resume/` 被 Git 忽略，不作为 submodule 提交。
 
 本指南持续扩展，不宣称穷尽 AI compiler 学科。后续深入方向见 [阅读路线](content/00-core.json) 和 [证据说明](evidence/README.md)。
