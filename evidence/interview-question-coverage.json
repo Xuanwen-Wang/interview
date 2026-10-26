@@ -1976,210 +1976,240 @@
       "source": "M01",
       "id": "qm-seed-01",
       "question": "先介绍一下你的工作经历。你觉得哪段经历和我们这个岗位最相关？",
-      "answerStatus": "personal"
+      "answerStatus": "personal",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-02",
       "question": "你为什么对硬件性能评估这个方向感兴趣？相比现在的工作，你希望以后主要做什么？",
-      "answerStatus": "personal"
+      "answerStatus": "personal",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-03",
       "question": "选一个你参与最深入的性能项目，介绍一下背景、目标、你的职责和最终结果。",
-      "answerStatus": "personal"
+      "answerStatus": "personal",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-04",
       "question": "这个项目最难的问题是什么？你是怎么一步步定位和解决的？",
-      "answerStatus": "personal"
+      "answerStatus": "personal",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-05",
       "question": "你们当时用什么指标判断项目做得好不好？为什么选这些指标？",
-      "answerStatus": "method-needs-personal"
+      "answerStatus": "method-needs-personal",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-06",
       "question": "你提到做过性能建模或仿真，具体想解决什么问题？哪些事情直接跑实验不方便解决？",
-      "answerStatus": "method-needs-personal"
+      "answerStatus": "method-needs-personal",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-07",
       "question": "你的模型是怎么建立的？哪些部分来自硬件规格，哪些来自实测，哪些是你作出的假设？",
-      "answerStatus": "method-needs-personal"
+      "answerStatus": "method-needs-personal",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-08",
       "question": "你怎么验证模型的准确性？有没有遇到预测和实际表现差很多的情况？",
-      "answerStatus": "method-needs-personal"
+      "answerStatus": "method-needs-personal",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-09",
       "question": "如果模型在已有测试上很准，换一个模型或输入规模以后，你还会相信它吗？怎么判断？",
-      "answerStatus": "reference"
+      "answerStatus": "reference",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-10",
       "question": "有没有出现过模型预测某个方案更快，实际跑起来却更慢？你是怎么分析的？",
-      "answerStatus": "method-needs-personal"
+      "answerStatus": "method-needs-personal",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-11",
       "question": "如果给你一款不熟悉的 AI 加速卡，让你评估它适不适合我们的业务，你会从哪里开始？",
-      "answerStatus": "reference"
+      "answerStatus": "reference",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-12",
       "question": "假设评估时间只有两周，你会优先做哪些事情？最后准备交付什么结论？",
-      "answerStatus": "reference"
+      "answerStatus": "reference",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-13",
       "question": "你会怎样选择测试模型和测试数据，才能让评估结果代表真实业务？",
-      "answerStatus": "reference"
+      "answerStatus": "reference",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-14",
       "question": "两款硬件的软件栈成熟度差很多，你觉得应该怎么比较才合理？",
-      "answerStatus": "reference"
+      "answerStatus": "reference",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-15",
       "question": "厂商提供的测试结果很好，但我们的业务跑得不好，你会怎么查？",
-      "answerStatus": "reference"
+      "answerStatus": "reference",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-16",
       "question": "一款卡的理论算力是另一款的两倍，但实际模型反而更慢，可能是什么原因？你会怎样验证？",
-      "answerStatus": "reference"
+      "answerStatus": "reference",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-17",
       "question": "你平时怎么判断一个性能瓶颈主要来自硬件、编译器、算子实现，还是框架和调度？",
-      "answerStatus": "reference"
+      "answerStatus": "reference",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-18",
       "question": "介绍一次你实际使用性能分析工具定位问题的经历。你看到了什么证据，最后采取了什么措施？",
-      "answerStatus": "personal"
+      "answerStatus": "personal",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-19",
       "question": "你怎么看大模型训练和推理对硬件需求的区别？同一种硬件可能更适合哪类负载？",
-      "answerStatus": "reference"
+      "answerStatus": "reference",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-20",
       "question": "对于推理，输入长度、输出长度、并发量变化，会怎样影响你对硬件的评价？",
-      "answerStatus": "reference"
+      "answerStatus": "reference",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-21",
       "question": "如果一个平台跑 Dense 模型不错，但跑 MoE 明显不好，你会优先考虑哪些问题？",
-      "answerStatus": "reference"
+      "answerStatus": "reference",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-22",
       "question": "单卡性能不错，多卡扩展却很差，你会怎样定位？",
-      "answerStatus": "reference"
+      "answerStatus": "reference",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-23",
       "question": "某个算子优化了很多，但整模型几乎没有变快，你会怎样解释？接下来还会继续优化它吗？",
-      "answerStatus": "reference"
+      "answerStatus": "reference",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-24",
       "question": "你怎么判断一个平台还有多少优化空间？什么时候应该继续投入软件优化，什么时候应该调整方案？",
-      "answerStatus": "reference"
+      "answerStatus": "reference",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-25",
       "question": "假设一种新卡更便宜，但性能稍差、适配工作也比较多，你会怎样判断是否值得引入？",
-      "answerStatus": "reference"
+      "answerStatus": "reference",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-26",
       "question": "除了购买价格和吞吐，你认为规模化使用一种硬件还需要考虑哪些成本和风险？",
-      "answerStatus": "reference"
+      "answerStatus": "reference",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-27",
       "question": "小规模测试通过以后，你觉得还需要满足哪些条件，才能支持大规模部署？",
-      "answerStatus": "reference"
+      "answerStatus": "reference",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-28",
       "question": "如果你的评估结果与硬件厂商或内部其他团队的结论不一致，你会怎么处理？",
-      "answerStatus": "reference"
+      "answerStatus": "reference",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-29",
       "question": "讲一个你最初判断错了的性能问题。后来什么证据让你改变了判断？",
-      "answerStatus": "personal"
+      "answerStatus": "personal",
+      "chapter": "seed-hardware-mock"
     },
     {
       "session": "mock-byte-seed-hardware",
       "source": "M01",
       "id": "qm-seed-30",
       "question": "如果你来做这个岗位，你觉得自己最能贡献的是什么？哪些能力还需要补齐？",
-      "answerStatus": "personal"
+      "answerStatus": "personal",
+      "chapter": "seed-hardware-mock"
     }
   ]
 }

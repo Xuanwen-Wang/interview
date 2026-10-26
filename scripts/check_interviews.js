@@ -10,20 +10,28 @@ const read = name => JSON.parse(fs.readFileSync(path.join(root, name), 'utf8'));
 const chapters = fs.readdirSync(path.join(root, 'content')).filter(f=>f.endsWith('.json')).flatMap(f=>read('content/'+f));
 const catalog = read('config/navigation.json');
 const moduleEntry = catalog.modules.find(m=>m.id==='interviews');
-assert.deepEqual(moduleEntry.groups.flatMap(g=>g.chapters), ['interview-jobs','interview-sessions']);
+assert.deepEqual(moduleEntry.groups.flatMap(g=>g.chapters), ['interview-jobs','interview-sessions','seed-hardware-mock']);
 const jobs = chapters.find(c=>c.id==='interview-jobs');
 const sessions = chapters.find(c=>c.id==='interview-sessions');
+const mock = chapters.find(c=>c.id==='seed-hardware-mock');
+const interviewBooks = [sessions, mock];
 assert.equal(jobs.portableReading.file, 'interview-jobs.html');
 assert.equal(sessions.portableReading.file, 'interview-questions.html');
+assert.equal(mock.portableReading.file, 'interview-seed-hardware.html');
 const inventory = read('evidence/interview-question-coverage.json');
-const answerIds = sessions.sections.flatMap(s=>[...s.html.matchAll(/<details\b[^>]*\bid="([^"]+)"[^>]*\bdata-interview-question/g)].map(m=>m[1]));
+const questionIds = book => book.sections.flatMap(s=>[...s.html.matchAll(/<details\b[^>]*\bid="([^"]+)"[^>]*\bdata-interview-question/g)].map(m=>m[1]));
+const answerIds = interviewBooks.flatMap(questionIds);
 assert.equal(new Set(answerIds).size, answerIds.length, 'Duplicate question anchors');
 assert.deepEqual([...answerIds].sort(), inventory.questions.map(q=>q.id).sort());
-assert.equal(sessions.interviewQuestionCount, answerIds.length);
-assert.equal(sessions.interviewSessionCount, inventory.sessions);
+for (const book of interviewBooks) assert.equal(book.interviewQuestionCount, questionIds(book).length);
+assert.equal(interviewBooks.reduce((n,book)=>n+book.interviewSessionCount,0), inventory.sessions);
 for (const q of inventory.questions) {
-  assert(sessions.sections.some(s=>s.id===q.session && s.html.includes('id="'+q.id+'"')));
+  const owner = chapters.find(c=>c.id===(q.chapter||sessions.id));
+  assert(owner?.sections.some(s=>s.id===q.session && s.html.includes('id="'+q.id+'"')));
 }
+assert.equal(questionIds(sessions).length, 328);
+assert.equal(questionIds(mock).length, 30);
+assert(!sessions.sections.some(s=>s.id==='mock-byte-seed-hardware'));
 
 // Counts audited against the supplied material, not inferred from the rendered page.
 const sourceCoverage = {F01:15,F02:22,F03:12,F04:17,F05:10,F06:4,F07:6,F08:6,F09:2,F10:8,F11:2,F12:22,F20:9,F21:13,F22:3,F23:13,F24:16,F25:10,F26:20,F27:3,F28:13,F29:4,P48:48};
@@ -52,6 +60,17 @@ for (const [old, sections] of Object.entries(historical)) {
     assert(anchors.has(route[2]), 'Lost old anchor '+old+'/'+section);
   }
 }
+// Published mock links move only their exact anchors, never the whole old book.
+for (const anchor of ['mock-byte-seed-hardware', ...Array.from({length:30},(_,i)=>'qm-seed-'+String(i+1).padStart(2,'0'))]) {
+  ctx.location.hash = '#chapter/interview-sessions/'+anchor;
+  assert.deepEqual(run('currentRoute()'), ['chapter','seed-hardware-mock',anchor]);
+  ctx.location.hash = '#chapter/seed-hardware-mock/'+anchor;
+  assert.deepEqual(run('currentRoute()'), ['chapter','seed-hardware-mock',anchor]);
+}
+for (const anchor of [null,'notes','fs-byte-infra-r3','qa-infra3-intro','qm-seed-31','qm-seed-01-extra']) {
+  ctx.location.hash = '#chapter/interview-sessions'+(anchor?'/'+anchor:'');
+  assert.equal(run('currentRoute()')[1], 'interview-sessions');
+}
 const app = fs.readFileSync(path.join(root,'web/app.js'),'utf8');
 vm.runInContext(app.slice(app.indexOf('function normalizeState('),app.indexOf('function readStorage(')),ctx);
 for (const readingVersion of [1,2]) {
@@ -68,4 +87,10 @@ for (const readingVersion of [1,2]) {
   ctx.location.hash='#chapter/interview-bytedance/notes';
   assert.equal(run('currentRoute()')[2],'note-interview-bytedance');
 }
-console.log(`Interview pages: 2 portable entries, ${inventory.sessions} sessions/material groups, ${answerIds.length} question anchors; 30 historical anchors and v1/v2 notes/read/practice migration passed.`);
+ctx.raw={readingVersion:2,notes:{'interview-sessions':'Existing whole-book note'},read:['interview-sessions'],last:'interview-sessions'};
+const splitState=run('normalizeState(raw)');
+assert.deepEqual(splitState.notes,ctx.raw.notes);
+assert.deepEqual(splitState.read,['interview-sessions']);
+assert.equal(splitState.last,'interview-sessions');
+assert(!splitState.read.includes('seed-hardware-mock'));
+console.log(`Interview pages: 3 portable entries, ${inventory.sessions} sessions/material groups, ${answerIds.length} question anchors; historical routes, 31 moved anchors and note/read/practice preservation passed.`);

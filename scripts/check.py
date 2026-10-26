@@ -40,6 +40,15 @@ for c in rows:
         assert {mapping.get(anchor, anchor) for anchor in meta['anchors']} <= anchors[c['id']], f'Lost historical anchors: {old}'
         assert old == c['id'] or old not in chapters, f'Legacy chapter shadows active chapter: {old}'
 assert len(aliases) == sum(old != c['id'] for c in rows for old in c.get('legacyChapters', {})), 'Duplicate legacy chapter'
+section_aliases = {}
+for c in rows:
+    for old, moved in c.get('legacySections', {}).items():
+        assert old in chapters and old != c['id'], f'Invalid former section owner: {old}'
+        for anchor in moved:
+            assert anchor in anchors[c['id']], f'Missing moved section: {c["id"]}/{anchor}'
+            assert anchor not in anchors[old], f'Moved section shadows active anchor: {old}/{anchor}'
+            assert (old, anchor) not in section_aliases, f'Duplicate moved section: {old}/{anchor}'
+            section_aliases[old, anchor] = c['id']
 catalog = json.loads((ROOT / 'config/navigation.json').read_text())
 modules = {m['id']: m for m in catalog['modules']}
 reports = json.loads((ROOT / 'config/interviews.json').read_text())
@@ -87,6 +96,7 @@ def check_link(url, where):
             alias = aliases.get(parts[1], {}) if len(parts) > 1 else {}
             target = alias.get('chapter', parts[1]) if len(parts) > 1 else None
             section = alias.get('anchorMap', {}).get(parts[2], parts[2]) if len(parts) > 2 else None
+            target = section_aliases.get((target, section), target)
             if target not in chapters:
                 errors.append(f'{where}: missing chapter {url}')
             elif section and section not in anchors[target]:
@@ -159,7 +169,9 @@ for job in jobs:
 assert {r['id'] for r in reports if r['category'] == 'job'} <= {j['sourceId'] for j in jobs}, 'Missing previously researched job'
 
 for c in rows:
-    assert len(c['sections']) >= 5, c['id']
+    # A complete mock session groups its substantive questions in one section.
+    single_interview = c.get('interviewSessionCount') == 1 and c.get('interviewQuestionCount', 0) >= 3
+    assert len(c['sections']) >= 5 or single_interview, c['id']
     assert len(c['questions']) >= 3, c['id']
     assert not ({s['id'] for s in c['sections']} & {'questions', 'takeaways', 'references', 'notes'}), c['id']
     assert len({q.get('id', q['q']) for q in c['questions']}) == len(c['questions']), c['id']

@@ -211,7 +211,7 @@
       "id": "interviews",
       "title": "岗位与面试题",
       "number": "07",
-      "description": "两个完整 HTML：先看岗位要求，再按公司与每一场面试逐题准备。重复题共用解答，保留场次差异。",
+      "description": "先看岗位要求，再按公司查阅面试题，或进入独立的模拟面试逐题练习。",
       "groups": [
         {
           "id": "jobs",
@@ -225,6 +225,13 @@
           "title": "公司面试题",
           "chapters": [
             "interview-sessions"
+          ]
+        },
+        {
+          "id": "mocks",
+          "title": "模拟面试",
+          "chapters": [
+            "seed-hardware-mock"
           ]
         }
       ],

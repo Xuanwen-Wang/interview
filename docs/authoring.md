@@ -86,7 +86,8 @@ Attention、FFN、PE、VP、MoE 部署与性能分析分别使用一个 chapter�
 
 ## 公司与面经
 
-- 面试模块只保留 `interview-jobs.html`（岗位）和 `interview-questions.html`（公司与场次题目）两个完整入口。正文均在 `content/60-company-interviews.json`；公司、场次、问题采用稳定 ID，重复问题链接到同页主答案，同时解释本场追问差异。读题方式置顶，公司组按收录场次数降序排列；同数量保留既有顺序，正文与目录顺序一致。
+- 依据用户 2026-10-26 的位置调整，面试模块首页并列展示岗位介绍、公司面试题与模拟面试。`interview-jobs.html`（岗位）和 `interview-questions.html`（公司与场次题目）的正文在 `content/60-company-interviews.json`；面向具体岗位的原创模拟面试使用独立 chapter 与完整 HTML，例如 `content/61-seed-hardware-mock.json` / `interview-seed-hardware.html`，不嵌入公司场次长文。公司、场次、问题采用稳定 ID，重复问题链接到同页主答案，同时解释本场追问差异。读题方式置顶，公司组按收录场次数降序排列；同数量保留既有顺序，正文与目录顺序一致。
+- 抽出仍然存在的章节中的部分内容时，用新章的 `legacySections` 逐项登记原 chapter 与旧锚点；不能用 `legacyChapters` 接管整个原章。旧整章笔记和已读保持原归属，新章独立记录。
 - 题目按原场次整理。无法确定公司、轮次或日期时保持未知；多人汇总、原创训练和官方作业明确标注，不能改称一场真实面试。缺失代码或不完整题干保留缺失说明，不补造原题。
 - 每个完整答案说明合同、机制、具体例子、工程取舍与验证；编程题说明算法、关键实现、复杂度和边界。五年经验是解读深度，不是对原候选人年限的判断，也不能编造读者的项目经历。
 - `evidence/interview-question-coverage.json` 登记概括题干和答案锚点。题目以 `data-interview-question` 标记，全文搜索直接跳到题目并展开；打印展开全部答案。新增或合并题目后运行 `node scripts/check_interviews.js`，并实际验证重复题跳转、返回、旧笔记和离线入口。

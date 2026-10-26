@@ -170,7 +170,8 @@ function setMenu(open){
 }
 function render(){
  const [route,id,section]=currentRoute();
- if(chapterAliases.has(location.hash.slice(1).split('/')[1]))history.replaceState(null,'','#chapter/'+id+(section?'/'+section:''));
+ const requested=location.hash.slice(1).split('/');
+ if(route==='chapter'&&requested[0]==='chapter'&&(requested[1]!==id||requested[2]!==section))history.replaceState(null,'','#chapter/'+id+(section?'/'+section:''));
  if(route==='chapter'&&renderedChapterId===id){setMenu(false);scrollChapterAnchor(section);return;}
  renderedChapterId=null;clearInterval(practiceTimer);practiceTimer=null;sectionObserver?.disconnect();
  setMenu(false);

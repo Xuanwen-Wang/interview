@@ -2,9 +2,13 @@
 
 // Published chapter identifiers remain valid when a narrative is consolidated.
 const chapterAliases = new Map();
+const chapterSectionAliases = new Map();
 for (const chapter of CHAPTERS) {
   for (const [id, legacy] of Object.entries(chapter.legacyChapters || {})) {
     if (id !== chapter.id) chapterAliases.set(id, {...legacy, chapter:chapter.id});
+  }
+  for (const [id, anchors] of Object.entries(chapter.legacySections || {})) {
+    for (const anchor of anchors) chapterSectionAliases.set(id + '/' + anchor, chapter.id);
   }
 }
 function currentRoute() {
@@ -14,6 +18,8 @@ function currentRoute() {
     return [route, requested, module?.legacyGroups?.[section] || section];
   }
   const alias = route === 'chapter' && chapterAliases.get(requested);
+  const moved = route === 'chapter' && chapterSectionAliases.get(requested + '/' + section);
+  if (moved) return [route, moved, section];
   if (!alias) return [route, requested, section];
   const noteKey = alias.noteKey || requested;
   const target = section === 'notes' && state.notes[noteKey] ? 'note-' + noteKey : alias.anchorMap?.[section] || section || alias.section;
@@ -82,10 +88,10 @@ function initInterviewQuestions() {
       controls.append(button);
     }
   });
-  document.querySelectorAll('[data-interview-question] a[href^="#chapter/interview-sessions/"]').forEach(link=>{
+  document.querySelectorAll('[data-interview-question] a[href^="#chapter/"]').forEach(link=>{
     link.addEventListener('click',()=>{
       const question = link.closest('[data-interview-question]');
-      if (question && !link.classList.contains('interview-permalink')) history.replaceState(null,'','#chapter/interview-sessions/'+question.id);
+      if (question && !link.classList.contains('interview-permalink')) history.replaceState(null,'','#chapter/'+currentRoute()[1]+'/'+question.id);
     });
   });
 }

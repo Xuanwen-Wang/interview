@@ -26,7 +26,8 @@
     ],
     "chapters": [
       "interview-jobs",
-      "interview-sessions"
+      "interview-sessions",
+      "seed-hardware-mock"
     ],
     "description": "图编译、算子优化与项目深挖"
   },
