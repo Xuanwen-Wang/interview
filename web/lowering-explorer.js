@@ -1,15 +1,79 @@
 'use strict';
 
-// This walkthrough explains contracts; it does not emulate compiler output.
+// Fixed excerpts from one GEMM compilation; the controls do not run a compiler.
 const LOWERING_STEPS = [
-  {name:'Triton / TTIR', title:'先确定算什么，以及哪些元素有效', added:'张量运算、元素类型、mask、program instance 的语义。', carried:'教学计算 Y=max(X+2,0)，X/Y 为 BF16 [6,32]；每块处理 [4,32]。', decision:'第二块从行索引 4（从 0 计）开始，只有 2 行有效。mask 是语义，不能在换 IR 时丢掉。', sketch:'logical domain: [6,32]\nblock: [4,32], row start: 4\nvalid rows: [4,6)'},
-  {name:'Linalg / MemRef', title:'把算术与存储对象分别表达', added:'结构化迭代、buffer、view、shape 与 stride 的关系。', carried:'同一计算与有效域继续存在；共享底层存储的 view 仍然可能别名。', decision:'形成可分析的存储对象，还没有替所有 buffer 选定硬件物理地址。', sketch:'X/Y: memref<6x32xbf16>\nview: rows [4,6), columns [0,32)\noperation: load → add → max → store'},
-  {name:'ZeusHigh', title:'让计算适配执行单元和描述符', added:'硬件维度规整、执行单元选择、fmap/weight 描述、边界约束。', carried:'示例 fmap tensor shape 为 [1,1,6,32]；补维不改变原来的元素数量。', decision:'区分完整张量、请求的块和本次有效块。weight 有自己的布局与语义，不套用同一维度名称。', sketch:'tensor: [1,1,6,32]\nrequested tile: [1,1,4,32]\nvalid tile: [1,1,2,32]'},
-  {name:'布局与分配', title:'在有限片上空间中选择合法布局', added:'buffer 的物理区间、生命周期与中端并行规划。', carried:'逻辑上不同的两个值，可能在不同时间使用同一段物理空间。', decision:'复用节省容量，也可能引入额外等待。地址分配的性能偏好不能替代后端正确性证明。', sketch:'buffer identity + byte interval\nlifetime + parallel planning\ncapacity ↔ reuse ↔ overlap'},
-  {name:'ZeusLow / CFG', title:'显式表达配置、命令与控制流', added:'BReg 配置、执行命令、标量与跳转操作、基本块边及实际执行器归属。', carried:'物理区间和描述符来源必须随 lowering 保留，供后续依赖分析使用。', decision:'当前路径先把 SCF 展开为 CFG，再做同步注入。发出了命令不代表异步单元已经完成。', sketch:'descriptor setup\nbranch / block arguments\nasync unit command'},
-  {name:'InjectSync', title:'为必须成立的执行顺序生成协议', added:'资源读写、完成事件、等待关系、mailbox 调度及验证。', carried:'保留合法的并行；配置快照与数据完成有不同的时点。', decision:'同步面对的是硬件资源和动态执行次数，不只是 SSA def-use。完整推导放在独立同步篇。', sketch:'effect → conflict → obligation\nplan → verify → emit\nRAW / WAR / WAW + FIFO capacity'},
-  {name:'RegAlloc / 选择', title:'把虚拟资源落实到目标指令', added:'物理寄存器、phi 边复制与指令选择；随后 peephole 与最终取指合法化。', carried:'同步阶段建立的资源与时序合同必须被后续展开保留。', decision:'当前使用自有目标后端；直接生成机器码仍然需要指令选择、寄存器分配与合法化。', sketch:'virtual registers → physical registers\noperations → target instruction sequences\ncheck final instruction constraints'},
-  {name:'zbin / 装载', title:'交付运行时真正能够装载的程序', added:'指令字、常量、运行时地址修补位置和容器中的程序信息。', carried:'最终二进制仍要与调用参数、运行时 ABI 和原始计算保持一致。', decision:'IR verifier、功能仿真、VCS 和硬件性能各验证不同层次；生成文件不是全部验收。', sketch:'instructions + constants\nruntime patch positions\ncontainer / runtime ABI\nload → execute → validate'}
+  {
+    "name": "TTIR：dot 与 acc",
+    "title": "先看到两个运算：本块 dot，再加到旧 acc",
+    "added": "tt.dot 的第三个操作数是零常量 %cst；循环携带的 %acc_8 出现在下一条 addf。",
+    "carried": "每个 K 块得到 FP32 部分积，跨 K 保持 FP32；所有 K 块结束才转 BF16。",
+    "decision": "不能直接把两个 SSA 名合成一个硬件累加模式；需要额外证明数值与布局等价。",
+    "source": "kernel.ttir.mlir:36–39",
+    "sketch": "          %acc_9 = tt.trans %b_tile_nk {order = array<i32: 1, 0>} : tensor<128x128xbf16> -> tensor<128x128xbf16>\n          %acc_10 = tt.dot %a_tile, %acc_9, %cst : tensor<128x128xbf16> * tensor<128x128xbf16> -> tensor<128x128xf32>\n          %acc_11 = arith.addf %acc_8, %acc_10 : tensor<128x128xf32>\n          scf.yield %acc_11 : tensor<128x128xf32>"
+  },
+  {
+    "name": "Linalg：存储显式化",
+    "title": "先表达 copy、transpose 与 matmul，给中端留下识别机会",
+    "added": "部分积 alloc_10 与跨 K 的 alloc_1 分开；linalg.add 原地更新后者。",
+    "carried": "权重的数学转置仍可见，尚未承诺执行一次物理 transpose。",
+    "decision": "中端可借助 weight 标记识别专用数据路径；先正确表示计算，再证明哪些搬运可以删除。",
+    "source": "kernel.midend_passes.log:2352–2358",
+    "sketch": "          %alloc_10 = memref.alloc() {alignment = 16 : i64} : memref<128x128xf32>\n          memref.copy %alloc, %alloc_10 : memref<128x128xf32> to memref<128x128xf32>\n          linalg.matmul ins(%alloc_6, %alloc_9 : memref<128x128xbf16>, memref<128x128xbf16>) outs(%alloc_10 : memref<128x128xf32>)\n          linalg.add ins(%alloc_1, %alloc_10 : memref<128x128xf32>, memref<128x128xf32>) outs(%alloc_1 : memref<128x128xf32>)\n        }\n        %19 = arith.addi %18, %14 : index\n        %reinterpret_cast_2 = memref.reinterpret_cast %arg2 to offset: [0], sizes: [%11, %12], strides: [%12, 1] {boundary_dims = array<i32: 0, 1>} : memref<*xbf16> to memref<?x?xbf16, strided<[?, 1]>>"
+  },
+  {
+    "name": "High：权重布局",
+    "title": "逻辑列位置变成专用打包地址",
+    "added": "weight descriptor 带 blocked_offset；%14=ceil(K/64)×64，%23=n_start。",
+    "carried": "本例 normal BF16/WBS128；代入K260、n128，得到128×320×2=81920B。",
+    "decision": "weight offset 已是字节；不能用普通行主序的128×260×2代替，也不能与fmap尚未换算的元素偏移混用。",
+    "source": "kernel.zeushigh.mlir:42–45",
+    "sketch": "        %26 = arith.muli %23, %14 : i32\n        %27 = arith.muli %26, %c2_i32 : i32\n        %28 = zeus_high.create_weight_desc %0 {offset = 0, tensor_shape = [1, 128, %7], tile_shape = [1, 128, 128], blocked_offset = %27, memory_space = \"LDG\"} : memref<1xbf16> -> !zeus_high.weight_desc\n        %29 = zeus_high.update_tile %24 [1, 1, %21, 128] : !zeus_high.fmap_desc -> !zeus_high.fmap_desc"
+  },
+  {
+    "name": "High：有效窗口",
+    "title": "固定SRAM几何，按消费者更新本轮范围",
+    "added": "PE 输入K被裁成min(K−k_start,128)；PE输出的N仍是128。",
+    "carried": "M130/K260/N130末块：A2×4，PE/VP2×128，最后ST2×2。",
+    "decision": "这份产物显式表达各阶段访问范围；完整合同仍需布局与运行验收，也不能据此宣称消除了N尾冗余计算。",
+    "source": "kernel.zeushigh.mlir:64–70",
+    "sketch": "          %56 = zeus_high.update_tile %28 [1, 128, %55] : !zeus_high.weight_desc -> !zeus_high.weight_desc\n          %57 = zeus_high.set_pos %56 [0, 0, %43] : !zeus_high.weight_desc -> !zeus_high.weight_desc\n          %58 = zeus_high.update_tile %44 [1, 1, %19, %55] : !zeus_high.fmap_desc -> !zeus_high.fmap_desc\n          %59 = zeus_high.set_pos %58 [0, 0, 0, 0] : !zeus_high.fmap_desc -> !zeus_high.fmap_desc\n          %60 = zeus_high.update_tile %54 [1, 1, %19, 128] : !zeus_high.fmap_desc -> !zeus_high.fmap_desc\n          %61 = zeus_high.set_pos %60 [0, 0, 0, 0] : !zeus_high.fmap_desc -> !zeus_high.fmap_desc\n          zeus_high.pe %alloc_1, %0, %alloc_2 desc(%59, %57, %61) {mtc = 2 : i64, mtk = 1 : i64, mtw = 4 : i64, op_type = \"matmul\", transpose_lhs = false, transpose_rhs = false, wbs = 128 : i64, ymode = \"KC\"} : memref<1x1x128x128xbf16>, memref<1xbf16>, memref<1x1x128x128xf32>"
+  },
+  {
+    "name": "Low：PE 命令",
+    "title": "高层数学算子变成描述符驱动的执行命令",
+    "added": "breg取代高层descriptor类型；pe_compute显式携带dtype、WBS和minitile等属性。",
+    "carried": "FP32部分积目的块仍是单独的L2区间，后面由VP消费。",
+    "decision": "配置合法、物理数据就绪与结果数值正确是三个不同问题；此时尚未注入完整同步。",
+    "source": "kernel.backend.log · After ConvertZeusHighToZeusLow，pe_compute原句",
+    "sketch": "          zeus_low.pe_compute %194, %145, %65 {carry_mode = \"round\", dst_dtype = \"FP32\", mtc = 2 : i32, mtk = 1 : i32, mtw = 4 : i32, src_a_dtype = \"BF16\", wbs = 128 : i32, weight_dtype = \"BF16\", weight_mode = \"normal\", ymode = \"KC\", zeus.weight_dram_array = 0 : i64, zeus.weight_dram_slab = 0 : i64, zeus.weight_dram_slot = -1 : i64} : <act, l2>, <act, l2>, <weight, wdram>"
+  },
+  {
+    "name": "CFG：循环与 φ",
+    "title": "K 循环变成有入口、回边和退出边的基本块",
+    "added": "循环计数通过block argument传递；随后标量下降会把边界min/max展开为菱形分支。",
+    "carried": "K=260只作代入：动态循环执行次数是ceil(K/128)，不能在编译时假装总是3。",
+    "decision": "边上的值传递还要在寄存器分配时落实；signed比较不能随意丢掉溢出语义。",
+    "source": "kernel.backend.log:6002–6008、6151–6152（K循环入口与回边）",
+    "sketch": "    cf.br ^bb5(%c0_i32_1 : i32)\n  ^bb5(%249: i32):  // 2 preds: ^bb4, ^bb6\n    %250 = arith.cmpi slt, %249, %30 : i32\n    cf.cond_br %250, ^bb6, ^bb7\n  ^bb6:  // pred: ^bb5\n    %251 = arith.muli %249, %c128_i32 : i32\n    %252 = arith.index_cast %251 : i32 to index\n\n// Backedge\n    %277 = arith.addi %249, %c1_i32_2 : i32\n    cf.br ^bb5(%277 : i32)"
+  },
+  {
+    "name": "Sync：返回通知",
+    "title": "MAIL 同时保护生产消费和下一轮覆盖",
+    "added": "LD等待PE，PE等待LD+VP，VP等待PE；反向边归还可复用的A和partial槽位。",
+    "carried": "配置/地址已知，算法与dtype未改变。进入和退出K循环还有seed/drain。",
+    "decision": "只沿LD→PE→VP看RAW不够；循环WAR、计数与无tag顺序必须一起成立。",
+    "source": "kernel.backend.log · After ZeusLow_InjectSyncPass，关键命令原句",
+    "sketch": "    zeus_low.dma_load %66, [%13, %74] {recv_mails = [\"PE\"], send_mails = [\"PE\"], zeus.dma_base_alias_class = 0 : i64} : !zeus_low.areg, <act, gdg>, <act, l2>\n    zeus_low.pe_compute %77, %66, %61 {carry_mode = \"round\", dst_dtype = \"FP32\", mtc = 2 : i32, mtk = 1 : i32, mtw = 4 : i32, recv_mails = [\"LD\", \"VP\"], send_mails = [\"VP\", \"LD\"], src_a_dtype = \"BF16\", wbs = 128 : i32, weight_dtype = \"BF16\", weight_mode = \"normal\", ymode = \"KC\", zeus.weight_dram_array = 0 : i64, zeus.weight_dram_slab = 0 : i64, zeus.weight_dram_slot = -1 : i64} : <act, l2>, <act, l2>, <weight, wdram>\n    zeus_low.vp_compute %80, %54, %54, %77, exec_unit unit0 {operandSegmentSizes = array<i32: 1, 1, 1, 1>, recv_mails = [\"PE\", \"VP\"], send_mails = [\"PE\"]} : !zeus_low.token, !zeus_low.breg<act, l2>"
+  },
+  {
+    "name": "ASM：实际 spill",
+    "title": "一个 M 块数实际被 spill 到 VR，再在循环头恢复",
+    "added": "CodeGen插入get_spill_vreg、reg2vreg与vreg2reg；最后映射到VR3槽0的CT指令。",
+    "carried": "搬的是控制标量，和128×128张量的SRAM地址分配是不同资源。",
+    "decision": "当前路径自有代码生成，但寄存器压力、phi复制、选择、合法化并没有消失。",
+    "source": "kernel.S:39–44、60–63（两个局部摘录）",
+    "sketch": "  CT_LSR_R_R_I Rx[25] Ra[26] Imme[25]\n  CT_ADD_R_R_I Rx[26] Ra[18] Imme[127]\n  CT_ADD_R_R_R Rx[26] Ra[26] Rb[25]\n  CT_ASR_R_R_I Rx[26] Ra[26] Imme[7]\n  CT_VMOVM_VR[I]_R VRx[3] Ra[26] Imme[0]\n  CT_ADD_R_R_I Rx[26] Ra[19] Imme[127]\n\n// Loop header\n  CT_MOV_R_I Rx[21] Imme[0]\nL_B1:\n  CT_VMOVM_R_VR[I] Rx[26] VRa[3] Imme[0]\n  CT_SUB_R_R_R Rx[27] Ra[21] Rb[26]"
+  }
 ];
 
 function initLoweringExplorers() {
@@ -17,7 +81,7 @@ function initLoweringExplorers() {
     if (root.dataset.ready) return;
     root.dataset.ready = 'true';
     root.classList.add('lowering-explorer');
-    root.innerHTML = `<div class="lowering-explorer-head"><strong>跟着同一个计算，逐层补齐信息</strong><p>教学表示，不是实际编译日志。选择任一阶段，观察它新增的信息与仍需作出的决定。</p></div><div class="lowering-steps" aria-label="选择下降阶段">${LOWERING_STEPS.map((s,i)=>`<button type="button" data-lowering-step="${i}" aria-pressed="${i===0}"><small>${String(i+1).padStart(2,'0')}</small>${s.name}</button>`).join('')}</div><div class="lowering-panels" aria-live="polite">${LOWERING_STEPS.map((s,i)=>`<section class="lowering-panel" data-lowering-panel="${i}" ${i?'hidden':''}><h4>${i+1}. ${s.title}</h4><dl><dt>新增信息</dt><dd>${s.added}</dd><dt>一直保留的语义</dt><dd>${s.carried}</dd><dt>架构上的决定</dt><dd>${s.decision}</dd></dl><pre><code>${s.sketch.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')}</code></pre></section>`).join('')}</div><div class="lowering-controls"><button type="button" data-lowering-prev disabled>← 上一层</button><span data-lowering-position>1 / ${LOWERING_STEPS.length}</span><button type="button" data-lowering-next>下一层 →</button></div>`;
+    root.innerHTML = `<div class="lowering-explorer-head"><strong>同一次 GEMM 编译：逐层查看真实 IR</strong><p>以下代码来自同一次实际编译，保留原始 SSA 名。M130/K260/N130 只用于解释动态表达式，未执行数值仿真。</p></div><div class="lowering-steps" aria-label="选择下降阶段">${LOWERING_STEPS.map((s,i)=>`<button type="button" data-lowering-step="${i}" aria-pressed="${i===0}"><small>${String(i+1).padStart(2,'0')}</small>${s.name}</button>`).join('')}</div><div class="lowering-panels" aria-live="polite">${LOWERING_STEPS.map((s,i)=>`<section class="lowering-panel" data-lowering-panel="${i}" ${i?'hidden':''}><h4>${i+1}. ${s.title}</h4><dl><dt>新增信息</dt><dd>${s.added}</dd><dt>一直保留的语义</dt><dd>${s.carried}</dd><dt>架构上的决定</dt><dd>${s.decision}</dd></dl><p class="gemm-capture-source">${s.source}</p><pre><code>${s.sketch.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')}</code></pre></section>`).join('')}</div><div class="lowering-controls"><button type="button" data-lowering-prev disabled>← 上一层</button><span data-lowering-position>1 / ${LOWERING_STEPS.length}</span><button type="button" data-lowering-next>下一层 →</button></div>`;
     let selected = 0;
     const select = index => {
       selected = Math.max(0, Math.min(LOWERING_STEPS.length-1, index));
