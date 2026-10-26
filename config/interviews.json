@@ -371,11 +371,11 @@
     "title": "AI异构硬件性能评估专家 - Seed Model",
     "url": "https://jobs.bytedance.com/experienced/position/7647081477118085429/detail",
     "date": "2026-06-03",
-    "kind": "官方岗位历史核验记录",
+    "kind": "官方岗位核验记录",
     "experience": "未注明年限或学历门槛",
     "topics": "异构硬件；性能评估；编译器；AI Infra；Benchmark；Roofline；仿真；ROI；TCO；C++；Python；GPU；NPU；Nsight；LLM",
-    "note": "2026-10-25 直接读取官方职位接口，发布状态为在线。状态只代表核验时页面发布情况，投递以官网为准。 本次复用该快照，未重新确认当前在招状态。",
-    "checked": "2026-10-25",
+    "note": "2026-10-26 重新读取官方职位 API，channel_online_status=1。记录页面发布状态；名额与招聘进度以官网为准。本场 M01 为本站原创练习，非真实面经。",
+    "checked": "2026-10-26",
     "category": "job"
   },
   {
@@ -767,5 +767,18 @@
     "note": "公司名称按原材料标注，未核实具体法人或团队。问题已独立改写；移除个人身份、内部硬件数值和原作者作答笔记。缺失代码截图不补造。 仅核对用户提供转录，未将候选人自述独立核实为公司事实。",
     "checked": "2026-10-26",
     "category": "report"
+  },
+  {
+    "id": "M01",
+    "company": "字节跳动",
+    "title": "Seed 硬件性能评估 · 30 问原创模拟面试",
+    "url": "https://xuanwen-wang.github.io/interview/interview-questions.html#chapter/interview-sessions/mock-byte-seed-hardware",
+    "date": "2026-10-26 编写；无实际面试日期",
+    "kind": "原创模拟面试；依据官方 JD 设计",
+    "experience": "面向社招准备；不推断 JD 年限要求",
+    "topics": "硬件仿真；性能建模；Benchmark；LLM；MoE；瓶颈分析；ROI；TCO；容量规划",
+    "note": "保留 30 个自然主问题，参考回答为方法与教学推演。个人履历、贡献、实测结果与失败经历待本人补充；不代表招聘方真实题库或内部流程。岗位依据 J01。",
+    "checked": "2026-10-26",
+    "category": "reading"
   }
 ]

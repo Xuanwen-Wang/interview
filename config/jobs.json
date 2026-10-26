@@ -12,10 +12,10 @@
     "origin": "user",
     "direction": "硬件性能与软硬协同",
     "status": "listed",
-    "checked": "2026-10-25",
+    "checked": "2026-10-26",
     "published": "2026-06-03",
     "url": "https://jobs.bytedance.com/experienced/position/7647081477118085429/detail",
-    "verification": "2026-10-25 直接读取官方职位接口，发布状态为在线。状态只代表核验时页面发布情况，投递以官网为准。 本次未刷新在招状态，复用此前核验记录。",
+    "verification": "2026-10-26 重新读取官方职位 API，channel_online_status=1；岗位标题、杭州地点、社招正式类型与职责要求已复核。此状态仅表示核验时官方发布在线，招聘进度以官网为准。",
     "summary": "围绕真实 LLM 训推负载评估异构加速卡，把硬件性能、软件栈与业务成本连起来。",
     "responsibilities": [
       "建立硬件仿真、性能评估与业务 ROI 体系，为加速卡引入提供依据。",
@@ -68,10 +68,12 @@
     "chapters": [
       "performance-model",
       "compiler-lowering",
-      "serving-runtime"
+      "serving-runtime",
+      "cyclesim-engineering",
+      "interview-sessions"
     ],
     "jobCode": "A54228",
-    "sourceType": "官方 API 2026-10-25 核验快照",
+    "sourceType": "官方 API 2026-10-26 核验快照",
     "evidenceUrls": [
       "https://jobs.bytedance.com/api/v1/job/posts/7647081477118085429/"
     ]
