@@ -95,6 +95,7 @@ function renderChapter(id, section) {
  initPerformanceExplorers();
  initDecodeExplorers();
  initLoweringExplorers();
+ initSyncExplorers();
  initAttentionLabs();
  enableFigureZoom();
  initInterviewQuestions();

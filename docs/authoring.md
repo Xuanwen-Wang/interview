@@ -14,6 +14,8 @@
 - 分开计算量、缓存容量、逻辑读写量和实测流量。说明省掉什么、增加什么，以及 prefill/decode、batch 和上下文增长对结论的影响。全量 GQA/MLA 仍访问全部可见历史，不能把压缩每行说成跳过历史位置。
 - 公式服务于数据流。主文保留理解流程所必需的内容，完整推导和实现细节放入可展开补充，打印仍完整显示。优化方法之间的组合、替代和独立关系必须有依据。
 
+面向面试准备的核心 Pass 长文，页首先安排原创模拟问答：从“请介绍这个 Pass”的 90 秒概述进入逐层追问，再链接同页的模型推导、源码与反例。每问说明口述答案、考察点和容易混淆的边界；不把训练题称为真实面经，不替读者编造本人贡献或性能结果。随后仍按问题、模型、合法性、实现、验证展开，不能让问答取代完整讲解。同步篇 `sync.html` 是这一结构的示例，已有章节与问答 ID 保持稳定。
+
 ### 硬件适配文章要有可追踪的实际案例
 
 依据用户 2026-10-26 对 Lowering 篇的反馈：仅列 pipeline、概念和通用取舍，不能支撑“整体架构设计”的解释。此类文章以一个可追踪的 GEMM 或业务案例为主线，展示具体硬件限制、输入/输出 IR、当前选择、可替代方案和代价；正文需要解释代码中的关键值，而不是用大量 dump 代替教学。
@@ -119,12 +121,14 @@ node --check web/pe-explorer.js
 node --check web/moe-explorer.js
 node --check web/decode-explorer.js
 node --check web/attention-lab.js
+node --check web/sync-explorer.js
 node --check web/performance-explorer.js
 node --check web/jobs.js
 node scripts/check_pe_model.js
 node scripts/check_moe_model.js
 node scripts/check_decode_model.js
 node scripts/check_attention_lab.js
+node scripts/check_sync_model.js
 node scripts/check_performance_model.js
 python3 -m unittest discover -s practice -v
 TMPDIR=/data/wangxw/tmp g++ -std=c++17 -Wall -Wextra -Werror \
