@@ -55,9 +55,37 @@ function scrollChapterAnchor(anchor) {
   if (!anchor) { window.scrollTo({top:0,behavior:'instant'}); return; }
   const target = document.getElementById(anchor);
   if (!target) return;
+  if (target.tagName === 'DETAILS') target.open = true;
   for (let parent=target.parentElement;parent;parent=parent.parentElement) if (parent.tagName==='DETAILS') parent.open=true;
   highlightReadingSection(target.closest('[data-section]')?.id || target.querySelector('[data-section]')?.id || anchor);
   requestAnimationFrame(()=>target.scrollIntoView({behavior:'instant',block:'start'}));
+}
+
+function sectionSearchEntries(c, s) {
+  const fragment = document.createElement('div');
+  fragment.innerHTML = s.html;
+  const items = [...fragment.querySelectorAll('[data-interview-question]')];
+  if (!items.length) return [{chapter:c.id,title:s.title,subtitle:c.title,body:fragment.textContent || '',link:'#chapter/'+c.id+'/'+s.id}];
+  return [{chapter:c.id,title:s.title,subtitle:c.title,body:s.title,link:'#chapter/'+c.id+'/'+s.id}, ...items.map(item=>({chapter:c.id,title:item.querySelector('summary')?.textContent || s.title,subtitle:s.title,body:item.querySelector('.interview-answer-body')?.textContent || '',link:'#chapter/'+c.id+'/'+item.id}))];
+}
+
+function initInterviewQuestions() {
+  document.querySelectorAll('[data-interview-session]').forEach(session=>{
+    const controls = session.querySelector('.interview-session-actions');
+    if (!controls) return;
+    for (const [label, open] of [['展开本场答案',true],['收起本场答案',false]]) {
+      const button = document.createElement('button');
+      button.textContent = label;
+      button.addEventListener('click',()=>session.querySelectorAll('[data-interview-question]').forEach(item=>{item.open=open;}));
+      controls.append(button);
+    }
+  });
+  document.querySelectorAll('[data-interview-question] a[href^="#chapter/interview-sessions/"]').forEach(link=>{
+    link.addEventListener('click',()=>{
+      const question = link.closest('[data-interview-question]');
+      if (question && !link.classList.contains('interview-permalink')) history.replaceState(null,'','#chapter/interview-sessions/'+question.id);
+    });
+  });
 }
 function legacyNotesHTML(c) {
   const entries=Object.entries(c.legacyChapters||{}).map(([id,old])=>[old.noteKey||id,old]).filter(([id])=>id!==c.id && state.notes[id]);

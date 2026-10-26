@@ -54,10 +54,16 @@ function renderReadingCollection(module, groupId) {
 function renderModule(id, groupId) {
   const module = MODULES.find(m=>m.id===id);
   if (!module) return renderNotFound();
+  if (module.interviewCollection) return renderInterviewCollection(module, groupId);
   if (module.readingCollection) return renderReadingCollection(module, groupId);
   const list=moduleChapters(module), done=list.filter(c=>state.read.includes(c.id)).length;
   $('#main').innerHTML=`<div class="eyebrow">FIELD ${module.number} / TOPIC COLLECTION</div><h1 class="page-title">${esc(module.title)}</h1><p class="page-lead">${esc(module.description)}</p><div class="collection-meta"><span>${list.length} 章</span><span>${module.groups.length} 个专题</span><span>已读 ${done} / ${list.length}</span><a href="#catalog">全站目录 ↗</a>${id==='interviews'?'<a href="#companies">打开公司与来源索引 ↗</a><a href="#jobs">岗位要求与收藏 ↗</a>':''}</div>${renderLearningPath(module)}<nav class="group-jumps" aria-label="专题跳转">${module.groups.map(g=>`<a href="#module/${id}/${g.id}">${esc(g.title)} <small>${groupChapters(g).length}</small></a>`).join('')}</nav>${module.groups.map((g,i)=>g.continuousReading?renderContinuousTopic(g,i):`<section class="topic-section" id="topic-${g.id}"><div class="section-head"><div><div class="eyebrow">TOPIC ${String(i+1).padStart(2,'0')}</div><h2>${esc(g.title)}</h2></div><span class="small muted">${groupChapters(g).reduce((n,c)=>n+c.minutes,0)} 分钟参考阅读量</span></div><div class="chapter-grid">${groupChapters(g).map(card).join('')}</div></section>`).join('')}`;
   if(groupId)requestAnimationFrame(()=>document.getElementById('topic-'+groupId)?.scrollIntoView());
+}
+function renderInterviewCollection(module, groupId) {
+  const books = moduleChapters(module);
+  $('#main').innerHTML = `<div class="eyebrow">FIELD ${esc(module.number)} / INTERVIEW DESK</div><h1 class="page-title">${esc(module.title)}</h1><p class="page-lead">${esc(module.description)}</p><div class="interview-volumes">${books.map((c,i)=>`<section class="reading-volume" id="topic-${esc(module.groups[i].id)}"><span class="eyebrow">0${i+1} / ${i?'按公司与场次':'岗位与能力要求'}</span><h2><a href="${esc(c.portableReading.file)}">${esc(c.title)}</a></h2><p>${esc(c.subtitle)}</p><div class="volume-actions"><a class="volume-open" href="${esc(c.portableReading.file)}">打开完整页面 ↗</a><a href="${esc(c.portableReading.file)}" download="${esc(c.portableReading.download)}">保存 HTML ↓</a></div><details class="interview-volume-index"><summary>${i?'查看全部场次目录':'查看岗位目录'}</summary><nav aria-label="${esc(c.title)}目录">${c.sections.map(s=>`<a href="${esc(c.portableReading.file)}#chapter/${c.id}/${s.id}">${esc(sectionTitle(s.title))}</a>`).join('')}</nav></details></section>`).join('')}</div><p class="interview-intro-note">岗位与题目各在一个完整页面内。按场次阅读，同题跳转到完整解答；每份材料保留时间、身份和来源范围。</p>`;
+  if (groupId) requestAnimationFrame(()=>document.getElementById('topic-'+groupId)?.scrollIntoView());
 }
 function renderContinuousTopic(group, index) {
   const c=groupChapters(group)[0], file=c.portableReading.file;

@@ -37,6 +37,7 @@ jobs:
           node --check web/lowering-explorer.js
           node scripts/check_pe_model.js
           node scripts/check_moe_model.js
+          node scripts/check_interviews.js
           node scripts/check_performance_model.js
           node scripts/check_decode_model.js
           node scripts/check_attention_lab.js

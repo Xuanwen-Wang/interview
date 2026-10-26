@@ -69,7 +69,7 @@ Attention、FFN、PE、VP、MoE 部署与性能分析分别使用一个 chapter�
 | --- | --- |
 | 中端核心 Pass 逐个拆解 | `compiler` 下新增 `middle-end-passes` 专题；按分析前提、合法性、变换、失效、反例组织章节 |
 | GLM5Next KDA 真实部署 | `moe`（显示名 GLM5Next 300B 真实部署）的 Attention 部署专题；区分模型wrapper与kernel版本，交叉链接算法与硬件 |
-| 更多公司面经 | 先添加来源记录和公司映射，再根据内容量添加叙事章节 |
+| 更多公司面经 | 添加来源记录后，在同一份面试题长文中增加场次与题目锚点，不再增加公司或专题 HTML |
 | LLVM 后端专题 | 扩展 `llvm-backend` 的对应 readingStage；每个模块保留独立 section、源码入口、例子与验证边界 |
 | 新 Coding 题型 | `coding` 下按通用算法、数据流、kernel、pass 分类扩章；代码和题源分开 |
 | 新硬件代际 | 新知识域或 `hardware` 下独立专题；不改写旧代际的来源范围 |
@@ -82,6 +82,10 @@ Attention、FFN、PE、VP、MoE 部署与性能分析分别使用一个 chapter�
 
 ## 公司与面经
 
+- 面试模块只保留 `interview-jobs.html`（岗位）和 `interview-questions.html`（公司与场次题目）两个完整入口。正文均在 `content/60-company-interviews.json`；公司、场次、问题采用稳定 ID，重复问题链接到同页主答案，同时解释本场追问差异。
+- 题目按原场次整理。无法确定公司、轮次或日期时保持未知；多人汇总、原创训练和官方作业明确标注，不能改称一场真实面试。缺失代码或不完整题干保留缺失说明，不补造原题。
+- 每个完整答案说明合同、机制、具体例子、工程取舍与验证；编程题说明算法、关键实现、复杂度和边界。五年经验是解读深度，不是对原候选人年限的判断，也不能编造读者的项目经历。
+- `evidence/interview-question-coverage.json` 登记概括题干和答案锚点。题目以 `data-interview-question` 标记，全文搜索直接跳到题目并展开；打印展开全部答案。新增或合并题目后运行 `node scripts/check_interviews.js`，并实际验证重复题跳转、返回、旧笔记和离线入口。
 - `config/interviews.json`：每条记录有稳定来源 ID、公司、题目、原文 URL、事件/帖子日期、身份与经验、主题、局限、整理核验日期。
 - `category` 只能是 `report`、`job`、`takehome`、`reading`。官方 JD、个人面经、官方作业和第三方练习不能互相替代。
 - `config/companies.json`：公司卡片、来源 ID 和关联章节 ID。公司组必须明确包含哪些公司，不把一个多家公司帖子里的所有题分配给每家公司。

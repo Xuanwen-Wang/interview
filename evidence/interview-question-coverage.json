@@ -1,0 +1,1975 @@
+{
+  "date": "2026-10-26",
+  "note": "只含概括后的题干与稳定答案锚点；缺失题说明也占一项，不宣称已有完整原题。",
+  "sessions": 43,
+  "questions": [
+    {
+      "session": "fs-biren",
+      "source": "F01",
+      "id": "qa-biren-engine",
+      "question": "推理引擎解决什么问题，难点在哪里？"
+    },
+    {
+      "session": "fs-biren",
+      "source": "F01",
+      "id": "qa-biren-engine-opt",
+      "question": "推理引擎通常在哪些层做优化？"
+    },
+    {
+      "session": "fs-biren",
+      "source": "F01",
+      "id": "qa-biren-speed",
+      "question": "如果目标是提高推理速度，如何决定先做哪一项？"
+    },
+    {
+      "session": "fs-biren",
+      "source": "F01",
+      "id": "qa-biren-models",
+      "question": "如何比较 Qwen、ChatGLM、GPT 等模型，而不是只报名称？"
+    },
+    {
+      "session": "fs-biren",
+      "source": "F01",
+      "id": "qa-biren-attention",
+      "question": "自注意力的流程、形状和公式是什么？"
+    },
+    {
+      "session": "fs-biren",
+      "source": "F01",
+      "id": "qa-biren-cpu-gpu",
+      "question": "GPU 和 CPU 的主要差别怎样影响算子设计？"
+    },
+    {
+      "session": "fs-biren",
+      "source": "F01",
+      "id": "qa-biren-memory",
+      "question": "GPU 的存储层次怎样影响 kernel？"
+    },
+    {
+      "session": "fs-biren",
+      "source": "F01",
+      "id": "qa-biren-cache",
+      "question": "为什么需要 cache？怎样判断缓存是否帮到了这个算子？"
+    },
+    {
+      "session": "fs-biren",
+      "source": "F01",
+      "id": "qa-biren-launch-hierarchy",
+      "question": "grid、block、thread 是什么关系？"
+    },
+    {
+      "session": "fs-biren",
+      "source": "F01",
+      "id": "qa-biren-kernel-life",
+      "question": "一个 kernel 从启动到完成经历什么？"
+    },
+    {
+      "session": "fs-biren",
+      "source": "F01",
+      "id": "qa-biren-quant",
+      "question": "量化有哪些方式，改变了什么数值合同？"
+    },
+    {
+      "session": "fs-biren",
+      "source": "F01",
+      "id": "qa-biren-quant-speed",
+      "question": "量化为什么可能加速？从硬件与实现角度怎样证明？"
+    },
+    {
+      "session": "fs-biren",
+      "source": "F01",
+      "id": "qa-biren-smart-ptr",
+      "question": "unique_ptr 与 shared_ptr 的所有权有什么不同？"
+    },
+    {
+      "session": "fs-biren",
+      "source": "F01",
+      "id": "qa-biren-reduce",
+      "question": "如何实现并验证 reduce_sum？"
+    },
+    {
+      "session": "fs-biren",
+      "source": "F01",
+      "id": "qa-biren-invert-tree",
+      "question": "如何反转二叉树，复杂度和边界是什么？"
+    },
+    {
+      "session": "fs-kunlun",
+      "source": "F02",
+      "id": "qa-kunlun-fused",
+      "question": "FusedAttention 的优化应怎样从项目讲到实现？"
+    },
+    {
+      "session": "fs-kunlun",
+      "source": "F02",
+      "id": "qa-kunlun-flash",
+      "question": "FlashAttention 的核心机制是什么，省的到底是什么？"
+    },
+    {
+      "session": "fs-kunlun",
+      "source": "F02",
+      "id": "qa-kunlun-flash-math",
+      "question": "在线 softmax 的更新公式如何推出来？"
+    },
+    {
+      "session": "fs-kunlun",
+      "source": "F02",
+      "id": "qa-kunlun-rmsnorm",
+      "question": "RMSNorm 为什么可能比 LayerNorm 更快？"
+    },
+    {
+      "session": "fs-kunlun",
+      "source": "F02",
+      "id": "qa-kunlun-allocator",
+      "question": "如何设计更灵活的 CUDA 显存分配器？"
+    },
+    {
+      "session": "fs-kunlun",
+      "source": "F02",
+      "id": "qa-kunlun-fc",
+      "question": "Llama 的全连接层应该怎样计数？"
+    },
+    {
+      "session": "fs-kunlun",
+      "source": "F02",
+      "id": "qa-kunlun-llama-flow",
+      "question": "Llama 2 一次推理中每层有哪些算子？"
+    },
+    {
+      "session": "fs-kunlun",
+      "source": "F02",
+      "id": "qa-kunlun-paper",
+      "question": "如何回答“介绍论文算法和网络结构”？"
+    },
+    {
+      "session": "fs-kunlun",
+      "source": "F02",
+      "id": "qa-kunlun-unet",
+      "question": "U-Net 相比一般 encoder-decoder 的优势在哪里？"
+    },
+    {
+      "session": "fs-kunlun",
+      "source": "F02",
+      "id": "qa-kunlun-skip",
+      "question": "跳跃连接用 concat 还是 add，有什么不同？"
+    },
+    {
+      "session": "fs-kunlun",
+      "source": "F02",
+      "id": "qa-kunlun-model-tricks",
+      "question": "网络优化和训练技巧应怎样回答才可验证？"
+    },
+    {
+      "session": "fs-kunlun",
+      "source": "F02",
+      "id": "qa-kunlun-loss",
+      "question": "如何解释自己模型采用的损失函数？"
+    },
+    {
+      "session": "fs-kunlun",
+      "source": "F02",
+      "id": "qa-kunlun-cpp11",
+      "question": "C++11 特性怎样和编译器开发关联？"
+    },
+    {
+      "session": "fs-kunlun",
+      "source": "F02",
+      "id": "qa-kunlun-smart",
+      "question": "智能指针应该怎样选择？"
+    },
+    {
+      "session": "fs-kunlun",
+      "source": "F02",
+      "id": "qa-kunlun-unique",
+      "question": "unique_ptr 如何在语言层保证唯一拥有？"
+    },
+    {
+      "session": "fs-kunlun",
+      "source": "F02",
+      "id": "qa-kunlun-shared",
+      "question": "shared_ptr 的对象何时析构，控制块何时释放？"
+    },
+    {
+      "session": "fs-kunlun",
+      "source": "F02",
+      "id": "qa-kunlun-member-template",
+      "question": "类的成员函数可以是模板吗？"
+    },
+    {
+      "session": "fs-kunlun",
+      "source": "F02",
+      "id": "qa-kunlun-lvalue",
+      "question": "左值、右值与 move 到底是什么？"
+    },
+    {
+      "session": "fs-kunlun",
+      "source": "F02",
+      "id": "qa-kunlun-cuda-choices",
+      "question": "“CUDA 有哪些编程手段”应如何界定和选择？"
+    },
+    {
+      "session": "fs-kunlun",
+      "source": "F02",
+      "id": "qa-kunlun-cores",
+      "question": "Tensor Core 与 CUDA Core 应怎样比较？"
+    },
+    {
+      "session": "fs-kunlun",
+      "source": "F02",
+      "id": "qa-kunlun-longest-consecutive",
+      "question": "最长连续整数序列如何做到期望 O(n)？"
+    },
+    {
+      "session": "fs-kunlun",
+      "source": "F02",
+      "id": "qa-kunlun-k-distinct",
+      "question": "至多包含 K 种字符的最长子串如何实现？"
+    },
+    {
+      "session": "fs-byte-infra-r3",
+      "source": "F03",
+      "id": "qa-infra3-intro",
+      "question": "自我介绍怎样呈现与推理编译岗位的匹配？"
+    },
+    {
+      "session": "fs-byte-infra-r3",
+      "source": "F03",
+      "id": "qa-infra3-flash",
+      "question": "FlashAttention 相比普通 Attention 的优势是什么？"
+    },
+    {
+      "session": "fs-byte-infra-r3",
+      "source": "F03",
+      "id": "qa-infra3-speculative",
+      "question": "推测解码怎样同时保持目标分布并获得速度收益？"
+    },
+    {
+      "session": "fs-byte-infra-r3",
+      "source": "F03",
+      "id": "qa-infra3-routing",
+      "question": "DeepSeek-V3 怎样做专家路由和负载均衡？"
+    },
+    {
+      "session": "fs-byte-infra-r3",
+      "source": "F03",
+      "id": "qa-infra3-memory-wall",
+      "question": "推理的 memory wall 怎样拆解并缓解？"
+    },
+    {
+      "session": "fs-byte-infra-r3",
+      "source": "F03",
+      "id": "qa-infra3-collective",
+      "question": "除了 Ring AllReduce，还有哪些通信算法和拓扑？"
+    },
+    {
+      "session": "fs-byte-infra-r3",
+      "source": "F03",
+      "id": "qa-infra3-mod",
+      "question": "Mixture-of-Depths 对推理系统有什么影响？"
+    },
+    {
+      "session": "fs-byte-infra-r3",
+      "source": "F03",
+      "id": "qa-infra3-position",
+      "question": "RoPE、ALiBi、位置插值在推理实现上有什么差别？"
+    },
+    {
+      "session": "fs-byte-infra-r3",
+      "source": "F03",
+      "id": "qa-infra3-cuda-project",
+      "question": "项目里具体用了哪些 CUDA 能力，应如何举证？"
+    },
+    {
+      "session": "fs-byte-infra-r3",
+      "source": "F03",
+      "id": "qa-infra3-learning",
+      "question": "如何回答学习一个新方向花了多久？"
+    },
+    {
+      "session": "fs-byte-infra-r3",
+      "source": "F03",
+      "id": "qa-infra3-transition",
+      "question": "从推荐系统转到大模型推理，最大的系统变化是什么？"
+    },
+    {
+      "session": "fs-byte-infra-r3",
+      "source": "F03",
+      "id": "qa-infra3-career",
+      "question": "长期规划怎样回答才与技术岗位有关？"
+    },
+    {
+      "session": "fs-byte-infra-r2",
+      "source": "F04",
+      "id": "qa-infra2-intro",
+      "question": "二面自我介绍怎样把重点放在可追问的成果？"
+    },
+    {
+      "session": "fs-byte-infra-r2",
+      "source": "F04",
+      "id": "qa-infra2-engine-choice",
+      "question": "为什么选择 TensorRT，而不是其他推理引擎？"
+    },
+    {
+      "session": "fs-byte-infra-r2",
+      "source": "F04",
+      "id": "qa-infra2-ctr",
+      "question": "CTR 推荐模型可能卡在哪里，如何定位？"
+    },
+    {
+      "session": "fs-byte-infra-r2",
+      "source": "F04",
+      "id": "qa-infra2-concurrency",
+      "question": "多模型并发怎样保证稳定性？"
+    },
+    {
+      "session": "fs-byte-infra-r2",
+      "source": "F04",
+      "id": "qa-infra2-incident",
+      "question": "线上性能或正确性问题怎样排查与回滚？"
+    },
+    {
+      "session": "fs-byte-infra-r2",
+      "source": "F04",
+      "id": "qa-infra2-hard-problem",
+      "question": "如何讲一个困难问题，体现五年经验？"
+    },
+    {
+      "session": "fs-byte-infra-r2",
+      "source": "F04",
+      "id": "qa-infra2-io",
+      "question": "分布式推理的 IO bound 怎样解决？"
+    },
+    {
+      "session": "fs-byte-infra-r2",
+      "source": "F04",
+      "id": "qa-infra2-ep-tp",
+      "question": "MoE 部署中 EP 与 TP 怎样取舍？"
+    },
+    {
+      "session": "fs-byte-infra-r2",
+      "source": "F04",
+      "id": "qa-infra2-pd",
+      "question": "Prefill/Decode 分离的收益和代价是什么？"
+    },
+    {
+      "session": "fs-byte-infra-r2",
+      "source": "F04",
+      "id": "qa-infra2-dual",
+      "question": "“Dual Pipeline Chunked Prefill”应怎样解释？"
+    },
+    {
+      "session": "fs-byte-infra-r2",
+      "source": "F04",
+      "id": "qa-infra2-hit",
+      "question": "“GPU 命中率”应该怎样监控与优化？"
+    },
+    {
+      "session": "fs-byte-infra-r2",
+      "source": "F04",
+      "id": "qa-infra2-kv",
+      "question": "为什么缓存 K/V，通常不缓存 Q？"
+    },
+    {
+      "session": "fs-byte-infra-r2",
+      "source": "F04",
+      "id": "qa-infra2-chunk",
+      "question": "Chunked batching 与传统 batching 有什么区别？"
+    },
+    {
+      "session": "fs-byte-infra-r2",
+      "source": "F04",
+      "id": "qa-infra2-dispatch",
+      "question": "EP 的 dispatch/combine 怎样保持正确性并控制负载？"
+    },
+    {
+      "session": "fs-byte-infra-r2",
+      "source": "F04",
+      "id": "qa-infra2-comms",
+      "question": "分布式训练/推理如何估算通信开销？"
+    },
+    {
+      "session": "fs-byte-infra-r2",
+      "source": "F04",
+      "id": "qa-infra2-offload",
+      "question": "Offloading 具体怎样实现，何时得不偿失？"
+    },
+    {
+      "session": "fs-byte-infra-r2",
+      "source": "F04",
+      "id": "qa-infra2-dynamic-window",
+      "question": "支持动态插入删除的滑动窗口最大值，如何选数据结构？"
+    },
+    {
+      "session": "fs-byte-operator-intern",
+      "source": "F06",
+      "id": "qa-byte-intern-hardware",
+      "question": "算子开发者怎样介绍整个平台的架构参数？"
+    },
+    {
+      "session": "fs-byte-operator-intern",
+      "source": "F06",
+      "id": "qa-byte-intern-capacity",
+      "question": "给定模型参数量与 token/s，怎样检查容量和吞吐是否合理？"
+    },
+    {
+      "session": "fs-byte-operator-intern",
+      "source": "F06",
+      "id": "qa-byte-intern-operators",
+      "question": "怎样把几个已开发算子讲到实现和性能细节？"
+    },
+    {
+      "session": "fs-byte-operator-intern",
+      "source": "F06",
+      "id": "qa-byte-intern-two-sum",
+      "question": "两数之和如何实现？set 与 unordered_set 的复杂度是什么？"
+    },
+    {
+      "session": "fs-byte-mlir-r1",
+      "source": "F07",
+      "id": "qa-mlir-load-cost",
+      "question": "项目架构和多缓冲的 load 耗时如何估算？"
+    },
+    {
+      "session": "fs-byte-mlir-r1",
+      "source": "F07",
+      "id": "qa-mlir-pass-types",
+      "question": "MLIR pass 怎么分类，分析与变换有什么区别？"
+    },
+    {
+      "session": "fs-byte-mlir-r1",
+      "source": "F07",
+      "id": "qa-mlir-pass-manager",
+      "question": "Pass 注册、构建 pipeline 与执行链路是什么？"
+    },
+    {
+      "session": "fs-byte-mlir-r1",
+      "source": "F07",
+      "id": "qa-mlir-interface",
+      "question": "MLIR Interface 为什么存在，怎样设计一个？"
+    },
+    {
+      "session": "fs-byte-mlir-r1",
+      "source": "F07",
+      "id": "qa-mlir-scf",
+      "question": "SCF 有哪些常用 op，它们的语义边界是什么？"
+    },
+    {
+      "session": "fs-byte-mlir-r1",
+      "source": "F07",
+      "id": "qa-mlir-max-subarray",
+      "question": "最大子数组和怎样一次扫描求出？"
+    },
+    {
+      "session": "fs-byte-mlir-r2",
+      "source": "F08",
+      "id": "qa-mlir-multicore",
+      "question": "大 shape 怎样切到多核执行？"
+    },
+    {
+      "session": "fs-byte-mlir-r2",
+      "source": "F08",
+      "id": "qa-mlir-pingpong",
+      "question": "双缓冲如何从 IR 变换落到正确的硬件流水？"
+    },
+    {
+      "session": "fs-byte-mlir-r2",
+      "source": "F08",
+      "id": "qa-mlir-pattern",
+      "question": "Pattern 的定义、注册与应用有哪些方式？"
+    },
+    {
+      "session": "fs-byte-mlir-r2",
+      "source": "F08",
+      "id": "qa-mlir-llm",
+      "question": "从编译器角度怎样说明对 LLM 的理解？"
+    },
+    {
+      "session": "fs-byte-mlir-r2",
+      "source": "F08",
+      "id": "qa-mlir-inductor",
+      "question": "TorchInductor 在 torch.compile 中负责什么？"
+    },
+    {
+      "session": "fs-byte-mlir-r2",
+      "source": "F08",
+      "id": "qa-mlir-reorder-list",
+      "question": "链表怎样重排为首、尾、次首、次尾？"
+    },
+    {
+      "session": "fs-topseed-intern-round2",
+      "source": "F20",
+      "id": "qb-top2-lru",
+      "question": "C++ 实现 LRU：如何做到平均 O(1) 查询、更新和淘汰？"
+    },
+    {
+      "session": "fs-topseed-intern-round2",
+      "source": "F20",
+      "id": "qb-top2-loss",
+      "question": "训练 loss 突然发散，如何定位而不是只调小学习率？"
+    },
+    {
+      "session": "fs-topseed-intern-round2",
+      "source": "F20",
+      "id": "qb-top2-gpu",
+      "question": "GPU、CUDA Core、Tensor Core 的分工，对 GEMM 和 Softmax 有什么影响？"
+    },
+    {
+      "session": "fs-topseed-intern-round2",
+      "source": "F20",
+      "id": "qb-top2-precision",
+      "question": "训练时可以在哪些位置控制精度，怎样证明控制有效？"
+    },
+    {
+      "session": "fs-topseed-intern-round2",
+      "source": "F20",
+      "id": "qb-top2-memory",
+      "question": "训练显存不足，应怎样选择重计算、分片、offload 和 LoRA？"
+    },
+    {
+      "session": "fs-topseed-intern-round2",
+      "source": "F20",
+      "id": "qb-top2-lora",
+      "question": "LoRA 的参数量、显存和计算量怎样算，与全参数微调区别在哪里？"
+    },
+    {
+      "session": "fs-topseed-intern-round2",
+      "source": "F20",
+      "id": "qb-top2-flash",
+      "question": "FlashAttention 原理：从训练视角要补充哪些内容？"
+    },
+    {
+      "session": "fs-topseed-intern-round2",
+      "source": "F20",
+      "id": "qb-top2-pp",
+      "question": "PP 有哪些问题，如何讨论 Megatron 的流水线特性？"
+    },
+    {
+      "session": "fs-topseed-intern-round2",
+      "source": "F20",
+      "id": "qb-top2-posttraining",
+      "question": "LLM 后训练在数据、算法和工程上与预训练有什么区别？"
+    },
+    {
+      "session": "fs-byte-infra-round1",
+      "source": "F21",
+      "id": "qb-infra-mfu",
+      "question": "MFU 怎样计算？分子、分母和 6N 近似的边界是什么？"
+    },
+    {
+      "session": "fs-byte-infra-round1",
+      "source": "F21",
+      "id": "qb-infra-softmax-flops",
+      "question": "Softmax 这类非 GEMM 算子的 FLOPs 应怎样统计？"
+    },
+    {
+      "session": "fs-byte-infra-round1",
+      "source": "F21",
+      "id": "qb-infra-hfu",
+      "question": "HFU 与 MFU 有什么区别，测高了是否一定更好？"
+    },
+    {
+      "session": "fs-byte-infra-round1",
+      "source": "F21",
+      "id": "qb-infra-tp",
+      "question": "张量并行 TP 的通信发生在哪里，通信量怎样算？"
+    },
+    {
+      "session": "fs-byte-infra-round1",
+      "source": "F21",
+      "id": "qb-infra-cp",
+      "question": "上下文并行 CP 的通信量怎样推导，为什么不能只背一个倍数？"
+    },
+    {
+      "session": "fs-byte-infra-round1",
+      "source": "F21",
+      "id": "qb-infra-ep",
+      "question": "专家并行 EP 的 Dispatch/Combine 通信量怎样算？"
+    },
+    {
+      "session": "fs-byte-infra-round1",
+      "source": "F21",
+      "id": "qb-infra-pp",
+      "question": "流水线并行 PP 在边界传什么，怎样计算通信量？"
+    },
+    {
+      "session": "fs-byte-infra-round1",
+      "source": "F21",
+      "id": "qb-infra-fa3",
+      "question": "FlashAttention-3 相比 FlashAttention-2 改进了什么？"
+    },
+    {
+      "session": "fs-byte-infra-round1",
+      "source": "F21",
+      "id": "qb-infra-overlap",
+      "question": "FA3 如何让存在数据依赖的 GEMM 和 Softmax 重叠？"
+    },
+    {
+      "session": "fs-byte-infra-round1",
+      "source": "F21",
+      "id": "qb-infra-tma",
+      "question": "TMA 出现前如何搬运数据，TMA 的优势和限制是什么？"
+    },
+    {
+      "session": "fs-byte-infra-round1",
+      "source": "F21",
+      "id": "qb-infra-project-gap",
+      "question": "本场还问了哪些项目问题？"
+    },
+    {
+      "session": "fs-byte-infra-round1",
+      "source": "F21",
+      "id": "qb-infra-gqa-backward",
+      "question": "GQA 的 backward 怎么推导，多个 Q head 共用 KV 时要注意什么？"
+    },
+    {
+      "session": "fs-byte-infra-round1",
+      "source": "F21",
+      "id": "qb-infra-reverse-list",
+      "question": "现场写反转单链表，怎样解释不丢链和复杂度？"
+    },
+    {
+      "session": "fs-byte-chip-operator",
+      "source": "F25",
+      "id": "qb-chip-model",
+      "question": "怎样介绍熟悉的深度学习模型，并体现编译器视角？"
+    },
+    {
+      "session": "fs-byte-chip-operator",
+      "source": "F25",
+      "id": "qb-chip-resnet",
+      "question": "ResNet 为什么引入残差结构，ResNet-50 的 bottleneck 有何作用？"
+    },
+    {
+      "session": "fs-byte-chip-operator",
+      "source": "F25",
+      "id": "qb-chip-conv-backward",
+      "question": "卷积反向传播的输入输出与公式是什么？"
+    },
+    {
+      "session": "fs-byte-chip-operator",
+      "source": "F25",
+      "id": "qb-chip-autograd",
+      "question": "PyTorch 自动微分的原理，与编译 lowering 是什么关系？"
+    },
+    {
+      "session": "fs-byte-chip-operator",
+      "source": "F25",
+      "id": "qb-chip-cpu-matmul",
+      "question": "CPU 写 Matmul，内积形式与外积形式有什么区别？"
+    },
+    {
+      "session": "fs-byte-chip-operator",
+      "source": "F25",
+      "id": "qb-chip-transformer",
+      "question": "Transformer 的结构、主要变体与适用场景怎样梳理？"
+    },
+    {
+      "session": "fs-byte-chip-operator",
+      "source": "F25",
+      "id": "qb-chip-smart-pointer",
+      "question": "C++ 三类智能指针有什么特性，编译器工程怎样选？"
+    },
+    {
+      "session": "fs-byte-chip-operator",
+      "source": "F25",
+      "id": "qb-chip-polymorphism",
+      "question": "C++ 如何实现多态，静态与动态多态怎么选？"
+    },
+    {
+      "session": "fs-byte-chip-operator",
+      "source": "F25",
+      "id": "qb-chip-virtual",
+      "question": "什么是虚函数，为什么引入它，常见坑在哪里？"
+    },
+    {
+      "session": "fs-byte-chip-operator",
+      "source": "F25",
+      "id": "qb-chip-cycle-entry",
+      "question": "怎样在 O(1) 空间找到环形链表入口？"
+    },
+    {
+      "session": "fs-topseed-intern-round1",
+      "source": "F26",
+      "id": "qb-top1-project",
+      "question": "怎样把项目介绍讲到能承受后续追问？"
+    },
+    {
+      "session": "fs-topseed-intern-round1",
+      "source": "F26",
+      "id": "qb-top1-fusion",
+      "question": "什么是算子融合，何时收益不如预期？"
+    },
+    {
+      "session": "fs-topseed-intern-round1",
+      "source": "F26",
+      "id": "qb-top1-flash",
+      "question": "FlashAttention 如何实现，现场应解释到哪一层？"
+    },
+    {
+      "session": "fs-topseed-intern-round1",
+      "source": "F26",
+      "id": "qb-top1-attention-cost",
+      "question": "Attention 的时间、空间复杂度分别是什么，prefill 与 decode 如何区别？"
+    },
+    {
+      "session": "fs-topseed-intern-round1",
+      "source": "F26",
+      "id": "qb-top1-memory",
+      "question": "通过访存优化提高性能，应从哪条账开始？"
+    },
+    {
+      "session": "fs-topseed-intern-round1",
+      "source": "F26",
+      "id": "qb-top1-bound",
+      "question": "大矩阵乘和求和一定分别是 compute bound 与 memory bound 吗？"
+    },
+    {
+      "session": "fs-topseed-intern-round1",
+      "source": "F26",
+      "id": "qb-top1-transformer",
+      "question": "Transformer 一层有哪些计算，哪些部分有权重？"
+    },
+    {
+      "session": "fs-topseed-intern-round1",
+      "source": "F26",
+      "id": "qb-top1-lora",
+      "question": "LoRA 的低秩更新为什么能节省微调资源，有哪些代价？"
+    },
+    {
+      "session": "fs-topseed-intern-round1",
+      "source": "F26",
+      "id": "qb-top1-tp-pp",
+      "question": "TP 与 PP 的区别是什么，怎样组合？"
+    },
+    {
+      "session": "fs-topseed-intern-round1",
+      "source": "F26",
+      "id": "qb-top1-megatron",
+      "question": "Megatron 如何切分 Attention 与 FFN 权重，哪里需要通信？"
+    },
+    {
+      "session": "fs-topseed-intern-round1",
+      "source": "F26",
+      "id": "qb-top1-auto-parallel",
+      "question": "什么是自动并行，编译器要解决哪些合法性与成本问题？"
+    },
+    {
+      "session": "fs-topseed-intern-round1",
+      "source": "F26",
+      "id": "qb-top1-pipeline",
+      "question": "Pipeline bubble 从哪里来，理想时间和 bubble 率怎样推导？"
+    },
+    {
+      "session": "fs-topseed-intern-round1",
+      "source": "F26",
+      "id": "qb-top1-pipeline-variants",
+      "question": "从朴素切层到 GPipe、1F1B、交错和 Zero Bubble，分别解决了什么？"
+    },
+    {
+      "session": "fs-topseed-intern-round1",
+      "source": "F26",
+      "id": "qb-top1-throughput",
+      "question": "吞吐量如何定义，与延迟是什么关系？"
+    },
+    {
+      "session": "fs-topseed-intern-round1",
+      "source": "F26",
+      "id": "qb-top1-pp-content",
+      "question": "PP 的通信内容是权重、激活还是梯度？"
+    },
+    {
+      "session": "fs-topseed-intern-round1",
+      "source": "F26",
+      "id": "qb-top1-ddp-p2p",
+      "question": "“中心 DDP”和 P2P 应如何区分，DDP 真有中心参数服务器吗？"
+    },
+    {
+      "session": "fs-topseed-intern-round1",
+      "source": "F26",
+      "id": "qb-top1-primitives",
+      "question": "常见通信原语分别做什么，PP 用哪些？"
+    },
+    {
+      "session": "fs-topseed-intern-round1",
+      "source": "F26",
+      "id": "qb-top1-why-parallel",
+      "question": "为什么需要并行策略，怎样选择而不只追求更多卡？"
+    },
+    {
+      "session": "fs-topseed-intern-round1",
+      "source": "F26",
+      "id": "qb-top1-model-memory",
+      "question": "模型参数、梯度和优化器状态怎样计算显存？"
+    },
+    {
+      "session": "fs-topseed-intern-round1",
+      "source": "F26",
+      "id": "qb-top1-zero",
+      "question": "ZeRO-1/2/3 分别分片什么，显存公式与通信代价是什么？"
+    },
+    {
+      "session": "ps-byte-202603",
+      "source": "S03",
+      "id": "qc-byte-fusion",
+      "question": "融合已经减少中间张量读写，为什么还会更慢？"
+    },
+    {
+      "session": "ps-byte-202603",
+      "source": "S03",
+      "id": "qc-byte-warp",
+      "question": "Hopper warp specialization 解决什么问题？去掉它会怎样？"
+    },
+    {
+      "session": "ps-byte-202603",
+      "source": "S03",
+      "id": "qc-byte-dsl",
+      "question": "CUDA/CuTe 等 kernel 工具怎样选择？让 Agent 生成 kernel 时怎样验收？"
+    },
+    {
+      "session": "ps-byte-202603",
+      "source": "S03",
+      "id": "qc-byte-moe",
+      "question": "MoE 路由与 kernel 优化应讲清哪些细节？"
+    },
+    {
+      "session": "fs-cambricon",
+      "source": "F05",
+      "id": "qa-cambricon-intro",
+      "question": "自我介绍如何突出工程落地？"
+    },
+    {
+      "session": "fs-cambricon",
+      "source": "F05",
+      "id": "qa-cambricon-motivation",
+      "question": "偏理论背景为什么选择编译器/算子方向？"
+    },
+    {
+      "session": "fs-cambricon",
+      "source": "F05",
+      "id": "qa-cambricon-intern",
+      "question": "实习内容应如何介绍到可核验深度？"
+    },
+    {
+      "session": "fs-cambricon",
+      "source": "F05",
+      "id": "qa-cambricon-e2e",
+      "question": "端到端优化收益应该怎么看？"
+    },
+    {
+      "session": "fs-cambricon",
+      "source": "F05",
+      "id": "qa-cambricon-project",
+      "question": "项目深挖应怎样呈现设计和反例？"
+    },
+    {
+      "session": "fs-cambricon",
+      "source": "F05",
+      "id": "qa-cambricon-hallucination",
+      "question": "系统怎样降低大模型幻觉？编译器负责哪部分？"
+    },
+    {
+      "session": "fs-cambricon",
+      "source": "F05",
+      "id": "qa-cambricon-vllm",
+      "question": "vLLM / PagedAttention 解决什么问题，怎样 profile KV？"
+    },
+    {
+      "session": "fs-cambricon",
+      "source": "F05",
+      "id": "qa-cambricon-language",
+      "question": "开发语言怎么回答，如何体现选择能力？"
+    },
+    {
+      "session": "fs-cambricon",
+      "source": "F05",
+      "id": "qa-cambricon-overload16",
+      "question": "“C++ 重载、16 位实现”这道记录不完整，怎样处理？"
+    },
+    {
+      "session": "fs-cambricon",
+      "source": "F05",
+      "id": "qa-cambricon-reverse-list",
+      "question": "怎样原地反转单链表？"
+    },
+    {
+      "session": "ps-cambricon-202609",
+      "source": "S05",
+      "id": "qc-cambricon-registers",
+      "question": "如何查询并减少寄存器用量？减少后为什么未必更快？"
+    },
+    {
+      "session": "ps-cambricon-202609",
+      "source": "S05",
+      "id": "qc-cambricon-dgemm",
+      "question": "DGEMM、CPU 分块和 OpenMP 如何优化？"
+    },
+    {
+      "session": "ps-cambricon-202609",
+      "source": "S05",
+      "id": "qc-cambricon-hip",
+      "question": "把 CUDA 算子重构到 HIP，哪些工作不能靠 API 替换完成？"
+    },
+    {
+      "session": "ps-cambricon-202609",
+      "source": "S05",
+      "id": "qc-cambricon-transpose",
+      "question": "现场写 CPU 分块转置，怎样处理非整块尺寸？"
+    },
+    {
+      "session": "ps-cambricon-2020",
+      "source": "S09",
+      "id": "qc-cambricon-build",
+      "question": "从 C++ 源文件到可执行程序经历哪些步骤？"
+    },
+    {
+      "session": "ps-cambricon-2020",
+      "source": "S09",
+      "id": "qc-cambricon-memory",
+      "question": "C++ 内存与错误处理怎样做工程设计？"
+    },
+    {
+      "session": "ps-cambricon-2020",
+      "source": "S09",
+      "id": "qc-cambricon-matmul",
+      "question": "CPU 矩阵乘怎样实现和优化？"
+    },
+    {
+      "session": "ps-cambricon-intern-202605",
+      "source": "S22",
+      "id": "qc-cambricon-prefix",
+      "question": "CUDA 前缀和怎样并行实现？"
+    },
+    {
+      "session": "ps-cambricon-intern-202605",
+      "source": "S22",
+      "id": "qc-cambricon-bank",
+      "question": "什么是 shared memory bank conflict？padding 为什么可能有效？"
+    },
+    {
+      "session": "ps-cambricon-intern-202605",
+      "source": "S22",
+      "id": "qc-cambricon-little",
+      "question": "Little’s Law 怎样用于估算需要多少在途请求？"
+    },
+    {
+      "session": "fs-anon-npu",
+      "source": "F09",
+      "id": "qa-anon-npu-calculator",
+      "question": "基本计算器怎样处理括号、符号与优先级？"
+    },
+    {
+      "session": "fs-anon-npu",
+      "source": "F09",
+      "id": "qa-anon-npu-project",
+      "question": "连续多轮项目面怎样保持回答一致且有深度？"
+    },
+    {
+      "session": "fs-anon-gpu",
+      "source": "F10",
+      "id": "qa-anon-gpu-dyncast",
+      "question": "dynamic_cast 与 LLVM/MLIR 的 dyn_cast 有何差别？"
+    },
+    {
+      "session": "fs-anon-gpu",
+      "source": "F10",
+      "id": "qa-anon-gpu-move",
+      "question": "什么情况下需要自己写移动构造函数？"
+    },
+    {
+      "session": "fs-anon-gpu",
+      "source": "F10",
+      "id": "qa-anon-gpu-dialects",
+      "question": "MLIR 常见 dialect 如何组成一个 lowering 流程？"
+    },
+    {
+      "session": "fs-anon-gpu",
+      "source": "F10",
+      "id": "qa-anon-gpu-errors",
+      "question": "异常和 error code 怎样取舍？"
+    },
+    {
+      "session": "fs-anon-gpu",
+      "source": "F10",
+      "id": "qa-anon-gpu-templates",
+      "question": "模板全特化、偏特化、约束和可变参数如何匹配？"
+    },
+    {
+      "session": "fs-anon-gpu",
+      "source": "F10",
+      "id": "qa-anon-gpu-traits",
+      "question": "MLIR Trait 和 Interface 分别解决什么问题？"
+    },
+    {
+      "session": "fs-anon-gpu",
+      "source": "F10",
+      "id": "qa-anon-gpu-matmul",
+      "question": "怎样写 CPU MatMul，并进一步做 tiling？"
+    },
+    {
+      "session": "fs-anon-gpu",
+      "source": "F10",
+      "id": "qa-anon-gpu-lit",
+      "question": "LIT 测试如何验证“预期报错”？"
+    },
+    {
+      "session": "fs-anon-internet-chip",
+      "source": "F11",
+      "id": "qa-anon-internet-project",
+      "question": "项目面怎样回答跨硬件优化迁移？"
+    },
+    {
+      "session": "fs-anon-internet-chip",
+      "source": "F11",
+      "id": "qa-anon-internet-increasing",
+      "question": "“最长单调递增数组”应先澄清哪一种问题？"
+    },
+    {
+      "session": "fs-horizon-engine",
+      "source": "F12",
+      "id": "qa-horizon-intro",
+      "question": "后端开发者怎样介绍自己与推理引擎岗位的匹配？"
+    },
+    {
+      "session": "fs-horizon-engine",
+      "source": "F12",
+      "id": "qa-horizon-programming-model",
+      "question": "不同加速器的算子开发，内存模型与编程模型如何比较？"
+    },
+    {
+      "session": "fs-horizon-engine",
+      "source": "F12",
+      "id": "qa-horizon-nvidia",
+      "question": "自研加速器与 NVIDIA GPU 的架构差异该如何解释？"
+    },
+    {
+      "session": "fs-horizon-engine",
+      "source": "F12",
+      "id": "qa-horizon-pe",
+      "question": "PE 是什么？数量与设计取舍怎样理解？"
+    },
+    {
+      "session": "fs-horizon-engine",
+      "source": "F12",
+      "id": "qa-horizon-pe-mapping",
+      "question": "线程或任务怎样映射到 PE，数据在哪一层读写？"
+    },
+    {
+      "session": "fs-horizon-engine",
+      "source": "F12",
+      "id": "qa-horizon-pe-work",
+      "question": "每个 PE 的计算负载如何估算？"
+    },
+    {
+      "session": "fs-horizon-engine",
+      "source": "F12",
+      "id": "qa-horizon-local-capacity",
+      "question": "大权重放不进片上 local memory 时怎么办？"
+    },
+    {
+      "session": "fs-horizon-engine",
+      "source": "F12",
+      "id": "qa-horizon-business",
+      "question": "业务场景和适配模型怎么介绍才有信息量？"
+    },
+    {
+      "session": "fs-horizon-engine",
+      "source": "F12",
+      "id": "qa-horizon-kv-flow",
+      "question": "大模型执行时，KV Cache 的数据流怎样画？"
+    },
+    {
+      "session": "fs-horizon-engine",
+      "source": "F12",
+      "id": "qa-horizon-precision",
+      "question": "权重是 4 bit，激活、累加和输出应该是什么精度？"
+    },
+    {
+      "session": "fs-horizon-engine",
+      "source": "F12",
+      "id": "qa-horizon-static-dynamic",
+      "question": "静态量化与动态量化区别是什么？"
+    },
+    {
+      "session": "fs-horizon-engine",
+      "source": "F12",
+      "id": "qa-horizon-int4-bf16",
+      "question": "INT4 权重怎样反量化到 BF16？"
+    },
+    {
+      "session": "fs-horizon-engine",
+      "source": "F12",
+      "id": "qa-horizon-lut",
+      "question": "算子查表法是什么？表放在哪里影响多大？"
+    },
+    {
+      "session": "fs-horizon-engine",
+      "source": "F12",
+      "id": "qa-horizon-peak",
+      "question": "芯片总算力、BF16 算力和单 PE 算力怎样换算？"
+    },
+    {
+      "session": "fs-horizon-engine",
+      "source": "F12",
+      "id": "qa-horizon-systolic",
+      "question": "脉动 MAC 阵列与指令中的乘加是什么关系？"
+    },
+    {
+      "session": "fs-horizon-engine",
+      "source": "F12",
+      "id": "qa-horizon-gemm-gemv",
+      "question": "GEMM 与 GEMV 在语义、指令和性能上怎么区分？"
+    },
+    {
+      "session": "fs-horizon-engine",
+      "source": "F12",
+      "id": "qa-horizon-matmul-contract",
+      "question": "介绍 MatMul 时，shape、dtype、layout 应写到什么程度？"
+    },
+    {
+      "session": "fs-horizon-engine",
+      "source": "F12",
+      "id": "qa-horizon-instruction-shape",
+      "question": "一条矩阵指令的 tile 尺寸由什么决定？"
+    },
+    {
+      "session": "fs-horizon-engine",
+      "source": "F12",
+      "id": "qa-horizon-stationary",
+      "question": "Input/Weight/Output stationary 该怎样解释？"
+    },
+    {
+      "session": "fs-horizon-engine",
+      "source": "F12",
+      "id": "qa-horizon-matmul",
+      "question": "矩阵乘分块是否只切 K？大 shape 怎样优化？"
+    },
+    {
+      "session": "fs-horizon-engine",
+      "source": "F12",
+      "id": "qa-horizon-benchmark",
+      "question": "benchmark、理论效率和对比基线怎样选？"
+    },
+    {
+      "session": "fs-horizon-engine",
+      "source": "F12",
+      "id": "qa-horizon-missing-code",
+      "question": "原记录中的找 bug 代码题该怎样处理？"
+    },
+    {
+      "session": "fs-horizon-campus",
+      "source": "F27",
+      "id": "qr-horizon-gpgpu",
+      "question": "怎样沿一个 kernel 解释 GPGPU 结构和存储层次？"
+    },
+    {
+      "session": "fs-horizon-campus",
+      "source": "F27",
+      "id": "qr-horizon-derived-gap",
+      "question": "“派生类对象……”这道题如何整理？"
+    },
+    {
+      "session": "fs-horizon-campus",
+      "source": "F27",
+      "id": "qr-horizon-struct",
+      "question": "结构体成员顺序会怎样影响大小，怎样解释 padding 和 ABI？"
+    },
+    {
+      "session": "fs-tencent-teg",
+      "source": "F22",
+      "id": "qb-teg-simd-simt",
+      "question": "SIMD、SIMT 各有什么优势，Tensor Core 应怎样理解？"
+    },
+    {
+      "session": "fs-tencent-teg",
+      "source": "F22",
+      "id": "qb-teg-threads",
+      "question": "GPU 的 SIMT 线程与 CPU 操作系统线程有什么不同？"
+    },
+    {
+      "session": "fs-tencent-teg",
+      "source": "F22",
+      "id": "qb-teg-nccl",
+      "question": "NCCL 的算法、协议和传输路径是什么关系？"
+    },
+    {
+      "session": "fs-enflame-operator",
+      "source": "F23",
+      "id": "qb-enflame-operator",
+      "question": "怎样介绍一个最近开发的算子的语义与实现？"
+    },
+    {
+      "session": "fs-enflame-operator",
+      "source": "F23",
+      "id": "qb-enflame-ptx-version",
+      "question": "如何回答项目使用的 PTX 版本，而不混淆架构版本？"
+    },
+    {
+      "session": "fs-enflame-operator",
+      "source": "F23",
+      "id": "qb-enflame-nvcc",
+      "question": "能否用 NVCC 生成 PTX，再作为 kernel 编译执行？"
+    },
+    {
+      "session": "fs-enflame-operator",
+      "source": "F23",
+      "id": "qb-enflame-int8",
+      "question": "INT8 量化、反量化怎样进入真实模型执行链？"
+    },
+    {
+      "session": "fs-enflame-operator",
+      "source": "F23",
+      "id": "qb-enflame-fa",
+      "question": "被问是否实现过 FlashAttention，怎样展示实现深度？"
+    },
+    {
+      "session": "fs-enflame-operator",
+      "source": "F23",
+      "id": "qb-enflame-efficiency",
+      "question": "Kernel efficiency 应以什么为基准验收？"
+    },
+    {
+      "session": "fs-enflame-operator",
+      "source": "F23",
+      "id": "qb-enflame-matmul",
+      "question": "Matmul 优化条件不成立或输入输出 dtype 不同时，如何处理？"
+    },
+    {
+      "session": "fs-enflame-operator",
+      "source": "F23",
+      "id": "qb-enflame-architecture",
+      "question": "如何介绍所用芯片架构，并把它关联到算子实现？"
+    },
+    {
+      "session": "fs-enflame-operator",
+      "source": "F23",
+      "id": "qb-enflame-compute-models",
+      "question": "怎样回答芯片算力和已支持模型，不夸大覆盖程度？"
+    },
+    {
+      "session": "fs-enflame-operator",
+      "source": "F23",
+      "id": "qb-enflame-broadcast",
+      "question": "Add 如何支持广播，数据规模过大时怎样分块？"
+    },
+    {
+      "session": "fs-enflame-operator",
+      "source": "F23",
+      "id": "qb-enflame-cambricon-accept",
+      "question": "另一套硬件的算子性能验收应怎样设计？"
+    },
+    {
+      "session": "fs-enflame-operator",
+      "source": "F23",
+      "id": "qb-enflame-porting",
+      "question": "两类芯片的算子开发差异，应怎样进行有深度的比较？"
+    },
+    {
+      "session": "fs-enflame-operator",
+      "source": "F23",
+      "id": "qb-enflame-leaving",
+      "question": "被追问多段经历的离职原因，怎样回答？"
+    },
+    {
+      "session": "ps-suiyuan-202306",
+      "source": "S07",
+      "id": "qc-suiyuan-ir",
+      "question": "MLIR 的多层表示怎样帮助优化？"
+    },
+    {
+      "session": "ps-suiyuan-202306",
+      "source": "S07",
+      "id": "qc-suiyuan-dynamic",
+      "question": "XLA 等编译器的动态性限制怎样影响业务？"
+    },
+    {
+      "session": "ps-suiyuan-202306",
+      "source": "S07",
+      "id": "qc-suiyuan-auto",
+      "question": "自动代码生成与 NPU 手写算子怎样取舍？"
+    },
+    {
+      "session": "fs-ant-operator",
+      "source": "F24",
+      "id": "qb-ant-profile-scope",
+      "question": "模型 profile 和 kernel profile 有什么区别，如何衔接？"
+    },
+    {
+      "session": "fs-ant-operator",
+      "source": "F24",
+      "id": "qb-ant-libraries",
+      "question": "手写 kernel 与调用 CUDA 库如何取舍，如何回答核心 API？"
+    },
+    {
+      "session": "fs-ant-operator",
+      "source": "F24",
+      "id": "qb-ant-ncu",
+      "question": "Nsight Compute 应先看哪些指标，怎样形成诊断链？"
+    },
+    {
+      "session": "fs-ant-operator",
+      "source": "F24",
+      "id": "qb-ant-roofline",
+      "question": "Roofline 的两轴、拐点和使用限制是什么？"
+    },
+    {
+      "session": "fs-ant-operator",
+      "source": "F24",
+      "id": "qb-ant-memory-chart",
+      "question": "Nsight Compute 的 Memory Chart 应怎样读？"
+    },
+    {
+      "session": "fs-ant-operator",
+      "source": "F24",
+      "id": "qb-ant-cache",
+      "question": "L1/L2 cache 命中率理想应是多少，如何优化？"
+    },
+    {
+      "session": "fs-ant-operator",
+      "source": "F24",
+      "id": "qb-ant-a100",
+      "question": "A100 的 L2 与每 SM shared memory 有多大，哪些数字容易混淆？"
+    },
+    {
+      "session": "fs-ant-operator",
+      "source": "F24",
+      "id": "qb-ant-ptx",
+      "question": "PTX 是最终硬件指令吗，与 SASS 有什么关系？"
+    },
+    {
+      "session": "fs-ant-operator",
+      "source": "F24",
+      "id": "qb-ant-ptx-structure",
+      "question": "PTX 文件结构与常见操作应如何讲清楚？"
+    },
+    {
+      "session": "fs-ant-operator",
+      "source": "F24",
+      "id": "qb-ant-ilp",
+      "question": "如何提高指令级并行，为什么展开循环不一定更快？"
+    },
+    {
+      "session": "fs-ant-operator",
+      "source": "F24",
+      "id": "qb-ant-load-store",
+      "question": "load/store 的优化从哪些维度考虑？"
+    },
+    {
+      "session": "fs-ant-operator",
+      "source": "F24",
+      "id": "qb-ant-align",
+      "question": "“.align 指令”这个说法哪里不准确，真正作用是什么？"
+    },
+    {
+      "session": "fs-ant-operator",
+      "source": "F24",
+      "id": "qb-ant-development",
+      "question": "一个可维护的算子从需求到上线应经过哪些步骤？"
+    },
+    {
+      "session": "fs-ant-operator",
+      "source": "F24",
+      "id": "qb-ant-performance",
+      "question": "被问自己开发的算子性能是多少，怎样给出可信数字？"
+    },
+    {
+      "session": "fs-ant-operator",
+      "source": "F24",
+      "id": "qb-ant-optimizations",
+      "question": "如何解释采用的优化策略与各自增益，避免只报最终加速比？"
+    },
+    {
+      "session": "fs-ant-operator",
+      "source": "F24",
+      "id": "qb-ant-multicore",
+      "question": "不同加速器的多核并行如何划分，有哪些常见问题？"
+    },
+    {
+      "session": "fs-gpu-experience",
+      "source": "F28",
+      "id": "qb-gpu-occupancy",
+      "question": "SM 的结构怎样约束 shared memory、寄存器与活跃 block？"
+    },
+    {
+      "session": "fs-gpu-experience",
+      "source": "F28",
+      "id": "qr-gpu-storage-choice",
+      "question": "哪些数据放寄存器，哪些放 shared，二者如何取舍？"
+    },
+    {
+      "session": "fs-gpu-experience",
+      "source": "F28",
+      "id": "qb-gpu-bank",
+      "question": "shared memory 的 bank conflict 是什么，padding 为什么有时有效？"
+    },
+    {
+      "session": "fs-gpu-experience",
+      "source": "F28",
+      "id": "qr-gpu-divergence",
+      "question": "warp 内 if/else 分歧怎样执行，是否所有线程都必须等？"
+    },
+    {
+      "session": "fs-gpu-experience",
+      "source": "F28",
+      "id": "qr-gpu-tensorcore",
+      "question": "Tensor Core 的工作原理以及使用经验应该怎样回答？"
+    },
+    {
+      "session": "fs-gpu-experience",
+      "source": "F28",
+      "id": "qr-gpu-float4",
+      "question": "为什么使用 float4 读写，什么时候不会更快？"
+    },
+    {
+      "session": "fs-gpu-experience",
+      "source": "F28",
+      "id": "qr-gpu-double-stream-graph",
+      "question": "双缓冲、CUDA stream 和 CUDA Graph 各解决什么问题？"
+    },
+    {
+      "session": "fs-gpu-experience",
+      "source": "F28",
+      "id": "qr-gpu-communication",
+      "question": "除了 MPI，还有哪些 GPU 通信方案，怎样按语义选择？"
+    },
+    {
+      "session": "fs-gpu-experience",
+      "source": "F28",
+      "id": "qr-gpu-ncu-memory",
+      "question": "Nsight Compute 中怎样使用内存指标，而不是只盯命中率？"
+    },
+    {
+      "session": "fs-gpu-experience",
+      "source": "F28",
+      "id": "qr-gpu-ptx",
+      "question": "怎样证明 PTX 级优化有价值？"
+    },
+    {
+      "session": "fs-gpu-experience",
+      "source": "F28",
+      "id": "qr-gpu-gemm-bound",
+      "question": "GEMM 是计算密集还是访存密集，怎样从 shape 推导？"
+    },
+    {
+      "session": "fs-gpu-experience",
+      "source": "F28",
+      "id": "qr-gpu-cutlass",
+      "question": "CUTLASS 如何组织 GEMM，编译器开发者应该理解到哪一层？"
+    },
+    {
+      "session": "fs-gpu-experience",
+      "source": "F28",
+      "id": "qr-gpu-four-heads",
+      "question": "4 张 GPU 执行 16-head Attention，按 head 怎么并行？"
+    },
+    {
+      "session": "fs-hrbp-notes",
+      "source": "F29",
+      "id": "qr-hr-plan",
+      "question": "未来规划怎样回答得具体可信？"
+    },
+    {
+      "session": "fs-hrbp-notes",
+      "source": "F29",
+      "id": "qr-hr-company",
+      "question": "为什么选择这家公司和岗位？"
+    },
+    {
+      "session": "fs-hrbp-notes",
+      "source": "F29",
+      "id": "qr-hr-mbti",
+      "question": "被问 MBTI 或性格时，怎样让回答回到工作行为？"
+    },
+    {
+      "session": "fs-hrbp-notes",
+      "source": "F29",
+      "id": "qr-hr-timeline",
+      "question": "毕业时间与个人经历类问题应怎样回应？"
+    },
+    {
+      "session": "ps-multi-compiler-2025",
+      "source": "S04",
+      "id": "qc-multi-dce",
+      "question": "DCE、DSE、GVN、TBAA 分别解决什么问题？为什么优化会被阻止？"
+    },
+    {
+      "session": "ps-mthreads-202610",
+      "source": "S06",
+      "id": "qc-mthreads-tile",
+      "question": "dtype 改变时，GEMM tile 和寄存器为什么要重新选？"
+    },
+    {
+      "session": "ps-mthreads-202610",
+      "source": "S06",
+      "id": "qc-mthreads-asm",
+      "question": "如何证明向量访存真正生成？ncu 和 occupancy 看什么？"
+    },
+    {
+      "session": "ps-mthreads-202610",
+      "source": "S06",
+      "id": "qc-mthreads-cutlass",
+      "question": "CUTLASS 怎样优化 GEMM？输出为何保留在寄存器？"
+    },
+    {
+      "session": "ps-mthreads-202610",
+      "source": "S06",
+      "id": "qc-mthreads-filter",
+      "question": "GPU 均值滤波怎么设计？"
+    },
+    {
+      "session": "ps-mthreads-202610",
+      "source": "S06",
+      "id": "qc-mthreads-topk",
+      "question": "GPU TopK 怎样选算法？"
+    },
+    {
+      "session": "ps-muxi-202306",
+      "source": "S08",
+      "id": "qc-muxi-pass",
+      "question": "写过什么 LLVM Pass，怎样使用和维护分析？"
+    },
+    {
+      "session": "ps-muxi-202306",
+      "source": "S08",
+      "id": "qc-muxi-ra",
+      "question": "寄存器分配有哪些方法？和调度是什么关系？"
+    },
+    {
+      "session": "ps-muxi-202306",
+      "source": "S08",
+      "id": "qc-muxi-branch",
+      "question": "分支目标超过跳转指令范围怎么办？如何定位后端错误？"
+    },
+    {
+      "session": "ps-muxi-202306",
+      "source": "S08",
+      "id": "qc-muxi-kgroup",
+      "question": "现场写 K 个一组反转链表。"
+    },
+    {
+      "session": "ps-ali-international-2025",
+      "source": "S13",
+      "id": "qc-ali-softmax",
+      "question": "按行实现稳定 Softmax CUDA kernel，如何安排归约与访存？"
+    },
+    {
+      "session": "ps-meituan-2025",
+      "source": "S13",
+      "id": "qc-meituan-select",
+      "question": "nth_element 的合同是什么？和有序 TopK 有什么不同？"
+    },
+    {
+      "session": "ps-meituan-2025",
+      "source": "S13",
+      "id": "qc-meituan-mha",
+      "question": "写 MHA 伪代码时，哪些 shape 和复杂度必须讲清？"
+    },
+    {
+      "session": "ps-internet-unassigned-2025",
+      "source": "S13",
+      "id": "qc-internet-quant",
+      "question": "非对称量化的 scale 和 zero point 怎样进入 kernel？"
+    },
+    {
+      "session": "ps-internet-unassigned-2025",
+      "source": "S13",
+      "id": "qc-internet-wmma",
+      "question": "WMMA/MMA 如何与 CUDA 线程协作？为什么不能把 fragment 当普通矩阵数组？"
+    },
+    {
+      "session": "ps-li-auto-2025",
+      "source": "S14",
+      "id": "qc-li-ssa",
+      "question": "什么是 SSA？MLIR 的 block argument 与 phi 怎么对应？"
+    },
+    {
+      "session": "ps-li-auto-2025",
+      "source": "S14",
+      "id": "qc-li-op",
+      "question": "Dialect/Operation 的类型、属性、verifier 与 parser/printer 各负责什么？"
+    },
+    {
+      "session": "ps-li-auto-2025",
+      "source": "S14",
+      "id": "qc-li-pass",
+      "question": "MLIR Pass 的粒度、注册和运行怎样组织？"
+    },
+    {
+      "session": "ps-li-auto-2025",
+      "source": "S14",
+      "id": "qc-li-crtp",
+      "question": "CRTP 怎样实现静态多态？static_cast 和 dynamic_cast 的区别？"
+    },
+    {
+      "session": "ps-li-auto-2025",
+      "source": "S14",
+      "id": "qc-li-heapsort",
+      "question": "堆排序怎样实现，为什么建堆是 O(n)？"
+    },
+    {
+      "session": "ps-samsung-202408",
+      "source": "S15",
+      "id": "qc-samsung-lowering",
+      "question": "IR 转换、融合与算子优化怎样保持语义？"
+    },
+    {
+      "session": "ps-samsung-202408",
+      "source": "S15",
+      "id": "qc-samsung-graph",
+      "question": "现场写 BFS、DFS 与拓扑排序，怎样处理环和独立节点？"
+    },
+    {
+      "session": "ps-baai-202408",
+      "source": "S16",
+      "id": "qc-baai-dfs",
+      "question": "DFS 在图问题里如何避免漏点和重复递归？"
+    },
+    {
+      "session": "ps-baai-202408",
+      "source": "S16",
+      "id": "qc-baai-conv",
+      "question": "现场实现支持 stride、padding、K×K 的 C++ Conv2D。"
+    },
+    {
+      "session": "ps-riscv-task-202610",
+      "source": "S17",
+      "id": "qc-riscv-builtin",
+      "question": "为自定义 RISC-V 扩展增加 LLVM builtin，交付哪些部分才算打通？"
+    },
+    {
+      "session": "ps-anonymous-parser-2025",
+      "source": "S19",
+      "id": "qc-parser-expression",
+      "question": "实现表达式解析与求值，怎样处理优先级和错误？"
+    },
+    {
+      "session": "ps-rona-2025",
+      "source": "S20",
+      "id": "qc-rona-algebra",
+      "question": "实现代数化简、常量传播与 DCE，最容易在哪些语义上犯错？"
+    },
+    {
+      "session": "ps-efficient-review-2025",
+      "source": "S21",
+      "id": "qc-instrumentation",
+      "question": "实现插桩 Pass 时怎样避免测量改变或破坏程序？"
+    },
+    {
+      "session": "ps-luminal-takehome",
+      "source": "G01",
+      "id": "qc-luminal-schedule",
+      "question": "SSA 到 VLIW：怎样同时满足依赖、延迟与资源限制？"
+    },
+    {
+      "session": "ps-luminal-takehome",
+      "source": "G01",
+      "id": "qc-luminal-allocation",
+      "question": "scratch 复用与调度如何互相制约？"
+    },
+    {
+      "session": "ps-luminal-takehome",
+      "source": "G01",
+      "id": "qc-luminal-memory",
+      "question": "load/store 哪些可以重排？"
+    },
+    {
+      "session": "ps-anthropic-takehome",
+      "source": "G02",
+      "id": "qc-anthropic-optimization",
+      "question": "怎样优化模拟机器 kernel，避免只在样例上“变快”？"
+    },
+    {
+      "session": "ps-anthropic-takehome",
+      "source": "G02",
+      "id": "qc-anthropic-trace",
+      "question": "怎样从 trace 证明优化原因？模拟 cycles 能外推到硬件吗？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-01",
+      "question": "01｜画出你做过的编译链路，逐层说明输入/输出 IR、你负责的范围和硬件接口。"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-02",
+      "question": "02｜选一个你亲自写的 Pass：变换前后是什么，收益来自哪里，为什么放在这一层？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-03",
+      "question": "03｜这个优化在什么条件下不合法？给出别名、布局、边界或浮点语义的反例。"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-04",
+      "question": "04｜一次改动如何验证正确性？怎样同时覆盖最小 IR、算子和原业务模型？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-05",
+      "question": "05｜出现错误结果时，如何缩小到具体 lowering/Pass，并构造最小复现？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-06",
+      "question": "06｜如何证明优化有效？说明版本、shape、dtype、硬件、基线和计时口径。"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-07",
+      "question": "07｜单 kernel 提速却没有改善模型，下一步查什么？如何判断瓶颈转移？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-08",
+      "question": "08｜如果只能选一项优化，你如何权衡性能、编译耗时、内存、代码复杂度和维护成本？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-09",
+      "question": "09｜什么是 SSA？你实际用的 MLIR IR 在什么意义上遵守 SSA？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-10",
+      "question": "10｜为什么要使用多层 IR？哪些信息应该保留到哪一层？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-11",
+      "question": "11｜是否定义过 Dialect/Operation？类型、属性、验证器各放什么约束？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-12",
+      "question": "12｜是否写过 Op 的 parser/printer？自定义语法与 round-trip 如何测试？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-13",
+      "question": "13｜MLIR Pass 有哪些运行粒度？Pass pipeline 怎样组织？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-14",
+      "question": "14｜Rewrite、canonicalization 和 lowering 的职责如何区分？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-15",
+      "question": "15｜什么时候用 partial/full conversion？如何解释“还残留非法 Op”？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-16",
+      "question": "16｜tensor 到 memref 的 bufferization 如何处理别名、生命周期和原地更新？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-17",
+      "question": "17｜DCE/DSE、GVN、TBAA 分别解决什么问题，什么时候会阻止优化？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-18",
+      "question": "18｜实际写过哪个 LLVM Pass？用了哪些分析，怎样维护/失效分析结果？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-19",
+      "question": "19｜给一段 SSA 程序，如何算 use-def、活跃区间并复用存储？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-20",
+      "question": "20｜如何把依赖图排成 VLIW bundle，同时满足延迟和每类引擎槽位限制？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-21",
+      "question": "21｜关键路径优先与降低存储压力发生冲突时，调度器如何取舍？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-22",
+      "question": "22｜已知访问范围的 load/store，哪些能重排，哪些必须有顺序？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-23",
+      "question": "23｜向量对齐、同周期读写及尚未落地的结果，怎样影响 scratch 复用？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-24",
+      "question": "24｜寄存器分配有哪些方法？怎样识别压力、spill 与调度的相互影响？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-25",
+      "question": "25｜给一个自定义 RISC-V 扩展指令，如何增加 LLVM builtin 并提供可编译 patch？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-26",
+      "question": "26｜手写带 tiling 和边界判断的矩阵转置，如何验证非整块尺寸？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-27",
+      "question": "27｜GEMM 的 tile 怎么选？换成 FP32/FP16/FP8 后为什么可能要重新选？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-28",
+      "question": "28｜GEMM 输出累加为何常驻寄存器？怎样判断是否需要跨块归约？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-29",
+      "question": "29｜怎样减少 kernel 寄存器用量，减少以后为何未必更快？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-30",
+      "question": "30｜怎样通过反汇编检查向量访存，怎样查询 CUDA/HIP 寄存器用量？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-31",
+      "question": "31｜profiler 中看哪些指标，才能区分计算、访存和低并行度问题？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-32",
+      "question": "32｜写一个稳定 Softmax，再讨论 reduction、访存与并行安排。"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-33",
+      "question": "33｜一个 fusion 为什么反而变慢？如何逐个排除寄存器、occupancy 和访存原因？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-34",
+      "question": "34｜Hopper warp specialization 怎样做？去掉它只保留 tile/shared memory 会怎样？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-35",
+      "question": "35｜对比 CUDA/Triton/CuTe/TileLang，你如何选择 DSL 及其编译后端适配路线？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-36",
+      "question": "36｜XLA 动态性的限制怎样影响业务？准备哪些静态化、specialization 或 fallback 方案？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-37",
+      "question": "37｜自动代码生成与手写算子如何取舍？哪些硬件特性最难自动表达和利用？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-38",
+      "question": "38｜IR 转换时哪些 shape、layout、dtype 信息不能丢？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-39",
+      "question": "39｜torch.compile 的图捕获、guard、graph break 和重编译怎样影响收益？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-40",
+      "question": "40｜非对称量化中的 scale/zero point 怎样进入 kernel，影响什么性能和精度？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-41",
+      "question": "41｜分块/向量化/融合改变浮点计算顺序时，如何设定误差与正确性标准？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-42",
+      "question": "42｜PyTorch 到新芯片后端打通最小链路，需要哪些 IR、算子、runtime 和验证环节？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-43",
+      "question": "43｜手写 C++ Conv2D，支持 stride、padding、K×K kernel。"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-44",
+      "question": "44｜给定计算依赖，写拓扑排序；如何处理环和独立节点？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-45",
+      "question": "45｜手写 K 个一组反转链表。"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-46",
+      "question": "46｜解释或实现堆排序，说明建堆与边界。"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-47",
+      "question": "47｜C++ CRTP 如何实现静态多态？static_cast 与 dynamic_cast 在这里有何区别？"
+    },
+    {
+      "session": "ps-original-48",
+      "source": "P48",
+      "id": "qc-train-48",
+      "question": "48｜写一个小型解析器/表达式求值器，并说明词法、优先级与错误报告。"
+    }
+  ]
+}

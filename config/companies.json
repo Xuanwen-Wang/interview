@@ -6,10 +6,26 @@
       "S01",
       "S02",
       "S03",
-      "S04"
+      "S04",
+      "F03",
+      "F04",
+      "F06",
+      "F07",
+      "F08",
+      "F20",
+      "F21",
+      "F25",
+      "F26",
+      "J01",
+      "J02",
+      "J03",
+      "J04",
+      "FJ01",
+      "FJ02"
     ],
     "chapters": [
-      "interview-bytedance"
+      "interview-jobs",
+      "interview-sessions"
     ],
     "description": "图编译、算子优化与项目深挖"
   },
@@ -19,10 +35,11 @@
     "reports": [
       "S05",
       "S09",
-      "S22"
+      "S22",
+      "F05"
     ],
     "chapters": [
-      "interview-chipmakers"
+      "interview-sessions"
     ],
     "description": "历史编译器社招与近期高性能库相邻岗位"
   },
@@ -33,7 +50,7 @@
       "S06"
     ],
     "chapters": [
-      "interview-chipmakers"
+      "interview-sessions"
     ],
     "description": "GEMM、寄存器、反汇编与现场 GPU 编码"
   },
@@ -41,10 +58,13 @@
     "id": "enflame",
     "title": "燧原",
     "reports": [
-      "S07"
+      "S07",
+      "F23",
+      "FJ04"
     ],
     "chapters": [
-      "interview-chipmakers"
+      "interview-jobs",
+      "interview-sessions"
     ],
     "description": "历史社招中的 MLIR 与自动生成取舍"
   },
@@ -55,7 +75,7 @@
       "S08"
     ],
     "chapters": [
-      "interview-chipmakers"
+      "interview-sessions"
     ],
     "description": "LLVM 后端、寄存器分配与链表题"
   },
@@ -68,7 +88,7 @@
       "S12"
     ],
     "chapters": [
-      "interview-internet"
+      "interview-jobs"
     ],
     "description": "官方岗位要求：DSL、MLIR 与 GPU 后端"
   },
@@ -80,7 +100,7 @@
       "S13"
     ],
     "chapters": [
-      "interview-internet"
+      "interview-sessions"
     ],
     "description": "保留同一作者多公司记录的归属边界"
   },
@@ -91,7 +111,7 @@
       "S14"
     ],
     "chapters": [
-      "interview-internet"
+      "interview-sessions"
     ],
     "description": "图编译实习：MLIR 对象、Pass 和 C++"
   },
@@ -102,7 +122,7 @@
       "S15"
     ],
     "chapters": [
-      "interview-internet"
+      "interview-sessions"
     ],
     "description": "图编译、算子融合与图算法"
   },
@@ -113,7 +133,7 @@
       "S16"
     ],
     "chapters": [
-      "interview-internet"
+      "interview-sessions"
     ],
     "description": "DFS 与 Conv2D 现场实现"
   },
@@ -124,7 +144,7 @@
       "G01"
     ],
     "chapters": [
-      "interview-official-takehomes"
+      "interview-sessions"
     ],
     "description": "官方 SSA→VLIW 编译器作业"
   },
@@ -135,8 +155,75 @@
       "G02"
     ],
     "chapters": [
-      "interview-official-takehomes"
+      "interview-sessions"
     ],
     "description": "官方历史性能作业与模拟机器优化"
+  },
+  {
+    "id": "biren",
+    "title": "壁仞科技",
+    "reports": [
+      "F01"
+    ],
+    "chapters": [
+      "interview-sessions"
+    ],
+    "description": "按场次保留用户提供面经的题目、身份与日期边界。"
+  },
+  {
+    "id": "kunlun",
+    "title": "百度昆仑芯",
+    "reports": [
+      "F02"
+    ],
+    "chapters": [
+      "interview-sessions"
+    ],
+    "description": "按场次保留用户提供面经的题目、身份与日期边界。"
+  },
+  {
+    "id": "horizon",
+    "title": "地平线 / 地瓜机器人",
+    "reports": [
+      "F12",
+      "F27"
+    ],
+    "chapters": [
+      "interview-sessions"
+    ],
+    "description": "按场次保留用户提供面经的题目、身份与日期边界。"
+  },
+  {
+    "id": "tencent",
+    "title": "腾讯 TEG",
+    "reports": [
+      "F22"
+    ],
+    "chapters": [
+      "interview-sessions"
+    ],
+    "description": "按场次保留用户提供面经的题目、身份与日期边界。"
+  },
+  {
+    "id": "ant",
+    "title": "蚂蚁集团",
+    "reports": [
+      "F24"
+    ],
+    "chapters": [
+      "interview-sessions"
+    ],
+    "description": "按场次保留用户提供面经的题目、身份与日期边界。"
+  },
+  {
+    "id": "aijie",
+    "title": "艾捷科芯",
+    "reports": [
+      "FJ03"
+    ],
+    "chapters": [
+      "interview-jobs"
+    ],
+    "description": "用户提供岗位转录：图、算子、分布式与通信协同。"
   }
 ]

@@ -202,28 +202,30 @@
     },
     {
       "id": "interviews",
-      "title": "公司与面经",
+      "title": "岗位与面试题",
       "number": "07",
-      "description": "按原始来源、招聘类型和时间理解公司考察，区分事实与准备扩展。",
+      "description": "两个完整 HTML：先看岗位要求，再按公司与每一场面试逐题准备。重复题共用解答，保留场次差异。",
       "groups": [
         {
-          "id": "field-reports",
-          "title": "面经阅读与公司专题",
+          "id": "jobs",
+          "title": "岗位介绍",
           "chapters": [
-            "interview-evidence-map",
-            "interview-bytedance",
-            "interview-chipmakers",
-            "interview-internet"
+            "interview-jobs"
           ]
         },
         {
-          "id": "takehomes",
-          "title": "官方开放作业",
+          "id": "sessions",
+          "title": "公司面试题",
           "chapters": [
-            "interview-official-takehomes"
+            "interview-sessions"
           ]
         }
-      ]
+      ],
+      "interviewCollection": true,
+      "legacyGroups": {
+        "field-reports": "sessions",
+        "takehomes": "sessions"
+      }
     },
     {
       "id": "coding",

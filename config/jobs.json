@@ -15,7 +15,7 @@
     "checked": "2026-10-25",
     "published": "2026-06-03",
     "url": "https://jobs.bytedance.com/experienced/position/7647081477118085429/detail",
-    "verification": "2026-10-25 直接读取官方职位接口，发布状态为在线。状态只代表核验时页面发布情况，投递以官网为准。",
+    "verification": "2026-10-25 直接读取官方职位接口，发布状态为在线。状态只代表核验时页面发布情况，投递以官网为准。 本次未刷新在招状态，复用此前核验记录。",
     "summary": "围绕真实 LLM 训推负载评估异构加速卡，把硬件性能、软件栈与业务成本连起来。",
     "responsibilities": [
       "建立硬件仿真、性能评估与业务 ROI 体系，为加速卡引入提供依据。",
@@ -71,7 +71,7 @@
       "serving-runtime"
     ],
     "jobCode": "A54228",
-    "sourceType": "官方 API 实时核验",
+    "sourceType": "官方 API 2026-10-25 核验快照",
     "evidenceUrls": [
       "https://jobs.bytedance.com/api/v1/job/posts/7647081477118085429/"
     ]
@@ -95,9 +95,9 @@
     "checked": "2026-10-25",
     "published": "2026-10-09",
     "url": "https://jobs.bytedance.com/experienced/position/7694589927579699461/detail",
-    "verification": "2026-10-25 直接读取官方职位接口，channel_online_status=1；记录核验时发布状态，申请条件与招聘进度以官网为准。",
+    "verification": "2026-10-25 直接读取官方职位接口，channel_online_status=1；记录核验时发布状态，申请条件与招聘进度以官网为准。 本次未刷新在招状态，复用此前核验记录。",
     "jobCode": "A62538B",
-    "sourceType": "官方 API 实时核验",
+    "sourceType": "官方 API 2026-10-25 核验快照",
     "evidenceUrls": [
       "https://jobs.bytedance.com/api/v1/job/posts/7694589927579699461/"
     ],
@@ -175,9 +175,9 @@
     "checked": "2026-10-25",
     "published": "2025-01-09",
     "url": "https://jobs.bytedance.com/experienced/position/7457906937700796690/detail",
-    "verification": "2026-10-25 直接读取官方职位接口，channel_online_status=1；记录核验时发布状态，申请条件与招聘进度以官网为准。",
+    "verification": "2026-10-25 直接读取官方职位接口，channel_online_status=1；记录核验时发布状态，申请条件与招聘进度以官网为准。 本次未刷新在招状态，复用此前核验记录。",
     "jobCode": "A100321A",
-    "sourceType": "官方 API 实时核验",
+    "sourceType": "官方 API 2026-10-25 核验快照",
     "evidenceUrls": [
       "https://jobs.bytedance.com/api/v1/job/posts/7457906937700796690/"
     ],
@@ -251,9 +251,9 @@
     "checked": "2026-10-25",
     "published": "2021-02-05",
     "url": "https://jobs.bytedance.com/experienced/position/6925712424150747400/detail",
-    "verification": "2026-10-25 直接读取官方职位接口，channel_online_status=1；记录核验时发布状态，申请条件与招聘进度以官网为准。",
+    "verification": "2026-10-25 直接读取官方职位接口，channel_online_status=1；记录核验时发布状态，申请条件与招聘进度以官网为准。 本次未刷新在招状态，复用此前核验记录。",
     "jobCode": "JU1RP",
-    "sourceType": "官方 API 实时核验",
+    "sourceType": "官方 API 2026-10-25 核验快照",
     "evidenceUrls": [
       "https://jobs.bytedance.com/api/v1/job/posts/6925712424150747400/"
     ],
@@ -350,7 +350,7 @@
       "推理"
     ],
     "jobCode": "A122003",
-    "sourceType": "官方 API 实时核验",
+    "sourceType": "官方 API 2026-10-25 核验快照",
     "evidenceUrls": [
       "https://jobs.bytedance.com/api/v1/job/posts/7503827063050635538/"
     ],
@@ -363,7 +363,7 @@
     "direction": "编译器与DSL",
     "status": "listed",
     "published": "2025-05-13",
-    "verification": "本轮直接读取官方 API，channel_online_status=1。该字段反映核验时发布状态，投递前仍以官网为准。",
+    "verification": "2026-10-25 核验直接读取官方 API，channel_online_status=1。该字段反映核验时发布状态，投递前仍以官网为准。 本次未刷新在招状态，复用此前核验记录。",
     "summary": "直接做 AI 编译器、全系统图优化与 CPU/GPU 算子。",
     "relevance": {
       "summary": "直接覆盖编译器设计、计算图优化与算子性能。",
@@ -376,7 +376,7 @@
     },
     "chapters": [
       "compiler-foundations",
-      "interview-bytedance"
+      "interview-sessions"
     ]
   },
   {
@@ -416,7 +416,7 @@
       "FPGA"
     ],
     "jobCode": "A245845",
-    "sourceType": "官方 API 实时核验的历史岗位",
+    "sourceType": "官方 API 2026-10-25 核验快照的历史岗位",
     "evidenceUrls": [
       "https://jobs.bytedance.com/api/v1/job/posts/7404679843633334579/"
     ],
@@ -429,7 +429,7 @@
     "direction": "编译器与DSL",
     "status": "closed",
     "published": "2024-08-19",
-    "verification": "本轮直接读取官方 API，channel_online_status=0；仅保留为历史岗位要求参考。",
+    "verification": "2026-10-25 核验直接读取官方 API，channel_online_status=0；仅保留为历史岗位要求参考。 本次未刷新在招状态，复用此前核验记录。",
     "summary": "自研 AI 编译器的模型解析、图融合、量化和硬件适配；已下线，仅作历史参考。",
     "relevance": {
       "summary": "直接覆盖框架前端、图优化、量化编译和硬件适配；注意 LLVM/MLIR 等在原 JD 中列为加分项。",
@@ -489,7 +489,7 @@
     "direction": "算子与性能优化",
     "status": "unverified",
     "published": "",
-    "verification": "本轮读取到官方 Workday 页面搜索快照；直接页面未返回正文，官方 CXS API 为 HTTP 403，无法确认当前是否接受申请。",
+    "verification": "2026-10-25 核验读取到官方 Workday 页面搜索快照；直接页面未返回正文，官方 CXS API 为 HTTP 403，无法确认当前是否接受申请。 本次未刷新在招状态，复用此前核验记录。",
     "summary": "标题是性能工程，职责覆盖编译器、DSL、高性能算子和架构适配。",
     "relevance": {
       "summary": "标题偏性能工程，职责明确包含编译器、DSL、算子与芯片适配，适合纳入编译相邻岗位。",
@@ -558,7 +558,7 @@
     "direction": "编译器与DSL",
     "status": "unverified",
     "published": "",
-    "verification": "本轮官方 Workday 搜索快照列出上海与北京；直接页面未返回正文，CXS API 为 HTTP 403，无法确认当前申请状态。",
+    "verification": "2026-10-25 核验官方 Workday 搜索快照列出上海与北京；直接页面未返回正文，CXS API 为 HTTP 403，无法确认当前申请状态。 本次未刷新在招状态，复用此前核验记录。",
     "summary": "面向 tile-aware GPU 编程的 DSL 与核心编译器。",
     "relevance": {
       "summary": "以 tile-aware DSL 和 GPU 核心编译器为主，兼顾硬件演进、Kernel 和分布式 AI 性能。",
@@ -626,7 +626,7 @@
     "direction": "编译器与DSL",
     "status": "unverified",
     "published": "",
-    "verification": "本轮 Workday 未取得正文且 CXS API 为 HTTP 403；对应 JR 编号的 NVIDIA LinkedIn 搜索快照写明不再接受申请，打开后跳转 expired_jd_redirect。只能确认该 LinkedIn 发布已过期，不能据此推断所有官方渠道状态。",
+    "verification": "2026-10-25 核验 Workday 未取得正文且 CXS API 为 HTTP 403；对应 JR 编号的 NVIDIA LinkedIn 搜索快照写明不再接受申请，打开后跳转 expired_jd_redirect。只能确认该 LinkedIn 发布已过期，不能据此推断所有官方渠道状态。 本次未刷新在招状态，复用此前核验记录。",
     "summary": "基于 MLIR 的推理图表示、优化与 Kernel 生成；美国历史岗位参考。",
     "relevance": {
       "summary": "覆盖图层 IR/Dialect 到 Kernel 生成的完整推理编译器链路；美国岗位，可作为技能对照。",
@@ -641,6 +641,264 @@
     "chapters": [
       "compiler-foundations",
       "compiler-lowering"
+    ]
+  },
+  {
+    "id": "feishu-bytedance-compiler-framework",
+    "title": "硬件加速编译器框架研发工程师（岗位转录）",
+    "company": "字节跳动",
+    "locations": [],
+    "employment": "岗位转录；招聘类型未核定",
+    "experience": "转录未注明年限或学历门槛",
+    "sourceId": "FJ01",
+    "origin": "user",
+    "direction": "编译器与DSL",
+    "status": "unverified",
+    "checked": "2026-10-26",
+    "published": "",
+    "url": "https://sr568gal5j.feishu.cn/docx/MvOidHKLdoJUkjxEFdxchgUdnXD#NeaNdaRwloMvYWxX7cXciJBsnxb",
+    "verification": "2026-10-26 读取用户提供文档对应章节，仅核对转录内容；发布日、完整原始招聘链接和当前在招状态均未确认。文档标为 BOSS 搜索来源；与已有 J04 官方岗位的名称和职责相近，可交叉对照，但转录未带招聘编号，不能据此断言属于同一招聘发布。",
+    "summary": "负责整体编译框架、指令与并行调度、存储分配、模型 Auto-tuning 和 Runtime；以跨层接口和可验证交付为准备重点。",
+    "responsibilities": [
+      "开发整体编译框架。",
+      "开发指令调度、存储分配和并行调度等优化。",
+      "开发和优化模型性能 Auto-tuning。",
+      "开发 Runtime 模块。"
+    ],
+    "requirements": [
+      "深入理解深度学习框架及软件栈。",
+      "熟练使用 C/C++、汇编、Python 等编程语言。",
+      "具备主动学习、快速解决问题与自驱能力。"
+    ],
+    "preferred": [
+      "MLIR 开发经验；多线程开发的产品经验。",
+      "计算机体系结构与并行计算知识。",
+      "编译优化及 TVM/XLA 等相关开发经验。",
+      "深入理解 TensorFlow/PyTorch/MXNet 等框架。",
+      "深入 LLVM/C++ 开发经验；AI 加速硬件量化工具经验。",
+      "GPU、FPGA 或 AI 芯片的开发与评测经验。"
+    ],
+    "keywords": [
+      "MLIR",
+      "LLVM",
+      "调度",
+      "存储分配",
+      "Runtime",
+      "Auto-tuning",
+      "C++",
+      "汇编",
+      "Python"
+    ],
+    "relevance": {
+      "summary": "负责整体编译框架、指令与并行调度、存储分配、模型 Auto-tuning 和 Runtime；以跨层接口和可验证交付为准备重点。",
+      "evidence": [
+        "用一段 IR 解释表示、资源分配、异步同步和运行时 ABI 的连续合同。",
+        "展示调度或存储优化的合法性反例、资源预算与同条件性能证据。"
+      ],
+      "prepare": [
+        "补齐 pass/interface/analysis/conversion 基础设施实际开发范围。",
+        "准备框架图捕获、动态 shape、缓存、并发与 runtime 生命周期案例。"
+      ]
+    },
+    "chapters": [
+      "interview-jobs"
+    ],
+    "sourceType": "用户提供的岗位转录，非官方当前招聘核验",
+    "evidenceUrls": [
+      "https://sr568gal5j.feishu.cn/docx/MvOidHKLdoJUkjxEFdxchgUdnXD#NeaNdaRwloMvYWxX7cXciJBsnxb"
+    ]
+  },
+  {
+    "id": "feishu-bytedance-kernel-development",
+    "title": "硬件加速算子实现研发工程师（岗位转录）",
+    "company": "字节跳动",
+    "locations": [
+      "北京",
+      "上海",
+      "杭州",
+      "深圳",
+      "西安"
+    ],
+    "employment": "岗位转录；招聘类型未核定",
+    "experience": "转录未注明年限或学历门槛",
+    "sourceId": "FJ02",
+    "origin": "user",
+    "direction": "算子与性能优化",
+    "status": "unverified",
+    "checked": "2026-10-26",
+    "published": "",
+    "url": "https://sr568gal5j.feishu.cn/docx/MvOidHKLdoJUkjxEFdxchgUdnXD#JauMdkzOzoqZHzx4m8wcSglDnId",
+    "verification": "2026-10-26 读取用户提供文档对应章节，仅核对转录内容；发布日、完整原始招聘链接和当前在招状态均未确认。地点仅按转录列示，未确认各城市当前职位情况。",
+    "summary": "负责模型算子分析、后端实现、自动调优及算子/模型编译精度验证。",
+    "responsibilities": [
+      "分析深度学习模型中的算子。",
+      "开发后端算子。",
+      "开展算子性能 Auto-tuning。",
+      "验证算子与模型编译精度。"
+    ],
+    "requirements": [
+      "熟悉视觉、语音、NLP 或推荐中一种以上常用模型。",
+      "熟悉 TensorFlow/PyTorch 等框架。",
+      "深入理解和分析 ONNX 等常见算子的底层计算过程。",
+      "熟练使用 C/C++、Python 等编程语言。"
+    ],
+    "preferred": [
+      "熟悉数据中心深度学习业务，具有模型硬件加速与精度评估经验。",
+      "熟悉处理器体系结构或 AI 加速硬件。"
+    ],
+    "keywords": [
+      "算子",
+      "GEMM",
+      "Auto-tuning",
+      "精度验证",
+      "ONNX",
+      "PyTorch",
+      "C++"
+    ],
+    "relevance": {
+      "summary": "负责模型算子分析、后端实现、自动调优及算子/模型编译精度验证。",
+      "evidence": [
+        "展示主力算子的 shape/dtype/layout、数值与 ABI 合同。",
+        "用固定输入与版本解释 tile、访存、寄存器和流水各项优化的收益与代价。"
+      ],
+      "prepare": [
+        "补齐非连续输入、广播、尾部、极值和多 dtype 的支持矩阵。",
+        "用模型集成证明局部 kernel 收益，分清数值、性能和端到端验收。"
+      ]
+    },
+    "chapters": [
+      "interview-jobs"
+    ],
+    "sourceType": "用户提供的岗位转录，非官方当前招聘核验",
+    "evidenceUrls": [
+      "https://sr568gal5j.feishu.cn/docx/MvOidHKLdoJUkjxEFdxchgUdnXD#JauMdkzOzoqZHzx4m8wcSglDnId"
+    ]
+  },
+  {
+    "id": "feishu-aijie-ai-compiler",
+    "title": "AI 编译器工程师（岗位转录）",
+    "company": "艾捷科芯",
+    "locations": [],
+    "employment": "岗位转录；招聘类型未核定",
+    "experience": "转录未注明年限或学历门槛",
+    "sourceId": "FJ03",
+    "origin": "user",
+    "direction": "编译器与DSL",
+    "status": "unverified",
+    "checked": "2026-10-26",
+    "published": "",
+    "url": "https://sr568gal5j.feishu.cn/docx/MvOidHKLdoJUkjxEFdxchgUdnXD#Wm16dhfloo9PR7xieUUcQtn0nxd",
+    "verification": "2026-10-26 读取用户提供文档对应章节，仅核对转录内容；发布日、完整原始招聘链接和当前在招状态均未确认。文档标为 BOSS 搜索来源；芯片架构描述仅为转录岗位背景，未独立核实硬件细节。",
+    "summary": "面向大带宽 GPU 架构，覆盖分布式编译、数据流/图/算子编译、量化与计算通信协同。",
+    "responsibilities": [
+      "研发面向大带宽 GPU 架构的 AI 编译框架。",
+      "研究分布式编译、数据流编译、图编译、算子编译和量化优化。",
+      "进行计算与通信融合，支持主流大模型运行。"
+    ],
+    "requirements": [
+      "熟练掌握 C/C++/Python，具有扎实编程基础。",
+      "熟悉 GPU 算子编程与优化，如 CUDA、CUTLASS、CuTe、Triton、TileLang 等。",
+      "熟悉一种或多种 AI 编译技术/框架，如 torch.compile、Triton、TileLang、MLIR、TVM、XLA、PyTorch、TensorFlow、ONNX。"
+    ],
+    "preferred": [
+      "熟悉主流模型架构及相关算子优化。",
+      "熟悉 NCCL 或类似通信编程。",
+      "超算/并行编程经验，如分布式矩阵乘法、MPI。",
+      "分布式与异步编程经验。",
+      "其他 AI 芯片的算子开发、模型优化、低精度量化或部署经验。"
+    ],
+    "keywords": [
+      "分布式编译",
+      "GPU",
+      "NCCL",
+      "MPI",
+      "量化",
+      "MLIR",
+      "Triton",
+      "CUDA",
+      "异步"
+    ],
+    "relevance": {
+      "summary": "面向大带宽 GPU 架构，覆盖分布式编译、数据流/图/算子编译、量化与计算通信协同。",
+      "evidence": [
+        "用每 rank shape 与数据所有权推导 collective 和 layout。",
+        "给出通信与计算重叠的依赖、buffer 生命周期和性能时间线。"
+      ],
+      "prepare": [
+        "补齐 NCCL/MPI 的 stream、调用顺序、完成语义与故障定位。",
+        "区分图级全局收益和本地最快 kernel，计入转换、通信与量化元数据。"
+      ]
+    },
+    "chapters": [
+      "interview-jobs"
+    ],
+    "sourceType": "用户提供的岗位转录，非官方当前招聘核验",
+    "evidenceUrls": [
+      "https://sr568gal5j.feishu.cn/docx/MvOidHKLdoJUkjxEFdxchgUdnXD#Wm16dhfloo9PR7xieUUcQtn0nxd"
+    ]
+  },
+  {
+    "id": "feishu-suiyuan-kernel-development",
+    "title": "算子开发工程师（岗位转录）",
+    "company": "燧原科技",
+    "locations": [],
+    "employment": "岗位转录；招聘类型未核定",
+    "experience": "转录未注明年限或学历门槛",
+    "sourceId": "FJ04",
+    "origin": "user",
+    "direction": "算子与性能优化",
+    "status": "unverified",
+    "checked": "2026-10-26",
+    "published": "",
+    "url": "https://sr568gal5j.feishu.cn/docx/MvOidHKLdoJUkjxEFdxchgUdnXD#QKe7disQRoWdjgxCXjdc5AU4n5e",
+    "verification": "2026-10-26 读取用户提供文档对应章节，仅核对转录内容；发布日、完整原始招聘链接和当前在招状态均未确认。",
+    "summary": "在自研芯片编程模型上实现和优化算子，覆盖形状、数据类型和融合场景，重视调试与语义泛化。",
+    "responsibilities": [
+      "基于燧原编程模型，在自研 AI 芯片上实现算子。",
+      "在功能上支持完整算子语义、形状与数据类型。",
+      "优化芯片性能与通用算子融合场景。"
+    ],
+    "requirements": [
+      "扎实的 C/C++/Python 编程能力。",
+      "良好算法基础，能分析时间和空间复杂度。",
+      "能高效定位软件错误范围。",
+      "理解深度学习理论，熟悉 TensorFlow/Caffe/PyTorch/MXNet/Paddle 等至少一种框架。",
+      "具备快速学习、协作和沟通能力。"
+    ],
+    "preferred": [
+      "CPU/GPU/DSP 底层函数库开发与优化经验。",
+      "汇编优化经验。",
+      "CUDA、RDMA、TensorRT、OpenCL 或 MPI/HPC 相关经验。",
+      "目标识别、目标检测、机器视觉或 NLP 的工程经验。"
+    ],
+    "keywords": [
+      "算子",
+      "广播",
+      "动态shape",
+      "dtype",
+      "调试",
+      "融合",
+      "C++",
+      "CUDA",
+      "HPC"
+    ],
+    "relevance": {
+      "summary": "在自研芯片编程模型上实现和优化算子，覆盖形状、数据类型和融合场景，重视调试与语义泛化。",
+      "evidence": [
+        "展示连续快路径、stride 通用路径与不支持条件诊断的统一合同。",
+        "用真实失败案例说明从模型差异缩小到 kernel/生成代码的过程。"
+      ],
+      "prepare": [
+        "准备 shape/dtype/广播/尾部/alias 的支持与测试矩阵。",
+        "按业务 shape 分类解释性能泛化，区分功能失败和性能回归。"
+      ]
+    },
+    "chapters": [
+      "interview-jobs"
+    ],
+    "sourceType": "用户提供的岗位转录，非官方当前招聘核验",
+    "evidenceUrls": [
+      "https://sr568gal5j.feishu.cn/docx/MvOidHKLdoJUkjxEFdxchgUdnXD#QKe7disQRoWdjgxCXjdc5AU4n5e"
     ]
   }
 ]

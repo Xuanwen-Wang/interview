@@ -4,13 +4,13 @@
 
 **在线阅读：[xuanwen-wang.github.io/interview](https://xuanwen-wang.github.io/interview/)**
 
-**[岗位收藏](https://xuanwen-wang.github.io/interview/jobs.html)**：集中查看 9 个编译器、算子性能与异构硬件岗位，按公司、方向、状态和要求关键词筛选；直接读职责、要求和加分项，跳转官网或准备章节。2026-10-25 复核，区分官方可见、已下线与待复核。关注标记仅保存在当前浏览器。
+**[岗位收藏](https://xuanwen-wang.github.io/interview/jobs.html)**：集中查看 13 份编译器、算子性能与异构硬件岗位，按公司、方向、状态和要求关键词筛选；直接读职责、要求和加分项，跳转官网或准备章节。九份官方记录沿用 2026-10-25 核验，新增四份用户岗位转录；区分官方可见、已下线与待复核。关注标记仅保存在当前浏览器。
 
 围绕“模型语义 → 算子 → 硬件映射 → 编译分析与变换 → 指令与验证”组织。内容面向已有项目经验、希望重建算法基础并准备资深 AI 编译器面试的工程师。
 
 ## 内容与导航
 
-当前使用 **8 个知识域 → 18 个专题 → 28 章** 的目录结构。侧边栏只展开当前专题；全站目录支持主题、标题/标签与阅读状态筛选。已有章节链接、笔记和学习记录保留。
+当前使用 **8 个知识域 → 18 个专题 → 25 章** 的目录结构。侧边栏只展开当前专题；全站目录支持主题、标题/标签与阅读状态筛选。已有章节链接、笔记和学习记录保留。
 
 | 知识域 | 内容 |
 | --- | --- |
@@ -20,11 +20,14 @@
 | Triton · MLIR · LLVM | AST/TTIR/布局、Op/Region/Dialect、PassManager与分析失效、Rewrite/Conversion、LLVM中后端 |
 | 518硬件与后端 | Lowering 架构长文与独立同步篇；从硬件约束解释描述符、边界、布局、控制流、VP 映射和代码生成，PE/VP 硬件长文作为配套 |
 | 性能与推理系统 | Nsight / Profiler、算子画像、Roofline、通信分析、模型负载、并发与容量、服务与运行时 |
-| 公司与面经 | 12个公司或公司组、28条来源，区分官方JD、个人面经、官方作业与第三方材料 |
+| 岗位与面试题 | 两份完整 HTML：13 份岗位记录；43 个场次或材料组、328 个问题项；保留题源、重复题跳转与缺失题说明 |
 | Coding实作 | 算法、图/数据流、kernel、玩具pass；原创Python/C++参考与测试 |
 
-当前 **409 小节、253 道追问、141 张正文 SVG**。附全文搜索、图示放大、3个通用交互实验、2个PE交互演示、1个MoE拓扑/容量交互、4个性能分析实验区和2个decode shape/字节交互、术语表、阅读进度及本地笔记导入导出。SVG、样式和内容均内嵌；网页不依赖CDN、外部字体或第三方脚本。
+当前 **434 小节、259 道章节追问（另有 328 个场次题目项）、138 张正文 SVG**。附全文搜索、图示放大、3个通用交互实验、2个PE交互演示、1个MoE拓扑/容量交互、4个性能分析实验区和2个decode shape/字节交互、术语表、阅读进度及本地笔记导入导出。SVG、样式和内容均内嵌；网页不依赖CDN、外部字体或第三方脚本。
 
+- [岗位介绍完整长文](https://xuanwen-wang.github.io/interview/interview-jobs.html)：四份岗位转录与九条已有岗位，按职责、能力差距和项目证据逐一解释。
+- [公司面试题完整长文](https://xuanwen-wang.github.io/interview/interview-questions.html)：按公司与每场面试展开；含新材料 230 项、此前来源 50 项、原创准备 48 项。回答覆盖机制、约束、取舍、验证与追问；原创与缺失题面分别标明，不冒充真实原题。
+- [面试页合并审查](evidence/review-interview-consolidation.md)：覆盖清单、题源边界、旧链接和记录迁移、浏览器验证。
 - [性能分析完整长文](https://xuanwen-wang.github.io/interview/performance.html)：57节、27道追问，先讲TPS、step time、请求与看板口径，再深入H200、Nsight、Roofline、Zeus Viewer、算子画像、通信与模型负载；含4个交互教学实验区，可独立离线阅读。
 - [性能分析审查与验收](evidence/review-performance-analysis.md)：来源、公式口径、教学边界与浏览器验证。
 - [Attention 全篇重写与动画](evidence/review-attention-teaching.md)：RoPE逐维计算、Flash/Flash-Decoding逐块与分片合并、MLA/DSA/Linear/Delta/KDA沿问题背景、节省和代价展开；7类可播放数据流，12道追问。
