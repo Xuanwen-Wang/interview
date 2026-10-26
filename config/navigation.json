@@ -191,6 +191,13 @@
           ]
         },
         {
+          "id": "cyclesim",
+          "title": "CycleSim：时序建模与 RTL 对齐",
+          "chapters": [
+            "cyclesim-engineering"
+          ]
+        },
+        {
           "id": "serving",
           "title": "性能模型与部署",
           "chapters": [

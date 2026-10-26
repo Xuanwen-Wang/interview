@@ -1,0 +1,50 @@
+{
+  "collected": "2026-10-26",
+  "simulator": {
+    "repository": "Zeus3Simulator",
+    "head": "d7ff3de469f8e4bfe571f4c86e127e6446ed56b0",
+    "dirty": [
+      "PROGRESS.md"
+    ],
+    "dirty_file_sha256": "c551beacb6caa534f0f6a0c93b68c8103b171c47afefd6d6fa1d5ecfbe71ee76"
+  },
+  "rtl": {
+    "repository": "RTL source drop",
+    "revision": "unknown; no Git metadata",
+    "files": [
+      {
+        "path": "zeus518/pe_ctrl/pe_ctrl_logic.v",
+        "sha256": "f52913bf2bbd4cba3b85974cbe67fedd6874466f2dc42e0bd5deafe94db9eb7e"
+      },
+      {
+        "path": "zeus518/pe_ctrl/pec_pipelines.v",
+        "sha256": "3bf715bc9c80ed82cec6c75bfad94a9ad77c72f67bbad29414f445282973e6c2"
+      },
+      {
+        "path": "zeus518/pegroup/pe518_al1.v",
+        "sha256": "5f35c60924b10919c20575c72e3c557b525835133e12056a42f642010ccfa887"
+      },
+      {
+        "path": "zeus518/pegroup/pe518_alu_ctrl.v",
+        "sha256": "67efd29a15325f3266f43cd2365a8a2f1db148927870bb3b0327c169cd49dc4b"
+      },
+      {
+        "path": "zeus518/pegroup/pe518_ol1_ctrl.v",
+        "sha256": "76972f03bc8d29f44e9257e7de402a4c618c13c7abbed65ad8447e15555df11e"
+      },
+      {
+        "path": "zeus518/pegroup/pegroup518_dt.v",
+        "sha256": "e7ce490d584a77c69226ff4cf3bd152a218ed6e2183678fc0617c617e0b34cfb"
+      },
+      {
+        "path": "zeus518/wl1/wl1_518_uscale_ctrl.v",
+        "sha256": "a903434d465fdb84cb81468af77fd36389607778e64dce15f2d49a844603956c"
+      },
+      {
+        "path": "zeus518/wl1/wl1_518_rd_buffer.v",
+        "sha256": "65feb4f1af5f50030240d49941d09d9fc48ee314dc2acf9d2379e1feafb54bf1"
+      }
+    ]
+  },
+  "validation": "Read-only current-source audit; no build, simulation or RTL experiment performed."
+}
