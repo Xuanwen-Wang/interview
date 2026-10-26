@@ -1,0 +1,11 @@
+# Original reduced post-RA fixture. The destination and operand 1 must match.
+---
+name: tied_add
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $rdi, $rsi
+    $rax = COPY $rdi
+    $rax = ADD64rr $rax, $rsi, implicit-def dead $eflags
+    RET 0, $rax
+...

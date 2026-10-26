@@ -166,6 +166,8 @@ Attention 的 N 包含本步新 token，按等长请求、每步每请求一个 
 
 `compiler` 主题只显示两篇连续长文，由 `readingCollection: true` 展示两卷入口和模块目录；两卷分别生成 `compiler-foundations.html` 与 `llvm-backend.html`。基础组件正文在 `content/50-compiler-internals.json`，后端正文在 `content/51-llvm-backend.json`。普通主题保留原来的专题目录。
 
+编译器机制的正文必须能帮助读者做出实现决策：用具体输入说明目标变换与合法性，沿实现展开关键分支、数据结构和维护的不变量，再对照输出解释成功或失败。源码路径、术语表、章节数量与几条合法汇编不能作为深度验收。核心机制至少给出一个边界或错误做法，并说明 verifier、语义 oracle、静态代码观察分别能发现什么；不能把 verifier 通过写成等价性证明。可运行的原创 Pass、IR、MIR 和驱动保存在 `practice/llvm/`，正文中的命令、关键输出与实验脚本同步维护。
+
 后端按“总图 → 目标与 ABI → 指令选择 → Machine IR 与调度 → RA → 栈帧与输出 → 调试”分层。扩充 RA 时，在 `backend-stage-ra` 增加独立 section，说明输入、约束、核心机制、输出不变量、源码和最小 MIR；同步把 section ID 加入该 stage。已有 `ra-liveness`、`ra-greedy`、`ra-spill` 不改名。新增大主题可增加 stage，但仍保留这一篇完整 HTML，不把每个 Pass 再变成首页卡片。
 
 图必须区分顶层 CodeGen Pass 与 SelectionDAG 内部的 combine/legalize/select。目标与版本差异显式标明，不能把某次 x86 pipeline 宣称为全部后端的固定列表。共享源码没有可用 Git 元数据时，记录文件 SHA256，不编造 commit。原创输入保存在 `practice/llvm/`，核对记录见 `evidence/compiler-guides-sources.md`。旧七章的深链接和笔记通过 `legacyChapters` 迁移，不把旧章的已读状态当成新长文完成状态。

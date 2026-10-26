@@ -175,7 +175,7 @@ for c in rows:
 html = (ROOT / 'dist/index.html').read_text(encoding='utf-8')
 assert 'const CHAPTERS =' in html
 assert 'const JOBS =' in html
-assert 'INLINE_' not in html
+assert not re.search(r'/\*\s*INLINE_\w+\s*\*/', html), 'Unexpanded inline template marker'
 assert not re.search(r'<script[^>]+src=', html), 'Standalone HTML must not need script downloads'
 assert not re.search(r'https?://[^\s"\']+\.(?:woff|ttf|css)', html), 'External asset dependency'
 assert not re.search(r'(?:ghp_|github_pat_|sk-proj-)[A-Za-z0-9_]{15,}', html)

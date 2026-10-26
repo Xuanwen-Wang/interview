@@ -1,5 +1,13 @@
 # LLVM / MLIR 基础与后端教程：源码证据
 
+本文件保留最初的共享快照指纹和简单编译实验，供旧链接追溯。正文已改为围绕实际开发与失败案例展开；当前重写的主要证据如下，不能用下方历史 `scaled-add` 实验代替：
+
+- [基础组件工程实验](compiler-foundations-engineering.md)：实际编译两个原创 Pass 插件，分析失效、poison、greedy rewrite 与 Dialect Conversion。
+- [SelectionDAG 工程实验](backend-isel-engineering.md)：ctlz 位宽和 feature 对照、matcher、立即数边界、60,314 次独立语义检查以及 GlobalISel 失败范围。
+- [机器后端工程实验](backend-machine-engineering.md)：跨调用活跃值、RA / spill / PEI、最小 MIR 正负例和 4,099 组原生执行。
+- [driver 配置实验](compiler-driver-engineering.md)：命令行和函数 feature 属性的三组对照。
+- [完整复跑入口](../practice/llvm/README.md)：输入、插件、驱动和各验证脚本。
+
 <a id="snapshot"></a>
 ## 版本和证据边界
 
@@ -7,7 +15,7 @@
 - 源码：共享 `llvm-project` 快照；`cmake/Modules/LLVMVersion.cmake` 为 22.0.0，工具报告 `22.0.0git`，Optimized build with assertions。
 - 共享目录 `.git` 指向已不存在的外部 submodule 元数据；`VCSRevision.h` 未定义 LLVM_REVISION 和 LLVM_REPOSITORY。因此 **无法确认对应 commit**，不把它冒充 release/22.x、上游 main 或某个已知提交。
 - 以下 SHA256 固定本次读到的关键文件。公共源码可在 [llvm/llvm-project](https://github.com/llvm/llvm-project) 按相对路径导航，但 main 的内容不能自动视为与共享快照一致。
-- 实际编译固定 x86_64-unknown-linux-gnu、mcpu=x86-64、O2。GlobalISel、玩具 RA 和 DAG 图属于源码说明或教学推导，没有执行其他目标，没有芯片性能或端到端结论。
+- 下方历史实验固定 x86_64-unknown-linux-gnu、mcpu=x86-64、O2，仅编译与检查。当轮没有执行函数；当前重写新增的原生语义执行、真实 spill 轨迹和 GlobalISel 负例见上述独立记录。所有图均为结构示意，没有芯片性能或端到端结论。
 
 ## 关键源码文件
 
@@ -60,7 +68,7 @@
 - LLVM New PM 的 PreservedAnalyses 与 MLIR 的 markAnalysesPreserved 是两套 API，不混写。
 
 <a id="runs"></a>
-## 本机运行
+## 历史简单编译实验（保留原始记录）
 
 原创输入位于 `practice/llvm/`。所有命令返回 0，执行目录为独立临时工作目录；公开材料不记录内部主机、个人目录或浏览器状态。
 
