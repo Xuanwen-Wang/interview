@@ -1,0 +1,526 @@
+[
+  {
+    "id": "compiler-sync",
+    "title": "518 自动同步：从资源依赖到可执行的 mailbox 协议",
+    "part": "518 硬件与编译器",
+    "order": 34,
+    "subtitle": "以一条 tile 链讲清 snapshot、物理别名、无 tag FIFO、循环世代与验证边界",
+    "minutes": 100,
+    "level": "深入",
+    "tags": [
+      "InjectSync",
+      "Staircase",
+      "Mailbox",
+      "RAW/WAR/WAW",
+      "CFG",
+      "Compiler"
+    ],
+    "lead": "顺序 IR 不会替异步硬件等待。沿着 LD→PE→VP→ST，从最简单的完成通知出发，逐步加入地址复用、无标签通道、分支与循环，最后回到当前源码的 planner、verifier 和 CodeGen 合同。",
+    "portableReading": {
+      "file": "sync.html",
+      "download": "518-sync.html",
+      "label": "保存完整同步设计 HTML ↓"
+    },
+    "readingLabel": "沿一条依赖逐步展开",
+    "readingStageLabel": "推导阶段",
+    "sections": [
+      {
+        "id": "why-sync",
+        "title": "先看一个会读错的程序：顺序写在 IR 里，完成顺序在哪里？",
+        "html": "<p>假设一个 tile 已分配在片上 SRAM，LD 单元把输入搬进来，PE 做矩阵计算，VP 做逐元素处理，ST 把结果写回。LD、PE、VP、ST 是独立的异步执行单元；CT 负责按程序顺序取指、配置和分发。这里不需要先记所有指令，只记一件事：<strong>前端发出 LD 后可以继续发出 PE，LD 的数据却可能尚未到齐。</strong></p><p>SSA 的 use-def 告诉编译器“谁使用谁产生的值”，并没有替目标硬件等待。如果底层 op 写的是一个 buffer，SSA 中流动的甚至只是地址或描述符；相同 SSA 句柄也不表示这个 buffer 在硬件上已经写完。同步下降要把“逻辑上应该先发生”翻译成“硬件执行时确实不能越过”的约束。</p><p>本文围绕一条 LD → PE → VP → ST 链，逐步加入地址复用、分支和循环。所有小地址、指令序号和 credit 数量都是明确的教学例子；不表示某个业务 kernel 的延迟、吞吐或实板结果。当前实现依据 triton_shared 的源码快照，历史设计另行标注。</p><p class=\"source-note\"><a href=\"#chapter/compiler-sync/source-sync-baseline\">[源码与证据]</a></p><details class=\"pe-deep-dive\" id=\"source-snapshot\"><summary>展开源码快照与证据摘要（随本 HTML 离线保存）</summary><p>以下不是原始源码副本，而是本次阅读所依据的版本、源码位置、结论及限制。完整的文件 hash 和核验记录另存于指南仓库的证据记录；阅读本章不依赖下载这些文件。</p><div id=\"source-sync-baseline\"><h3>本轮源码快照与证据层级</h3><p>采集于2026-10-26；triton_shared完整HEAD为82613bc2eb30feb9ef7f57aef20584df0ef9e28a。引用源码和主设计文件无相关未提交修改，仓库有其它无关改动。只读源码、文档和测试意图，没有重跑compiler/CycleSim/VCS/实板。小地址与整数指令序号为教学设定。独立证据记录保留文件hash；本摘要随HTML离线保存。</p></div><div id=\"source-sync-timing\"><h3>snapshot、issue与done的证据</h3><p>triton_shared同一快照：docs/vcs_debug/rtl-instruction-dependency-model.md §0–1（约23–202行）区分前端分发、snapshot、入队、issue、done和mail可见，§4（约616–674行）说明BR锁存。正文引用的是已维护的RTL证据合同与对应编译器行为；本轮未重新阅读全部RTL文件。</p></div><div id=\"source-sync-resources\"><h3>typed resource与PE输出语义</h3><p>同快照：include/triton-shared/Dialect/ZeusLow/Transforms/InjectSync/Resources.h:114、Model.h:149定义资源类型与InstructionEffect；lib/Dialect/ZeusLow/Transforms/InjectSync/EffectBuilder.cpp:578–590明确PE读srcA/srcB，L2 dst只写，VP按实际模式登记RMW；:1240附近将BR snapshot与数据read分开。旧“PE累加就读L2 dst”说法已不适用。</p></div><div id=\"source-sync-address\"><h3>物理共址的合同</h3><p>同快照：docs/ZeusLow_Inject_Sync_Pass.md:12–30明确中端地址共址与成本估计不授予no-mail proof。lib/Dialect/ZeusLow/Transforms/InjectSync/Resources.cpp与EffectBuilder.cpp依据最终物理区间、读写范围和alias分类建立依赖；lib/Dialect/ZeusHigh/Transforms/AddressAllocation.cpp决定物理放置。</p></div><div id=\"source-sync-unit\"><h3>单元内顺序的范围</h3><p>同快照：硬件依赖合同§5.4（约736–770行）只为同core PE重叠L2 WAW提供segment grant顺序，不能推广为RAW/WAR；§6–7分别定义LD/ST/LW与VP/DT合同。《无tag Mailbox上的同步综合：单调链模型》的“可擦除对角点”节区分SI有序退休与跨核数据是否真正到达。本核DAG不证明remote pairing正确。</p></div><div id=\"source-sync-mailbox\"><h3>为什么无tag必须整体规划</h3><p>同快照：docs/vcs_debug/rtl-instruction-dependency-model.md:268–326说明收发mask与每sender的counter。硬件没有tensor或producer tag；软件FIFO身份是验证抽象。单调链设计文档“硬件抽象”节把单元释放序作为明确前提，不能推广到所有NPU。</p></div><div id=\"source-sync-pipeline\"><h3>当前pipeline的真实入口</h3><p>同快照：tools/zeus-compiler/zeus-compiler.cpp:948–1013与tools/zeusv3-backend/zeusv3-backend.cpp:303–375。相关控制流、lane、BR配置优化和scalar divide调度在InjectSync前，CodeGen/RA在后；部分步骤受开关控制。同步分析因此知道最终需要保护的执行顺序，但仍需向后续RA传递合同。</p></div><div id=\"source-sync-architecture\"><h3>冻结模型、唯一物化与最终检查</h3><p>同快照：lib/Dialect/ZeusLow/Transforms/InjectSyncPass.cpp:80–425串起预检、模型构建、verifyDependencyModels、materializePhysicalMailboxSchedule和最终provenance/mailbox检查。同目录InjectSync/{ModelBuilder,Planning,Lowering,Verification,Ledger}.cpp分别承担这些职责；冻结模型不会在插mail后重新生成另一份模型自证。</p></div><div id=\"source-sync-staircase\"><h3>阶梯算法与已有测试意图</h3><p>同快照：《单调链模型》“单channel直线段”节定义(p,c)、后缀最小值与去重。实现为InjectSync/Staircase/StaircasePlanning.cpp；test/ZeusV3Backend/Unit/Transforms/inject_sync_staircase_linear.mlir含crossing_points_share_one_token和nested_points_keep_two_tokens。正文四点算例为同构教学推导，不是运行结果。</p></div><div id=\"source-sync-capacity\"><h3>容量预算与优化边界</h3><p>同快照：InjectSync/Staircase/StaircasePlanning.cpp:592–606说明counter上限63、outstanding预算62、组合recv保留槽位及受限粗化方向。设计“实现状态”节明确仅实现容量粗化，未接profile或一般重排；候选启发式不证明全局成本最优。</p></div><div id=\"source-sync-loop\"><h3>跨轮配对与首尾协议</h3><p>同快照：《单调链模型》“循环：周期阶梯”节推导每轮n个通知与k个seed的FIFO配对。inject_sync_staircase_loop.mlir:1–95含本轮RAW、跨轮WAR、retirement self-edge与seed/drain；两周期展开和loop equalization在StaircasePlanning.cpp。每个退出边按实际剩余势能处理，不能固定复制一个drain。</p></div><div id=\"source-sync-region\"><h3>区域树与默认支持边界</h3><p>同快照：RegionTree.h定义Seq/If/Loop，Staircase/RegionTree.cpp:440构建区域树；StaircasePlanning.cpp:900–921组织规划。Passes.td:131与InjectSync/Planning.cpp:28确认默认staircase、只接受staircase/legacy；driver帮助里的auto文字陈旧。inject_sync_staircase_unsupported.mlir明确拒绝特定非canonical side exit，默认不自动回退。</p></div><div id=\"source-sync-verification\"><h3>当前证明还缺什么</h3><p>同快照：StaircaseVerification.cpp检查obligation、时序站点、冻结schedule及确定性重建；StaircaseCreditPolicy.cpp:110–146的OPEN注释保留零轮absorption/epoch证明边界。inject_sync_staircase_placement_negatives.mlir:1–22专门记录部分loop-carried变异只能由重建漂移发现。设计文档C3依构造及容量，未独立实现一般事件图。源码中存在拒绝测试不是本轮重跑结果。</p></div><div id=\"source-sync-ra\"><h3>同步与寄存器分配的交接</h3><p>同快照：InjectSyncPass.cpp:108–158记录预测BR分配模式与单位数；lib/Target/ZeusV3/CodeGen/CodeGenPass.cpp:99–190核对实际RA的requested mode、initial units与lifetime reuse是否被前置同步建模。该合同有特定VP/BR范围，不能宣传为所有物理复用的通用证明。</p></div><div id=\"source-sync-history\"><h3>可核对的演进提交</h3><p>triton_shared历史：b7e0b7052（2026-03-13）四阶段；577c228fc（07-08）dependency ledger；42323bd9b（07-30）canonical model；5a4a253fc（09-10）staircase；4b01627fb（10-12）拓扑索引；b34bea097（10-13）并行收集/验证。日期采用 Git AuthorDate（作者日期），并非 CommitDate（提交者日期），不代表会议时间、个人贡献或本轮性能验证。</p></div><div id=\"source-sync-debug\"><h3>排障报告的阅读顺序</h3><p>同快照：docs/vcs_debug/inject-sync-debug-manual.md先区分planner，当前staircase看staircase-plan；依次看effect、candidate/admission、physical-mailbox-schedule、final-token-provenance与balance。旧Phase术语主要描述legacy，不应用来代替当前默认路径。</p></div><div id=\"source-sync-isa\"><h3>备选ISA与讨论的性质</h3><p>《单调链模型》的“硬件推广”节讨论多个channel与单元拥有的统一channel。正文带身份/世代对象、更强硬件依赖跟踪等是取舍假设，不声称ZeusV3已实现，也没有对应实测收益。模型文档标注的实现/实验截至2026-09-10；本文以2026-10-26快照核对实现。</p></div><div id=\"source-cuda-async\"><h3>CUDA异步barrier：官方职责对照</h3><p>NVIDIA CUDA Programming Guide的Asynchronous Barriers章节（2026-10-26查阅）说明异步barrier的arrival/wait、phase及异步操作完成关系。本文只用于说明GPU也需要显式异步同步，不将它等同于Zeus mailbox。</p><p>联网可继续阅读：<a href=\"https://docs.nvidia.com/cuda/cuda-programming-guide/04-special-topics/async-barriers.html\">NVIDIA 官方原文</a>。</p></div><div id=\"source-gpu-scoreboard\"><h3>GPU scoreboard：官方职责对照</h3><p>NVIDIA Nsight Compute Profiling Guide（2026-10-26查阅）的long/short scoreboard stall说明warp可以因等待producer依赖而停顿。本文据此说明GPU存在依赖跟踪，不由工具指标反推所有代际的内部实现。</p><p>联网可继续阅读：<a href=\"https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html\">NVIDIA 官方原文</a>。</p></div></details>"
+      },
+      {
+        "id": "first-pair",
+        "title": "从一对 producer–consumer 开始：等待的究竟是哪一刻",
+        "html": "<pre><code>LD A          // Producer writes the input tile.\nPE X = A × W  // Consumer must not read A before LD completes.\nVP Y = f(X)\nST Y</code></pre><p>先只解决 LD → PE。生产者 LD 的写入完成后发布通知；消费者 PE 在真正发射到执行单元前取走通知。这样 PE 可以提前进入自己的队列，但不能提前读 A。类似地，PE → VP 等待矩阵结果，VP → ST 等待向量结果。权重 W 的供给是另一条依赖，图中假设已就绪，实际分析不能漏掉它。</p><figure class=\"diagram\"><svg viewBox=\"0 0 960 400\" role=\"img\" aria-label=\"一条 tile 链：四个队列靠完成通知交接\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"arrow-basic-chain\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto-start-reverse\"><path d=\"M0 0 L10 5 L0 10 Z\" fill=\"#5a777e\"/></marker></defs><rect width=\"960\" height=\"400\" fill=\"#fafbf9\"/><text x=\"28\" y=\"34\" fill=\"#243c47\" font-size=\"21\" font-weight=\"600\" text-anchor=\"start\">一条 tile 链：四个队列靠完成通知交接</text><text x=\"35\" y=\"120\" fill=\"#243c47\" font-size=\"20\" font-weight=\"600\" text-anchor=\"start\">LD</text><rect x=\"150\" y=\"92\" width=\"260\" height=\"48\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"280.0\" y=\"122.0\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">搬入 A → SRAM</text><text x=\"35\" y=\"185\" fill=\"#243c47\" font-size=\"20\" font-weight=\"600\" text-anchor=\"start\">PE</text><rect x=\"448\" y=\"157\" width=\"180\" height=\"48\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"538.0\" y=\"187.0\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">读取 A，生成 X</text><text x=\"35\" y=\"250\" fill=\"#243c47\" font-size=\"20\" font-weight=\"600\" text-anchor=\"start\">VP</text><rect x=\"660\" y=\"222\" width=\"120\" height=\"48\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"720.0\" y=\"252.0\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">读取 X</text><text x=\"35\" y=\"315\" fill=\"#243c47\" font-size=\"20\" font-weight=\"600\" text-anchor=\"start\">ST</text><rect x=\"812\" y=\"287\" width=\"110\" height=\"48\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"867.0\" y=\"317.0\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">写回 Y</text><path d=\"M410,116 L448,181\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-basic-chain)\"/><path d=\"M628,181 L660,246\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-basic-chain)\"/><path d=\"M780,246 L812,311\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-basic-chain)\"/><text x=\"150\" y=\"365\" fill=\"#243c47\" font-size=\"17\" font-weight=\"400\" text-anchor=\"start\">横向表示先后关系，矩形长度不表示周期；箭头表示 completion → issue。</text></svg><figcaption>图 01｜教学示意：输入 A、预先就绪的 W，输出 Y；只画单 tile 的必需数据依赖。真正可重叠的工作来自其它独立 tile，图中不作性能比例绘制。</figcaption></figure><p>这个约束通常写成 producer.done → consumer.issue。它比“把两条汇编挨着放”更准确，也比“整机全部等待”更精细：只阻止有依赖的消费者，独立工作仍可推进。</p><p class=\"source-note\"><a href=\"#chapter/compiler-sync/source-sync-timing\">[源码与证据]</a></p>"
+      },
+      {
+        "id": "events",
+        "title": "一条指令至少有两种“已经用完”：配置已锁存，数据访问已结束",
+        "html": "<p>读一行汇编时，要拆出分发、snapshot、入队、issue、执行、done 和 mail 可见几个事件。它们不是等义词。前端按程序顺序工作，后端队列却能并行推进；mailbox 的接收门控制 issue，不意味着这条指令此前不能被译码或锁存配置。</p><figure class=\"diagram\"><svg viewBox=\"0 0 960 355\" role=\"img\" aria-label=\"不要把 snapshot 和 done 压成一个时间点\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"arrow-events\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto-start-reverse\"><path d=\"M0 0 L10 5 L0 10 Z\" fill=\"#5a777e\"/></marker></defs><rect width=\"960\" height=\"355\" fill=\"#fafbf9\"/><text x=\"28\" y=\"34\" fill=\"#243c47\" font-size=\"21\" font-weight=\"600\" text-anchor=\"start\">不要把 snapshot 和 done 压成一个时间点</text><rect x=\"24\" y=\"85\" width=\"120\" height=\"84\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"84.0\" y=\"120.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">CT 分发</text><text x=\"84.0\" y=\"145.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">program order</text><path d=\"M144,127 L154,127\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-events)\"/><rect x=\"156\" y=\"85\" width=\"120\" height=\"84\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"216.0\" y=\"120.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">锁存描述符</text><text x=\"216.0\" y=\"145.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">snapshot</text><path d=\"M276,127 L286,127\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-events)\"/><rect x=\"288\" y=\"85\" width=\"120\" height=\"84\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"348.0\" y=\"120.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">进入单元队列</text><text x=\"348.0\" y=\"145.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">queue</text><path d=\"M408,127 L418,127\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-events)\"/><rect x=\"420\" y=\"85\" width=\"120\" height=\"84\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"480.0\" y=\"120.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">检查 recv</text><text x=\"480.0\" y=\"145.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">issue gate</text><path d=\"M540,127 L550,127\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-events)\"/><rect x=\"552\" y=\"85\" width=\"120\" height=\"84\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"612.0\" y=\"120.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">读写与计算</text><text x=\"612.0\" y=\"145.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">execute</text><path d=\"M672,127 L682,127\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-events)\"/><rect x=\"684\" y=\"85\" width=\"120\" height=\"84\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"744.0\" y=\"120.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">结果完成</text><text x=\"744.0\" y=\"145.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">done</text><path d=\"M804,127 L814,127\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-events)\"/><rect x=\"816\" y=\"85\" width=\"120\" height=\"84\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"876.0\" y=\"120.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">通知可消费</text><text x=\"876.0\" y=\"145.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">mail visible</text><path d=\"M180,220 L450,220\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-events)\"/><text x=\"180\" y=\"207\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"start\">配置复用看这条边</text><text x=\"180\" y=\"250\" fill=\"#243c47\" font-size=\"17\" font-weight=\"400\" text-anchor=\"start\">旧指令 snapshot 后，后续配置可改写</text><path d=\"M720,288 L453,288\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-events)\"/><text x=\"470\" y=\"320\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"start\">数据依赖：producer.done → consumer.issue</text></svg><figcaption>图 02｜事件关系示意：上排是单条普通后端指令的事件链；下方两条边说明配置复用与跨指令数据依赖使用不同的时间边界。事件间距不表示真实延迟。</figcaption></figure><p>硬件证据文档区分 normal command 的完成发布、CT 对前端 dispatch 的阻塞、以及 BR/config 的 snapshot。阅读模型时也要保留范围：这些结论来自该硬件合同和对应实现，不能推广成“任何异步 NPU 都如此”。</p><p class=\"source-note\"><a href=\"#chapter/compiler-sync/source-sync-timing\">[源码与证据]</a></p>"
+      },
+      {
+        "id": "snapshot",
+        "title": "BR 保存张量描述，却不是张量内容：少发一封 mail 也要证明",
+        "html": "<pre><code>set BR7 = descriptor(A)\nPE uses BR7       // Snapshot captures the descriptor fields.\nset BR7 = descriptor(B)\nPE uses BR7</code></pre><p>BR 是描述符寄存器，描述数据所在位置、维度、步长或硬件访问方式。旧 PE 指令已把 BR7 的字段锁存进 command 后，CT 改写 BR7 不一定需要等旧 PE 的矩阵运算结束。这里要保护的是 snapshot-before-rewrite，而不是 data-completion。</p><p>反过来，BR7 指向的 SRAM 正在被 LD 写入时，描述符已经锁存也不代表数据可读。<strong>同一对指令可能同时存在配置 hazard 和数据 hazard。</strong>配置的 no-mail proof 只能消掉它证明的配置边，不能顺手消掉 SRAM 或权重的 RAW。</p><p>当前实现把不发 mail 的依据记录为带类型的 proof，再由 verifier 检查资源、方向、lane 和控制流条件。面试里这比“配置指令很快，所以不用同步”有说服力：速度不是正确性证明，明确的锁存语义才是。</p><p class=\"source-note\"><a href=\"#chapter/compiler-sync/source-sync-resources\">[源码与证据]</a></p>"
+      },
+      {
+        "id": "resource-model",
+        "title": "第一层建模：一条指令读取和改写了哪些硬件资源",
+        "html": "<p>同步分析首先把每条 ZeusLow 指令变成 InstructionEffect：执行单元、可携带哪种 mail、读取哪些资源、写入哪些资源。资源类型让两种不同问题不会混成一条布尔依赖。</p><table><thead><tr><th>资源族</th><th>保护什么</th><th>不能省掉的身份信息</th></tr></thead><tbody><tr><td>Value / BRegConfig</td><td>逻辑对象、描述符字段</td><td>逻辑资源身份、别名关系与快照边界</td></tr><tr><td>L2Region / L2MayAlias</td><td>片上数据的读写生命周期</td><td>物理字节区间、访问范围、不确定性</td></tr><tr><td>DmaBaseAddr / DmaWindow</td><td>外部地址与 DMA 实际访问窗口</td><td>base 身份、偏移、范围与 alias class</td></tr><tr><td>WeightSlab</td><td>权重区域的写入与计算读取</td><td>实际权重区域，不仅是 SSA 名称</td></tr><tr><td>VPConfig / VPInternal / VPReg</td><td>VP 配置、内部参数与结果状态</td><td>字段、物理 lane、完成或 issue 边界</td></tr></tbody></table><p>例如 VP 的部分输出模式需要读改写，effect 必须按实际配置登记；而当前 PE 在内部 OL1 累加，L2 destination 只写，不能把“累加”误读成读取 L2 旧输出。向量参数装载也不能仅按 op 名猜读写，需要由最终配置判定它是否真的是 parameter loader。<strong>planner 再聪明，也无法保护 effect 层没有告诉它的资源。</strong></p><p class=\"source-note\"><a href=\"#chapter/compiler-sync/source-sync-resources\">[源码与证据]</a></p>"
+      },
+      {
+        "id": "hazards",
+        "title": "同一段地址的三种冲突：RAW、WAR、WAW",
+        "html": "<p>设 A 表示教学用的一个物理 SRAM 区间。RAW（先写后读）保护新值可见；WAR（先读后写）保护旧值不会提前被覆盖；WAW（先写后写）保护覆盖顺序。三者的箭头都表示必须满足的访问顺序，但“生产者”不总是写数据的指令：WAR 的前驱是读者。</p><figure class=\"diagram\"><svg viewBox=\"0 0 960 365\" role=\"img\" aria-label=\"复用引入的 WAR，与计算本来的 RAW 同样重要\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"arrow-hazards\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto-start-reverse\"><path d=\"M0 0 L10 5 L0 10 Z\" fill=\"#5a777e\"/></marker></defs><rect width=\"960\" height=\"365\" fill=\"#fafbf9\"/><text x=\"28\" y=\"34\" fill=\"#243c47\" font-size=\"21\" font-weight=\"600\" text-anchor=\"start\">复用引入的 WAR，与计算本来的 RAW 同样重要</text><text x=\"28\" y=\"112\" fill=\"#243c47\" font-size=\"21\" font-weight=\"600\" text-anchor=\"start\">RAW</text><rect x=\"115\" y=\"80\" width=\"205\" height=\"62\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"217.5\" y=\"117.0\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">LD 写 A</text><path d=\"M320,111 L425,111\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-hazards)\"/><rect x=\"425\" y=\"80\" width=\"205\" height=\"62\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"527.5\" y=\"117.0\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">PE 读 A</text><text x=\"663\" y=\"116\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"start\">先得到新值，再读取</text><text x=\"28\" y=\"207\" fill=\"#243c47\" font-size=\"21\" font-weight=\"600\" text-anchor=\"start\">WAR</text><rect x=\"115\" y=\"175\" width=\"205\" height=\"62\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"217.5\" y=\"212.0\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">PE 读 A</text><path d=\"M320,206 L425,206\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-hazards)\"/><rect x=\"425\" y=\"175\" width=\"205\" height=\"62\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"527.5\" y=\"212.0\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">LD 覆写 A</text><text x=\"663\" y=\"211\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"start\">旧值读完，才能复用</text><text x=\"28\" y=\"302\" fill=\"#243c47\" font-size=\"21\" font-weight=\"600\" text-anchor=\"start\">WAW</text><rect x=\"115\" y=\"270\" width=\"205\" height=\"62\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"217.5\" y=\"307.0\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">LD 写 A</text><path d=\"M320,301 L425,301\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-hazards)\"/><rect x=\"425\" y=\"270\" width=\"205\" height=\"62\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"527.5\" y=\"307.0\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">DT 写 A</text><text x=\"663\" y=\"306\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"start\">写入结果保留所需顺序</text></svg><figcaption>图 03｜教学条件：两条访问确实可能命中同一物理区间，图中未使用硬件额外顺序证明。箭头只表示需满足的先后关系，不断言每条边最终都生成一对 mail。</figcaption></figure><p>常见错误是只按“谁产生这个 tensor”连 RAW，把 allocator 共址产生的 WAR 当作无关优化。另一个错误是给每条 WAW 都插 mail；某些单元与特定资源已经有硬件释放序，可以用有范围的 no-mail proof。正确顺序是先保留依赖，再证明其中哪些可由硬件保证。</p><p class=\"source-note\"><a href=\"#chapter/compiler-sync/source-sync-resources\">[源码与证据]</a></p>"
+      },
+      {
+        "id": "alias",
+        "title": "物理地址分配改变依赖图：两个 SSA 名称不等于两块内存",
+        "html": "<p>教学例：逻辑 buffer A 与 B 生命周期不重叠，allocator 都把它们放在字节区间 [4096, 5120)。IR 里 PE 最后读 A 后紧接着执行 B 的 LD，并不表示 PE 已完成异步读取。新 LD 会覆写同一段物理存储，于是 PE → LD 的 WAR 必须进入后端模型。</p><p>子视图让问题更细：base 不同的 descriptor 可能投影到重叠物理区间；逻辑元素区间看似不交，也可能因 DMA 访问窗口或硬件粒度而重叠。能证明 NoAlias 才可不连边；范围未知时保留 may-alias，并在支持范围内保守处理或明确拒绝。</p><p>因此中端的共址选择与同步规划互相影响，但责任不能混同。AddressAllocation 可以用预估同步成本选择放置；它不授予“这条依赖无需等待”的豁免。InjectSync 根据最终地址、执行器和访问范围独立重建依赖，避免把中端性能启发式误当正确性证明。</p><p class=\"source-note\"><a href=\"#chapter/compiler-sync/source-sync-address\">[源码与证据]</a></p>"
+      },
+      {
+        "id": "same-unit",
+        "title": "同一执行单元也不自动安全：队列顺序、lane 与退休",
+        "html": "<p>“同一单元 FIFO”首先说明命令入队或发射顺序，不自动说明前一条指令的所有读写都已经结束。判断可以省哪条边，必须同时说明依赖种类、资源、物理 lane 和硬件完成合同。一个针对 WAW 的证明，不能拿去消掉 RAW 或 WAR。</p><p>VP/DT 有多 lane。默认执行器和显式 lane 要按 CodeGen 的同一规则解释；只对“同一 physical lane”成立的顺序事实，不能推广到跨 lane。当前 compiler-managed split group 有专门的 head acquire / tail completion 合同，任意手写跨 lane 依赖不能因为单元名相同就继承该合同。</p><p>SI/SO 还有另一层边界：本核同步可以保证 SI 退休后本地消费者才读，却不能单靠本地依赖图证明对端真的提供了正确数据。跨核配对、版本与 launch ABI 仍由对应跨核合同和验证负责。完成通知与业务数据有效性是两个需要分别闭合的问题。</p><p class=\"source-note\"><a href=\"#chapter/compiler-sync/source-sync-unit\">[源码与证据]</a></p>"
+      },
+      {
+        "id": "gpu-comparison",
+        "title": "与 CUDA/GPU 对照：硬件承担的依赖不同，软件依然要管理异步边界",
+        "html": "<p>GPU 有用于跟踪数据依赖的 scoreboard，工具能显示等待某类 producer 的 long/short scoreboard stall。这说明硬件与机器代码共同承担一部分指令级依赖管理，不意味着任意共享内存通信或异步引擎都会自动同步。<a href=\"https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html\">[Nsight Compute：scoreboard stall]</a></p><p>CUDA 仍提供显式的 barrier、异步 barrier 和 pipeline；异步操作与发起它的线程之间，要通过相应同步对象建立完成关系。barrier 的 phase/arrival 语义也要求使用者遵守生命周期，不能把一次等待当作全局数据完成。<a href=\"https://docs.nvidia.com/cuda/cuda-programming-guide/04-special-topics/async-barriers.html\">[CUDA：异步 barrier]</a></p><table><thead><tr><th>设计问题</th><th>当前 518 路径</th><th>GPU 对照时应问什么</th></tr></thead><tbody><tr><td>普通指令的数据就绪</td><td>效果模型区分单元与资源，按合同生成 completion 等待</td><td>目标架构哪些依赖由 scoreboard / 调度承担？不能只看 CUDA 源码有没有 barrier</td></tr><tr><td>异步搬运与计算交接</td><td>显式描述符 + 异步单元 + mailbox 收发</td><td>对应指令要求哪种 wait、barrier、phase 和内存范围？</td></tr><tr><td>片上 buffer 复用</td><td>allocator 的物理区间进入 RAW/WAR/WAW 分析</td><td>shared-memory stage 重用前，旧读者和异步访问是否都完成？</td></tr><tr><td>同步对象复用</td><td>无 tag channel 必须证明 FIFO 及 epoch</td><td>barrier 对象的初始化、phase 和重复使用由谁保证？</td></tr></tbody></table><p>这个对照的架构结论是推导：518 在当前路径中把跨执行单元的完成与存储生命周期显式暴露给目标编译器，因此 lowering 必须同时设计资源模型、调度和同步。GPU 把一部分职责放进其它硬件/软件层，却仍存在异步数据移动与复用的证明问题。不能简化为“GPU 有 scoreboard，所以 CUDA 不需要同步”。</p>"
+      },
+      {
+        "id": "untagged",
+        "title": "最容易低估的限制：mailbox 没有 tensor 标签",
+        "html": "<p>同一个 sender → receiver channel 共享一个计数器。send 增加通知，recv 消费通知；通知里没有“A 已完成”或“B 已完成”的资源标签。编译器可以在模型里给 token 编号，硬件并不会按这个编号替你匹配。</p><figure class=\"diagram\"><svg viewBox=\"0 0 960 390\" role=\"img\" aria-label=\"两条各自正确的依赖边，合起来可能消费错通知\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"arrow-untagged\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto-start-reverse\"><path d=\"M0 0 L10 5 L0 10 Z\" fill=\"#5a777e\"/></marker></defs><rect width=\"960\" height=\"390\" fill=\"#fafbf9\"/><text x=\"28\" y=\"34\" fill=\"#243c47\" font-size=\"21\" font-weight=\"600\" text-anchor=\"start\">两条各自正确的依赖边，合起来可能消费错通知</text><text x=\"38\" y=\"82\" fill=\"#243c47\" font-size=\"20\" font-weight=\"600\" text-anchor=\"start\">编译器想要的两条依赖</text><rect x=\"40\" y=\"115\" width=\"180\" height=\"60\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"130.0\" y=\"151.0\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">LD A 完成</text><rect x=\"40\" y=\"240\" width=\"180\" height=\"60\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"130.0\" y=\"276.0\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">LD B 完成</text><rect x=\"455\" y=\"115\" width=\"190\" height=\"60\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"550.0\" y=\"151.0\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">PE 先读 B</text><rect x=\"455\" y=\"240\" width=\"190\" height=\"60\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"550.0\" y=\"276.0\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">PE 后读 A</text><path d=\"M220,145 L455,270\" fill=\"none\" stroke=\"#b56f48\" stroke-width=\"2.5\" marker-end=\"url(#arrow-untagged)\"/><path d=\"M220,270 L455,145\" fill=\"none\" stroke=\"#b56f48\" stroke-width=\"2.5\" marker-end=\"url(#arrow-untagged)\"/><text x=\"690\" y=\"135\" fill=\"#243c47\" font-size=\"18\" font-weight=\"600\" text-anchor=\"start\">实际 counter 无 tag</text><text x=\"690\" y=\"173\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"start\">第 1 次 recv</text><text x=\"690\" y=\"201\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"start\">会取走 A 的通知</text><text x=\"690\" y=\"253\" fill=\"#a14c31\" font-size=\"18\" font-weight=\"400\" text-anchor=\"start\">不能声明“我要 B”</text><text x=\"40\" y=\"350\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"start\">修复思路：在 B 完成后统一通知，第一条 PE 等待这个较晚完成点。</text></svg><figcaption>图 04｜教学条件：LD 按 A、B 的释放顺序发送，PE 按 B、A 的顺序消费，且同用 LD→PE channel。连线是期望的资源匹配；硬件实际按通知顺序消费，不认识交叉连线。</figcaption></figure><p>因此不能“发现一条 RAW 就插一对 send/recv”。要把同一 channel 上所有动态收发作为整体：send 的释放顺序与 recv 的消费顺序必须一致，收到的 credit 必须足以证明当前 consumer 所需的完成事实。这个限制解释了为什么同步规划需要单独的架构，而不只是给 IR 添几个属性。</p><p class=\"source-note\"><a href=\"#chapter/compiler-sync/source-sync-mailbox\">[源码与证据]</a></p><p>后文的 FIFO 是编译器用于证明通知顺序的模型，不表示硬件保存了一串带资源身份的队列元素。硬件 credit 是计数器的一次计数；token 则是编译器规划中的一条通知关系。验证时追踪 token 的来源，正是为了证明没有 tag 的实际计数仍能正确对应。</p>"
+      },
+      {
+        "id": "pipeline-position",
+        "title": "为什么在这里插入同步：先确定资源与执行顺序，再冻结计划",
+        "html": "<p>当前生产 driver 在 InjectSync 前完成 ZeusHigh → ZeusLow、参数和初始化下降、低层 LICM、控制流下降、critical-edge 拆分、运行时参数物化、清理、执行器分配、BR 配置优化以及标量除法调度。staircase 路径还在 SCFToControlFlow 前尝试 LiftControlFlowToSCF，以保留后续区域树可识别的结构。</p><p>这里的先后关系有具体原因：控制流变化影响每条指令执行几次，执行器分配改变 channel，BR 清理改变配置 hazard，调度改变发射顺序。如果先产生 mail，再让这些变换随意搬动指令，原来的同步证明便失效。<strong>“晚插同步”指的是输入合同已明确、会改变相关事实的变换已完成，不是含糊地等到“分配稳定”。</strong></p><p>另一方面，寄存器分配仍在后续 CodeGen 中执行，所以 InjectSync 也不是见到了所有物理细节。跨越这个分界需要显式合同与后验检查，后文以 VP 退休和 BR 复用为例说明。对 pipeline 的好解释应同时讲清“为什么在这里”与“此时还不知道什么”。</p><p class=\"source-note\"><a href=\"#chapter/compiler-sync/source-sync-pipeline\">[源码与证据]</a></p>"
+      },
+      {
+        "id": "model-to-schedule",
+        "title": "把同步拆成可检查的层：分析、规划、验证、物化各做什么",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 960 355\" role=\"img\" aria-label=\"当前 InjectSync 的职责分层\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"arrow-architecture\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto-start-reverse\"><path d=\"M0 0 L10 5 L0 10 Z\" fill=\"#5a777e\"/></marker></defs><rect width=\"960\" height=\"355\" fill=\"#fafbf9\"/><text x=\"28\" y=\"34\" fill=\"#243c47\" font-size=\"21\" font-weight=\"600\" text-anchor=\"start\">当前 InjectSync 的职责分层</text><rect x=\"28\" y=\"75\" width=\"178\" height=\"88\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"117.0\" y=\"112.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">1 指令效果</text><text x=\"117.0\" y=\"137.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">读写什么</text><rect x=\"270\" y=\"75\" width=\"178\" height=\"88\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"359.0\" y=\"112.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">2 资源与准入</text><text x=\"359.0\" y=\"137.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">哪些依赖成立</text><rect x=\"512\" y=\"75\" width=\"178\" height=\"88\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"601.0\" y=\"112.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">3 区域内规划</text><text x=\"601.0\" y=\"137.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">点 → 阶梯</text><rect x=\"754\" y=\"75\" width=\"178\" height=\"88\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"843.0\" y=\"112.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">4 冻结 schedule</text><text x=\"843.0\" y=\"137.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">站点与生命周期</text><rect x=\"754\" y=\"230\" width=\"178\" height=\"88\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"843.0\" y=\"267.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">5 前置验证</text><text x=\"843.0\" y=\"292.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">检查所有权/覆盖</text><rect x=\"512\" y=\"230\" width=\"178\" height=\"88\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"601.0\" y=\"267.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">6 唯一物化器</text><text x=\"601.0\" y=\"292.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">写入最终 IR</text><rect x=\"270\" y=\"230\" width=\"178\" height=\"88\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"359.0\" y=\"267.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">7 最终验证</text><text x=\"359.0\" y=\"292.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">FIFO / 来源 / 配平</text><rect x=\"28\" y=\"230\" width=\"178\" height=\"88\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"117.0\" y=\"267.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">8 CodeGen 合同</text><text x=\"117.0\" y=\"292.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">RA 后继续核对</text><path d=\"M206,119 L270,119\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-architecture)\"/><path d=\"M448,119 L512,119\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-architecture)\"/><path d=\"M690,119 L754,119\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-architecture)\"/><path d=\"M843,163 L843,230\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-architecture)\"/><path d=\"M754,274 L690,274\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-architecture)\"/><path d=\"M512,274 L448,274\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-architecture)\"/><path d=\"M270,274 L206,274\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-architecture)\"/></svg><figcaption>图 05｜当前源码结构的概念映射：箭头传递分析事实或冻结计划；不是硬件时间轴。最终验证发生在 IR 修改之后，CodeGen 还会验证跨寄存器分配的合同。</figcaption></figure><p>EffectBuilder 与资源代数回答“发生了什么”；准入逻辑判断依赖是否需要显式完成边，或已有哪种硬件证明。默认 staircase planner 按区域和 channel 组织这些 obligation。PhysicalMailboxSchedule 冻结 token、event、command、program point、credit class 与 lifecycle transfer。</p><p>物化器只执行这份计划，不应再次猜测循环 owner 或选择另一套插入位置。随后，provenance verifier 核对每个实际 mail 来自哪个计划事件，FIFO 与 mailbox balance 再检查动态消费。这样失败能够定位到某一层：漏资源、错准入、错规划，或者计划正确但发射错了。</p><p class=\"source-note\"><a href=\"#chapter/compiler-sync/source-sync-architecture\">[源码与证据]</a></p><table><thead><tr><th>可选组织方式</th><th>为什么不作为最终结构</th></tr></thead><tbody><tr><td>单条直线数据链全部串行等待</td><td>便于最小bring-up，但把独立tile的重叠机会一并压掉；也不自动处理任意CFG的可达性</td></tr><tr><td>各依赖边或各Phase各自插mail</td><td>局部容易理解，但无tag channel上的交错和动态频率无法独立组合，需要不断补跨阶段协调</td></tr><tr><td>共同资源模型 + 按channel/区域规划 + 冻结计划</td><td>当前选择：把FIFO与生命周期作为整体约束；付出的成本是更复杂的资源、区域和验证框架，换来可解释的责任边界</td></tr></tbody></table>"
+      },
+      {
+        "id": "points",
+        "title": "把硬件依赖变成点：staircase 的输入比“所有 op”更小",
+        "html": "<p>固定一对单元 U → V，并暂时只看直线段。把 U 上的 producer 指令序号记作 p，把 V 上的 consumer 指令序号记作 c，一条必须满足的完成依赖写成点 (p,c)。两个轴都是<strong>各单元内指令顺序</strong>，不是时间，也不是 tensor 维度。</p><p>一枚 token 在 U 的 s 处完成后发送，在 V 的 r 处执行前接收。若 s 不早于 p 且 r 不晚于 c，这枚 token 能覆盖该依赖：消费者已经等过一个足够晚的生产者完成点。这里还要求该单元的释放序合同成立，不能只凭坐标猜硬件时序。</p><p>多个 token 必须在两条轴上保持同序；send 顺序向前而 recv 顺序向后，就会落回上节的无 tag 错配。staircase 的价值在于把这个约束放进构造过程。它保持给定指令顺序，在这个条件下寻找不过度扩大等待的通知链；并不替代 instruction scheduling 或全局性能优化。</p><p class=\"source-note\"><a href=\"#chapter/compiler-sync/source-sync-staircase\">[源码与证据]</a></p>"
+      },
+      {
+        "id": "staircase-example",
+        "title": "四条依赖怎样变成三枚 token：手算一次后缀最小值",
+        "html": "<p>使用四个教学点：(1,1)、(2,3)、(3,2)、(4,4)。按 producer 从早到晚排列，consumer 序号是 1、3、2、4。中间两条交叉：较早 producer 的消费者反而更晚执行。</p><figure class=\"diagram\"><svg viewBox=\"0 0 960 380\" role=\"img\" aria-label=\"阶梯把交叉依赖转成同序通知链\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"arrow-staircase\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto-start-reverse\"><path d=\"M0 0 L10 5 L0 10 Z\" fill=\"#5a777e\"/></marker></defs><rect width=\"960\" height=\"380\" fill=\"#fafbf9\"/><text x=\"28\" y=\"34\" fill=\"#243c47\" font-size=\"21\" font-weight=\"600\" text-anchor=\"start\">阶梯把交叉依赖转成同序通知链</text><path d=\"M90,300 L600,300\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-staircase)\"/><path d=\"M90,300 L90,65\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-staircase)\"/><text x=\"335\" y=\"352\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">U：producer 顺序 p（向右更晚）</text><text x=\"107\" y=\"67\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"start\">V：consumer 顺序 c（向上更晚）</text><text x=\"200\" y=\"325\" fill=\"#243c47\" font-size=\"17\" font-weight=\"400\" text-anchor=\"middle\">1</text><text x=\"70\" y=\"252\" fill=\"#243c47\" font-size=\"17\" font-weight=\"400\" text-anchor=\"middle\">1</text><text x=\"310\" y=\"325\" fill=\"#243c47\" font-size=\"17\" font-weight=\"400\" text-anchor=\"middle\">2</text><text x=\"70\" y=\"204\" fill=\"#243c47\" font-size=\"17\" font-weight=\"400\" text-anchor=\"middle\">2</text><text x=\"420\" y=\"325\" fill=\"#243c47\" font-size=\"17\" font-weight=\"400\" text-anchor=\"middle\">3</text><text x=\"70\" y=\"156\" fill=\"#243c47\" font-size=\"17\" font-weight=\"400\" text-anchor=\"middle\">3</text><text x=\"530\" y=\"325\" fill=\"#243c47\" font-size=\"17\" font-weight=\"400\" text-anchor=\"middle\">4</text><text x=\"70\" y=\"108\" fill=\"#243c47\" font-size=\"17\" font-weight=\"400\" text-anchor=\"middle\">4</text><circle cx=\"200\" cy=\"252\" r=\"7\" fill=\"#b56f48\"/><text x=\"212\" y=\"242\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"start\">(1,1)</text><circle cx=\"310\" cy=\"156\" r=\"7\" fill=\"#b56f48\"/><text x=\"322\" y=\"146\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"start\">(2,3)</text><circle cx=\"420\" cy=\"204\" r=\"7\" fill=\"#b56f48\"/><text x=\"432\" y=\"194\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"start\">(3,2)</text><circle cx=\"530\" cy=\"108\" r=\"7\" fill=\"#b56f48\"/><text x=\"542\" y=\"98\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"start\">(4,4)</text><path d=\"M90 252 H200 V204 H420 V108 H530 V65\" fill=\"none\" stroke=\"#426a5a\" stroke-width=\"4\"/><rect x=\"190\" y=\"242\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"#426a5a\" stroke-width=\"3\"/><rect x=\"410\" y=\"194\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"#426a5a\" stroke-width=\"3\"/><rect x=\"520\" y=\"98\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"#426a5a\" stroke-width=\"3\"/><text x=\"650\" y=\"108\" fill=\"#243c47\" font-size=\"19\" font-weight=\"600\" text-anchor=\"start\">输入 consumer 序号</text><text x=\"650\" y=\"142\" fill=\"#243c47\" font-size=\"20\" font-weight=\"400\" text-anchor=\"start\">1，3，2，4</text><text x=\"650\" y=\"192\" fill=\"#243c47\" font-size=\"19\" font-weight=\"600\" text-anchor=\"start\">后缀最小值</text><text x=\"650\" y=\"226\" fill=\"#243c47\" font-size=\"20\" font-weight=\"400\" text-anchor=\"start\">1，2，2，4</text><text x=\"650\" y=\"276\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"start\">同 recv 保留较晚 send</text><text x=\"650\" y=\"307\" fill=\"#243c47\" font-size=\"20\" font-weight=\"600\" text-anchor=\"start\">最终 3 枚 token</text></svg><figcaption>图 06｜教学整数序号：橙点是输入依赖，绿色空心方块是最终 token，折线表示单调阶梯。轴均为指令顺序；不用于估计性能。</figcaption></figure><p>从右向左取 consumer 的后缀最小值，得到 1、2、2、4。含义是：较早发送的通知不能安排在后续通知的接收点之后。然后把相同 recv 的 token 合并，保留较晚的 send，得到 (1,1)、(3,2)、(4,4)。原依赖 (2,3) 被 (3,2) 覆盖，因为通知在 producer 3 完成后发出、在 consumer 2 开始前收到，自然也保护 producer 2 → consumer 3。</p><p>同 recv 去重不是“少发一点比较快”的启发式：相同指令的同一 channel 只有一个收发位，重复事件必须有可解释的覆盖关系。源码中的 crossing 回归检查最终只保留一枚 token，但其依赖在 admission 阶段已先合并，不能单独作为 staircase 处理交叉点的证明。nested 回归检查同序点保留多枚 token；上面的四点后缀最小值过程是依据算法的独立教学推导。</p><p class=\"source-note\"><a href=\"#chapter/compiler-sync/source-sync-staircase\">[源码与证据]</a></p>"
+      },
+      {
+        "id": "capacity-cost",
+        "title": "通知更少不一定更快：粗化的收益与损失",
+        "html": "<p>若两枚同序 token 是 (s₁,r₁)、(s₂,r₂)，s₁ 早于 s₂，r₁ 早于 r₂，合并为 (s₂,r₁) 会让第一个消费者等待更晚的生产者。它降低 token 数，却可能损失本可发生的计算与搬运重叠。没有实测前，不能把 mail 条数下降写成性能提升。</p><p>容量会迫使规划器作这样的交换。当前硬件合同描述 mailbox 使用 6-bit counter，上限为 63；staircase 的 outstanding 规划预算取 62，为多来源 recv 的组合等待保留一个槽位。原因是某 channel 已有通知时，组合 recv 仍可能被另一个 channel 阻塞，满计数器会向 sender outbox 施加反压。</p><p>当前源码实现容量驱动的粗化，并对不能安全粗化的形态报错。设计文档讨论的成本驱动粗化、profile 引导与指令重排，不应统称为已经实现。静态势能、计划内 outstanding 与某一周期的硬件实时计数也不是同一个对象；它们用于不同证明，不能拿同一条曲线替代。</p><p class=\"source-note\"><a href=\"#chapter/compiler-sync/source-sync-capacity\">[源码与证据]</a></p>"
+      },
+      {
+        "id": "epochs",
+        "title": "循环改变了依赖的身份：同一行指令，可能是上一轮",
+        "html": "<p>让 PE 每轮写 A，VP 每轮读 A，下一轮 PE 再覆写 A。循环体内有 PE(i) → VP(i) 的 RAW；跨轮还有 VP(i) → PE(i+1) 的 WAR。前者等待本轮数据，后者把 buffer 所有权交还给下一轮写者。</p><p>用 d 表示相对 owner loop 的迭代距离：d=0 是同一轮，d=1 是前一轮到后一轮。循环嵌套时必须明确是哪一个 loop 的 epoch，不能把“跨了某个回边”一律当作跨当前 owner 的一轮。producer 在内层循环里，不代表每次内层 backedge 都增加外层 epoch。</p><p>这一点也解释 self-edge：p=c 仅说明源码里是同一条指令。d=1 时，前驱和后继是两个动态实例，仍可能需要保护异步退休。用“fromOp == toOp”直接删掉这条边，会把跨轮正确性一并删掉。</p><p class=\"source-note\"><a href=\"#chapter/compiler-sync/source-sync-loop\">[源码与证据]</a></p>"
+      },
+      {
+        "id": "seed-drain",
+        "title": "首轮与最后一轮怎样闭合：seed 不是伪造数据，drain 不是清垃圾",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 960 365\" role=\"img\" aria-label=\"同一 buffer 的所有权跨迭代交接\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"arrow-seed-drain\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto-start-reverse\"><path d=\"M0 0 L10 5 L0 10 Z\" fill=\"#5a777e\"/></marker></defs><rect width=\"960\" height=\"365\" fill=\"#fafbf9\"/><text x=\"28\" y=\"34\" fill=\"#243c47\" font-size=\"21\" font-weight=\"600\" text-anchor=\"start\">同一 buffer 的所有权跨迭代交接</text><rect x=\"25\" y=\"85\" width=\"160\" height=\"84\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"105.0\" y=\"120.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">入口 seed</text><text x=\"105.0\" y=\"145.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">首轮无需等上一轮</text><rect x=\"275\" y=\"85\" width=\"160\" height=\"84\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"355.0\" y=\"120.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">PE(0) 取 seed</text><text x=\"355.0\" y=\"145.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">写 A；发 RAW</text><rect x=\"525\" y=\"85\" width=\"160\" height=\"84\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"605.0\" y=\"120.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">VP(0) 收 RAW</text><text x=\"605.0\" y=\"145.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">读 A；发 WAR</text><rect x=\"775\" y=\"85\" width=\"160\" height=\"84\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"855.0\" y=\"120.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">PE(1) 收 WAR</text><text x=\"855.0\" y=\"145.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">可安全覆写 A</text><rect x=\"775\" y=\"245\" width=\"160\" height=\"84\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"855.0\" y=\"280.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">VP(1) 完成</text><text x=\"855.0\" y=\"305.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">再发一枚 WAR</text><rect x=\"525\" y=\"245\" width=\"160\" height=\"84\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"605.0\" y=\"280.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">出口 drain</text><text x=\"605.0\" y=\"305.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">消费剩余通知</text><path d=\"M185,127 L275,127\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-seed-drain)\"/><path d=\"M435,127 L525,127\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-seed-drain)\"/><path d=\"M685,127 L775,127\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-seed-drain)\"/><path d=\"M855,169 L855,245\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-seed-drain)\"/><path d=\"M775,287 L685,287\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-seed-drain)\"/><text x=\"32\" y=\"248\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"start\">这里展示 2 轮、单 buffer 的简化协议。</text><text x=\"32\" y=\"285\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"start\">RAW 和 WAR 使用相反方向的 channel。</text><text x=\"32\" y=\"322\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"start\">seed 不代表数据已产生，只授权首轮写入。</text></svg><figcaption>图 07｜教学协议：两轮 PE 写 / VP 读，反向 WAR channel 由入口提供一次 seed；出口消费最后一次读完成通知。实际代码需按每条退出边的剩余势能决定 drain 数，图不代表所有循环一律 seed=1。</figcaption></figure><p>若每轮开始都等待上一轮 VP 读完，首轮会等待一个不存在的前驱。入口 seed 解决的是这个边界：第一次使用没有旧读者要保护。它不能替代 LD → PE 的本轮输入数据通知，也不能给未初始化数据背书。</p><p>最后一轮 VP 仍会交还所有权，但已没有下一轮 PE 消费；退出时要 drain 这份通知，使 mailbox 回到 kernel 入口的空状态。零轮执行也必须闭合：入口已发的 seed 若没有进入循环消费，出口同样要接走。循环有多个出口时，应在每个真实出口计算剩余通知，不是统一在任意 return 前硬塞一条 recv。</p><p>一般周期链每轮 n 个通知、入口偏移 k 个 seed。第 i 轮第 j 个 recv 对应哪个 send，需要按全局 FIFO 序号计算；它可能来自本轮，也可能来自上一轮。只对齐静态 send/recv 数量，不会告诉你收到的是哪一轮的完成事实。</p><p class=\"source-note\"><a href=\"#chapter/compiler-sync/source-sync-loop\">[源码与证据]</a></p>"
+      },
+      {
+        "id": "branch-balance",
+        "title": "分支里的“发一次、收一次”必须按路径理解",
+        "html": "<p>考虑 true 分支执行 producer 并 send，false 分支跳过它，join 处却无条件 recv。静态文本里是一发一收；运行 false 路径时只有 recv，于是挂起。如果在 false 路径随便补一个 send，计数可能配平，但 consumer 所需的数据未必产生，结果仍错误。</p><figure class=\"diagram\"><svg viewBox=\"0 0 960 425\" role=\"img\" aria-label=\"分支配平首先是路径语义，再是计数\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"arrow-branch\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto-start-reverse\"><path d=\"M0 0 L10 5 L0 10 Z\" fill=\"#5a777e\"/></marker></defs><rect width=\"960\" height=\"425\" fill=\"#fafbf9\"/><text x=\"28\" y=\"34\" fill=\"#243c47\" font-size=\"21\" font-weight=\"600\" text-anchor=\"start\">分支配平首先是路径语义，再是计数</text><rect x=\"370\" y=\"65\" width=\"220\" height=\"52\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"480.0\" y=\"97.0\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">条件 cond</text><rect x=\"80\" y=\"160\" width=\"280\" height=\"74\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"220.0\" y=\"190.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">true：producer 执行</text><text x=\"220.0\" y=\"215.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">发送 completion</text><rect x=\"600\" y=\"160\" width=\"280\" height=\"74\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"740.0\" y=\"190.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">false：producer 不执行</text><text x=\"740.0\" y=\"215.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">不能假装数据已写</text><path d=\"M370,91 L220,160\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-branch)\"/><path d=\"M590,91 L740,160\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-branch)\"/><path d=\"M220,234 L370,302\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-branch)\"/><path d=\"M740,234 L590,302\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-branch)\"/><rect x=\"370\" y=\"275\" width=\"220\" height=\"72\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"480.0\" y=\"304.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">join 的 consumer</text><text x=\"480.0\" y=\"329.5\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">要证明每条到达路径</text><text x=\"30\" y=\"395\" fill=\"#243c47\" font-size=\"17\" font-weight=\"400\" text-anchor=\"start\">可行方案由语义决定：将等待下沉到相应路径，或在入口/出口构造有证明的路径协议。</text></svg><figcaption>图 08｜结构化 if 教学图：箭头是控制流，true/false 互斥；join 是否能消费同一数据取决于两臂的数据定义。图中没有假定 false 路径能使用 true 路径才写出的结果。</figcaption></figure><p>正确规划必须先保留原程序的数据定义：若 consumer 只在 true 上有意义，就在对应动态路径等待；若两臂各自产生一个结果，则分别建立覆盖，并保证每个到达 join 的路径消费正确 credit。互斥路径不应凭静态条数相加，更不能把多条路径的 queue 逐位置并集合成一个虚假的 FIFO。</p><p>staircase 用区域树组织 Seq、If、Loop，并通过站点投影、下沉和势能均衡安排收发。势能只是某条路径走到某站点的逻辑收发差；计数相同是必要检查，credit 的来源和完成覆盖仍要单独验证。</p><p class=\"source-note\"><a href=\"#chapter/compiler-sync/source-sync-region\">[源码与证据]</a></p>"
+      },
+      {
+        "id": "nested-credit",
+        "title": "嵌套循环为何难：子循环可以消费掉父区域的通知",
+        "html": "<p>设父区域有一枚 U → V credit 尚未消费，随后进入也使用 U → V channel 的子循环。子循环的第一个 recv 不知道“这枚属于父区域”，会直接拿走队首 credit。即使两层循环各自 send/recv 总数相等，父 consumer 最后收到的也可能是另一轮或另一个来源的通知。</p><p>因此要把 parent credit 穿过子区域的过程纳入计划：哪些通知被吸收、由哪个 token 接管义务、零轮时怎样保持身份、出口处哪一个完成点足以覆盖父 consumer。这里的 lifecycle transfer 不是凭空换标签，而是记录必须由最终 FIFO 和 obligation 重新验证的转移关系。</p><p>变换顺序也有意义。某次粗化或上提把 send 推迟、recv 提前后，原先判断的“穿过哪一个子循环”可能已经变化。当前规划器在区域规划过程中处理这些相互约束；不能先把吸收结果缓存为真，再任意移动站点。源码对零轮吸收仍有明确的证明缺口注释，后文会保留这个边界。</p><p class=\"source-note\"><a href=\"#chapter/compiler-sync/source-sync-region\">[源码与证据]</a></p>"
+      },
+      {
+        "id": "region-tree",
+        "title": "为什么控制流下降会影响同步架构：从 CFG 恢复可组合区域",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 960 450\" role=\"img\" aria-label=\"区域树给每条循环依赖一个明确的归属\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"arrow-region-tree\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto-start-reverse\"><path d=\"M0 0 L10 5 L0 10 Z\" fill=\"#5a777e\"/></marker></defs><rect width=\"960\" height=\"450\" fill=\"#fafbf9\"/><text x=\"28\" y=\"34\" fill=\"#243c47\" font-size=\"21\" font-weight=\"600\" text-anchor=\"start\">区域树给每条循环依赖一个明确的归属</text><rect x=\"360\" y=\"65\" width=\"240\" height=\"62\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"480.0\" y=\"102.0\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">Seq：整个函数</text><rect x=\"95\" y=\"185\" width=\"220\" height=\"62\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"205.0\" y=\"222.0\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">普通直线指令</text><rect x=\"370\" y=\"185\" width=\"220\" height=\"62\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"480.0\" y=\"222.0\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">Loop：唯一 owner</text><rect x=\"675\" y=\"185\" width=\"220\" height=\"62\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"785.0\" y=\"222.0\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">退出与 drain</text><path d=\"M400,127 L205,185\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-region-tree)\"/><path d=\"M480,127 L480,185\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-region-tree)\"/><path d=\"M560,127 L785,185\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-region-tree)\"/><rect x=\"260\" y=\"300\" width=\"220\" height=\"62\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"370.0\" y=\"337.0\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">If：互斥分支</text><rect x=\"540\" y=\"300\" width=\"220\" height=\"62\" rx=\"10\" fill=\"#eaf0ee\" stroke=\"#72958a\" stroke-width=\"1.5\"/><text x=\"650.0\" y=\"337.0\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"middle\">Loop：嵌套 epoch</text><path d=\"M440,247 L370,300\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-region-tree)\"/><path d=\"M520,247 L650,300\" fill=\"none\" stroke=\"#5a777e\" stroke-width=\"2.5\" marker-end=\"url(#arrow-region-tree)\"/><text x=\"35\" y=\"417\" fill=\"#243c47\" font-size=\"18\" font-weight=\"400\" text-anchor=\"start\">每个区域保留入口、出口、单元内顺序；跨区域依赖必须投影到可解释的站点。</text></svg><figcaption>图 09｜概念示意：节点是 Seq/If/Loop，连线表示包含关系，不是运行时通信。单个 loop 的 epoch 与内层 loop 的 epoch 分开管理；退出边属于该区域的证明边界。</figcaption></figure><p>普通 CFG 只给出基本块与跳转边，loop 的入口、latch、exit 和嵌套关系需要分析。对于不规整控制流，两个看起来相邻的块可能执行不同次数，不能用文本位置代替动态频率。</p><p>当前 staircase driver 在 SCFToControlFlow 之前增加 LiftControlFlowToSCF；InjectSync 内也按 planner 的规则归一化多 latch。这样并不是回避 CFG，而是让区域树能够给循环生命周期定义唯一归属，再把站点落回最终 CFG。</p><p>支持边界要说实话：当前 hand-written low-level fixture 中，某些 side exit 不落 canonical exit 的形态会被 staircase 明确拒绝；可以显式选择 legacy，但默认没有自动 fallback。CLI 帮助文本仍残留 auto 描述，实际 parser、Passes.td 和回归才是这里核对默认行为的依据。</p><p class=\"source-note\"><a href=\"#chapter/compiler-sync/source-sync-region\">[源码与证据]</a></p>"
+      },
+      {
+        "id": "frozen-materialization",
+        "title": "冻结计划再改 IR：为什么需要一个唯一的物化入口",
+        "html": "<p>当多条依赖共享同一 CFG edge，循环退出与下一段循环入口可能需要在同一条边放事件。如果各子算法边分析边改 CFG，先插的一块 trampoline 会改变后一个算法看到的拓扑，结果可能取决于遍历顺序。</p><p>PhysicalMailboxSchedule 先冻结 program point、token ownership、event、command 和 loop site。verifyDependencyModels 通过后，materializePhysicalMailboxSchedule 一次性按计划修改 IR：能合法附着在指令上的使用 piggyback 收发位，需要独立站点的生成 MailOp，并记录 TokenProvenanceLedger。</p><p>最终检查反向追踪：每个实际收发位来自哪个冻结事件，是否发生在正确的 completion/checkout 时点，是否漏掉或多出一个命令。report 也必须对照冻结模型与最终 IR，不能在已插 MailOp 的 IR 上重建一套“看起来一致”的新模型来掩盖原计划漂移。</p><p class=\"source-note\"><a href=\"#chapter/compiler-sync/source-sync-architecture\">[源码与证据]</a></p>"
+      },
+      {
+        "id": "verification",
+        "title": "三种正确性与当前证明边界：计数、覆盖、推进都不能缺",
+        "html": "<table><thead><tr><th>性质</th><th>需要回答的问题</th><th>典型反例</th></tr></thead><tbody><tr><td>C1：收发与容量</td><td>每条路径是否无下溢、容量内，退出回到空状态？</td><td>零轮只 seed 不 drain；false 分支只有 recv</td></tr><tr><td>C2：完成事实覆盖</td><td>实际取走的 credit 是否证明了 consumer 所需的 producer？</td><td>通知错配；recv 放在 consumer 之后；上一轮 credit 冒充本轮</td></tr><tr><td>C3：可推进性</td><td>等待、释放与有限容量的组合是否形成无法推进的环？</td><td>队列或 outbox 反压让对方所需命令无法到达</td></tr></tbody></table><p>当前实现有 obligation 覆盖、冻结站点时序检查、provenance、带身份的 FIFO replay、mailbox balance，以及独立重建比较。它们的证明力不同：重建比较发现计划被改坏，不证明构造算法从一开始就没有共同错误；FileCheck 断言某条诊断，也不等于执行了 RTL。</p><p><strong>当前仍有边界：</strong>loop-carried 放置的独立时序检查并不完整；StaircaseCreditPolicy 对特定零轮 absorption/credit transfer 有明确 OPEN 注释。placement_negatives 回归专门记下：部分绕回事件移动只能被 schedule rebuild 漂移拒绝，而非完整的 epoch 语义检查。设计文档的 C3 一般事件图检查也没有原样落地，生产实现依赖构造约束与容量约束。</p><p>因此这里适合说“建立了多层验证和已知拒绝边界”，不适合说“形式化证明所有 CFG 上不会死锁”。本次仅核对源码、设计文档与测试意图，没有重新运行 compiler、CycleSim、VCS 或实板。</p><p class=\"source-note\"><a href=\"#chapter/compiler-sync/source-sync-verification\">[源码与证据]</a></p>"
+      },
+      {
+        "id": "ra-contract",
+        "title": "同步之后还会发生寄存器复用：VP 退休与 RegAlloc 怎样交接",
+        "html": "<p>InjectSync 位于 RA 前，逻辑上不同的 descriptor 可能被后续分到同一物理 BR。若 VP 输出仍在退休路径上，下一条使用同一物理身份的命令可能制造分析阶段尚未显现的风险。仅说“SSA 上不是 in-place”不足以涵盖物理复用。</p><p>当前 driver 把同一次编译的 breg-allocation-mode 传给 InjectSync。分析依据逻辑 in-place 与预测的 lifetime reuse 模式决定需要的 VP retirement 边界，并保留 requested / predicted / effective 合同。CodeGen 看到真实 RA 决策后核对预测单位数和复用模式是否被前置同步覆盖。</p><p>这不是让两个 pass 各猜一次硬件：它们必须共享可核对的决策规则，后段验证实际行为不超过前段承诺。面试可沿这里追问：若寄存器压力超过阈值、append-only 退回 lifetime reuse，哪里保证同步合同随之收紧？怎样让新增分配策略无法悄悄绕过检查？</p><p class=\"source-note\"><a href=\"#chapter/compiler-sync/source-sync-ra\">[源码与证据]</a></p>"
+      },
+      {
+        "id": "evolution",
+        "title": "架构怎样演变：从逐阶段补规则，到统一模型，再到按 channel 构造",
+        "html": "<p>下面只列 Git 历史可核对的阶段，不凭记忆补会议决策，也不把文档更新时间当实现时间。当前 HEAD 同时保留 legacy 与 staircase，旧代码是可对照的历史路径，不是默认生产路径的说明。</p><table><thead><tr><th>历史节点</th><th>可核实的变化</th><th>解决的问题与仍需保留的职责</th></tr></thead><tbody><tr><td>2026-03<br>b7e0b7052</td><td>四阶段同步分析、跨迭代 WAR 与条件分支处理</td><td>按直线、跨块、循环等形态逐步覆盖；组合后仍要管理同 channel 的交错</td></tr><tr><td>2026-07<br>577c228fc → 42323bd9b</td><td>dependency ledger → canonical dependency model</td><td>把资源、准入、计划和最终收发纳入共同事实来源；避免各 Phase 私有规则和重复 emission</td></tr><tr><td>2026-09<br>5a4a253fc</td><td>staircase physical mailbox planner</td><td>先按无 tag FIFO 构造单调链，再扩展区域、循环和容量；保留共用 effect/资源/验证基础</td></tr><tr><td>2026-10<br>4b01627fb / b34bea097</td><td>拓扑索引、收集与 verifier 并行等工程优化</td><td>改善大依赖图分析成本；需保证计划与证明语义不被缓存或并行化改变</td></tr></tbody></table><p>这段演进的架构价值在于问题边界收敛：资源建模回答真实硬件事实，规划器回答怎样组织合法收发，verifier 检查冻结结果，物化器只发射。staircase 可以减少“逐边放置再打补丁消除交错”的复杂度，却不能自动补全 PE 输出只写、VP 退休或 DMA alias 等硬件事实。</p><p class=\"source-note\"><a href=\"#chapter/compiler-sync/source-sync-history\">[源码与证据]</a></p>"
+      },
+      {
+        "id": "isa-tradeoffs",
+        "title": "如果还能改 ISA：让同步更容易，究竟需要付出什么",
+        "html": "<p>下面是架构设计讨论，不是声称 ZeusV3 已采用这些扩展。比较时固定目标：保留异步单元的重叠，同时减少错配、过度等待和编译器证明成本。</p><table><thead><tr><th>备选设计</th><th>可能减轻的问题</th><th>必须付出的代价与剩余问题</th></tr></thead><tbody><tr><td>当前无 tag 单元对计数 mailbox</td><td>硬件接口紧凑，收发可附着普通指令</td><td>编译器承担同 channel 全局 FIFO、容量、路径频率与 epoch 配对；不能逐依赖独立放置</td></tr><tr><td>假设增加同单元对的独立 channel</td><td>可把难以同序的两条依赖分开</td><td>更多计数器/编码与分配策略；channel 数仍有限，复用和容量证明仍存在</td></tr><tr><td>假设支持带身份或世代的 completion object</td><td>消费者可更明确指定等待对象，降低不同资源通知相互误用的风险</td><td>硬件状态、匹配与编码成本；对象耗尽、世代回绕、生命周期和数据可见性仍需证明</td></tr><tr><td>用更粗的全局等待</td><td>便于最小 bring-up 和故障定位</td><td>扩大等待范围、损失 overlap；有限队列与控制流下仍要检查等待是否可达</td></tr><tr><td>更强的硬件依赖跟踪</td><td>减轻部分静态调度与完成管理</td><td>依赖资源要能被硬件精确识别；面积、时序与验证复杂度增加，跨核/动态别名不自动解决</td></tr></tbody></table><p>从芯片 co-design 角度，应拿最小反例与代表 kernel 比较：哪些额外 channel 能避免粗化？哪些事件必须区分 snapshot 与 done？异步完成是否覆盖真实写回 response？编译器还能保留多少必要同步？没有成本与测量依据时，只能给取舍假设，不能宣布某种 ISA 必然更快。</p><p class=\"source-note\"><a href=\"#chapter/compiler-sync/source-sync-isa\">[设计文档中的硬件推广与本节假设边界]</a></p>"
+      },
+      {
+        "id": "debug-interview",
+        "title": "把设计讲成可追问的工程案例：先定位哪一层丢了事实",
+        "html": "<p>出现错数、挂起或性能退化时，先固定源码、编译器、输入、选项和二进制，再沿同一条依赖追踪。不要在最终汇编看见少一封 mail 就直接加一个 barrier；那可能隐藏了上游 alias 错误，或把另一个路径变成多收少发。</p><ol><li><strong>效果层：</strong>report 是否列出 producer/consumer 的真实读写？物理区间、lane、weight 或 VP 内部资源是否遗漏？</li><li><strong>依赖层：</strong>候选边是否出现？admission/no-mail proof 的类型与硬件事实是否相符？</li><li><strong>规划层：</strong>查看 staircase-plan 的区域、点和 token，再到 physical-mailbox-schedule 核对 owner、站点、频率与 epoch。</li><li><strong>发射层：</strong>final-token-provenance 与实际 IR/汇编中的收发是否一致？RA 和 CodeGen 是否改变了被保护的物理身份？</li><li><strong>执行层：</strong>功能结果检查语义；CycleSim 用于模型内时序；VCS/RTL 再验证硬件事件与实际等待。各层证据分别报告。</li></ol><p>面试最值得讲透的三个取舍是：为什么配置 snapshot 不等于数据 completion；为什么资源依赖图还需要无 tag channel 的整体规划；为什么地址分配、控制流和 RA 必须用跨 pass 合同连接同步。每一个都可以配一个最小反例、一个源码入口和一个拒绝测试。</p><p>准备个人经历时，还要把本人设计、亲自实现、共同评审和已有模块分开。本文讲的是当前工程架构与可验证的演进，不由源码存在推断任何人的个人贡献。能够讲清反例、设计取舍与验证边界，比背出全部类名更接近“负责整体 lowering 方案”的能力。</p><p class=\"source-note\"><a href=\"#chapter/compiler-sync/source-sync-debug\">[源码与证据]</a></p>"
+      }
+    ],
+    "readingStages": [
+      {
+        "id": "hardware-events",
+        "title": "从一个错读理解硬件事件",
+        "summary": "先建立执行单元、配置快照与数据完成的区别。",
+        "sections": [
+          "why-sync",
+          "first-pair",
+          "events",
+          "snapshot"
+        ]
+      },
+      {
+        "id": "resources",
+        "title": "把逻辑数据投影成硬件资源",
+        "summary": "沿 RAW/WAR/WAW、物理别名与 lane 找出必须保护的访问。",
+        "sections": [
+          "resource-model",
+          "hazards",
+          "alias",
+          "same-unit",
+          "gpu-comparison"
+        ]
+      },
+      {
+        "id": "channel-planning",
+        "title": "从依赖边推导无 tag 通知链",
+        "summary": "理解当前架构、staircase 手算与容量代价。",
+        "sections": [
+          "untagged",
+          "pipeline-position",
+          "model-to-schedule",
+          "points",
+          "staircase-example",
+          "capacity-cost"
+        ]
+      },
+      {
+        "id": "control-flow",
+        "title": "让通知穿过循环与分支",
+        "summary": "用 epoch、seed/drain、路径与区域树解释动态生命周期。",
+        "sections": [
+          "epochs",
+          "seed-drain",
+          "branch-balance",
+          "nested-credit",
+          "region-tree"
+        ]
+      },
+      {
+        "id": "proof-engineering",
+        "title": "回到实现、证明与工程演进",
+        "summary": "看冻结计划、验证边界、RA 合同及可追问的案例。",
+        "sections": [
+          "frozen-materialization",
+          "verification",
+          "ra-contract",
+          "evolution",
+          "isa-tradeoffs",
+          "debug-interview"
+        ]
+      }
+    ],
+    "questions": [
+      {
+        "q": "SSA 依赖齐全，为什么还可能读到旧数据？",
+        "a": "SSA 表达值和逻辑对象关系；异步执行单元不会因文本顺序自动等待。buffer 的物理别名、访问生命周期和完成事件还需要显式建模。",
+        "followup": "用 LD 写、PE 读同一 SRAM 的例子，区分分发顺序和完成顺序。",
+        "id": "compiler-sync-q1"
+      },
+      {
+        "q": "描述符复用与数据 buffer 复用为什么不能使用同一种等待？",
+        "a": "描述符可能在前端 snapshot 后就不再被旧命令访问；数据却仍在后端读写。前者的 no-mail proof 不能证明后者已经完成。",
+        "followup": "同一 op pair 同时有 BRegConfig 和 L2Region 依赖时，如何避免过度消边？",
+        "id": "compiler-sync-q2"
+      },
+      {
+        "q": "每条依赖各插一对 send/recv 为什么不够？",
+        "a": "同一 channel 的通知没有资源 tag。交叉的发送和接收顺序可能让 consumer 取到另一资源的通知，必须验证整个 FIFO。",
+        "followup": "画 LD 按 A、B 释放、PE 按 B、A 消费的反例。",
+        "id": "compiler-sync-q3"
+      },
+      {
+        "q": "staircase 是怎样保留并行机会的？",
+        "a": "给定指令顺序下，按 producer 排序，对 consumer 取后缀最小值，再去重，构造同序 token。没有容量约束时，不应把原本独立的等待无依据合并到更晚 producer。",
+        "followup": "用 (1,1)、(2,3)、(3,2)、(4,4) 手算三枚 token。",
+        "id": "compiler-sync-q4"
+      },
+      {
+        "q": "循环入口的 seed 为什么不会掩盖数据依赖？",
+        "a": "它只表达首轮不存在上一轮读者或其它跨轮义务；当前轮输入的 RAW 仍需真实 producer completion。退出和零轮路径还需按实际剩余通知 drain。",
+        "followup": "多出口与嵌套循环中，seed 的归属和 epoch 如何记录？",
+        "id": "compiler-sync-q5"
+      },
+      {
+        "q": "当前 verifier 通过，能否宣称所有循环不会死锁？",
+        "a": "不能。当前检查覆盖多个不变量，但部分 loop-carried 时序与零轮 absorption 仍有明确边界；一般 C3 事件图没有完整独立落地。需要说明测试、模型和真实执行各自范围。",
+        "followup": "为什么重建 schedule 的一致性不等于构造算法的语义正确性？",
+        "id": "compiler-sync-q6"
+      },
+      {
+        "q": "同步在 RA 前，如何防止 RA 制造未建模的物理复用？",
+        "a": "通过分配模式与预测资源合同，让 InjectSync 覆盖可能的 VP retirement 风险；CodeGen 在真实分配后核对实际模式与单位数。",
+        "followup": "如果新增分配策略或 append-only fallback，哪些跨 pass 检查必须随之更新？",
+        "id": "compiler-sync-q7"
+      }
+    ],
+    "sources": [
+      {
+        "id": "sync-baseline",
+        "label": "源码快照与验证范围",
+        "url": "#chapter/compiler-sync/source-sync-baseline",
+        "note": "2026-10-26 只读核对 triton_shared@82613bc2eb30；点击可在本文展开版本、相对源码位置和证据边界。",
+        "kind": "源码"
+      },
+      {
+        "id": "sync-timing",
+        "label": "硬件事件与 snapshot/completion 合同",
+        "url": "#chapter/compiler-sync/source-sync-timing",
+        "note": "2026-10-26 只读核对 triton_shared@82613bc2eb30；点击可在本文展开版本、相对源码位置和证据边界。",
+        "kind": "源码"
+      },
+      {
+        "id": "sync-resources",
+        "label": "typed resource 与指令效果",
+        "url": "#chapter/compiler-sync/source-sync-resources",
+        "note": "2026-10-26 只读核对 triton_shared@82613bc2eb30；点击可在本文展开版本、相对源码位置和证据边界。",
+        "kind": "源码"
+      },
+      {
+        "id": "sync-address",
+        "label": "物理地址复用边界",
+        "url": "#chapter/compiler-sync/source-sync-address",
+        "note": "2026-10-26 只读核对 triton_shared@82613bc2eb30；点击可在本文展开版本、相对源码位置和证据边界。",
+        "kind": "源码"
+      },
+      {
+        "id": "sync-unit",
+        "label": "单元、lane 与 SI 退休范围",
+        "url": "#chapter/compiler-sync/source-sync-unit",
+        "note": "2026-10-26 只读核对 triton_shared@82613bc2eb30；点击可在本文展开版本、相对源码位置和证据边界。",
+        "kind": "源码"
+      },
+      {
+        "id": "sync-mailbox",
+        "label": "无 tag FIFO 硬件抽象",
+        "url": "#chapter/compiler-sync/source-sync-mailbox",
+        "note": "2026-10-26 只读核对 triton_shared@82613bc2eb30；点击可在本文展开版本、相对源码位置和证据边界。",
+        "kind": "源码"
+      },
+      {
+        "id": "sync-pipeline",
+        "label": "当前 backend pass 顺序",
+        "url": "#chapter/compiler-sync/source-sync-pipeline",
+        "note": "2026-10-26 只读核对 triton_shared@82613bc2eb30；点击可在本文展开版本、相对源码位置和证据边界。",
+        "kind": "源码"
+      },
+      {
+        "id": "sync-architecture",
+        "label": "统一模型与 schedule 物化",
+        "url": "#chapter/compiler-sync/source-sync-architecture",
+        "note": "2026-10-26 只读核对 triton_shared@82613bc2eb30；点击可在本文展开版本、相对源码位置和证据边界。",
+        "kind": "源码"
+      },
+      {
+        "id": "sync-staircase",
+        "label": "阶梯算法与直线回归",
+        "url": "#chapter/compiler-sync/source-sync-staircase",
+        "note": "2026-10-26 只读核对 triton_shared@82613bc2eb30；点击可在本文展开版本、相对源码位置和证据边界。",
+        "kind": "源码"
+      },
+      {
+        "id": "sync-capacity",
+        "label": "容量粗化与实现范围",
+        "url": "#chapter/compiler-sync/source-sync-capacity",
+        "note": "2026-10-26 只读核对 triton_shared@82613bc2eb30；点击可在本文展开版本、相对源码位置和证据边界。",
+        "kind": "源码"
+      },
+      {
+        "id": "sync-loop",
+        "label": "周期阶梯、epoch 与 seed/drain",
+        "url": "#chapter/compiler-sync/source-sync-loop",
+        "note": "2026-10-26 只读核对 triton_shared@82613bc2eb30；点击可在本文展开版本、相对源码位置和证据边界。",
+        "kind": "源码"
+      },
+      {
+        "id": "sync-region",
+        "label": "区域树、分支与支持边界",
+        "url": "#chapter/compiler-sync/source-sync-region",
+        "note": "2026-10-26 只读核对 triton_shared@82613bc2eb30；点击可在本文展开版本、相对源码位置和证据边界。",
+        "kind": "源码"
+      },
+      {
+        "id": "sync-verification",
+        "label": "当前 verifier 与已知缺口",
+        "url": "#chapter/compiler-sync/source-sync-verification",
+        "note": "2026-10-26 只读核对 triton_shared@82613bc2eb30；点击可在本文展开版本、相对源码位置和证据边界。",
+        "kind": "源码"
+      },
+      {
+        "id": "sync-ra",
+        "label": "VP 退休与寄存器分配合同",
+        "url": "#chapter/compiler-sync/source-sync-ra",
+        "note": "2026-10-26 只读核对 triton_shared@82613bc2eb30；点击可在本文展开版本、相对源码位置和证据边界。",
+        "kind": "源码"
+      },
+      {
+        "id": "sync-history",
+        "label": "Git 可核实的架构演进",
+        "url": "#chapter/compiler-sync/source-sync-history",
+        "note": "2026-10-26 只读核对 triton_shared@82613bc2eb30；点击可在本文展开版本、相对源码位置和证据边界。",
+        "kind": "源码"
+      },
+      {
+        "id": "sync-debug",
+        "label": "依赖报告与分层排障",
+        "url": "#chapter/compiler-sync/source-sync-debug",
+        "note": "2026-10-26 只读核对 triton_shared@82613bc2eb30；点击可在本文展开版本、相对源码位置和证据边界。",
+        "kind": "源码"
+      },
+      {
+        "id": "cuda-async",
+        "label": "CUDA 异步 barrier 与 phase 生命周期",
+        "url": "#chapter/compiler-sync/source-cuda-async",
+        "note": "NVIDIA 官方文档，2026-10-26 查阅；只用于职责对照，不作为 518 实测或硬件实现证据。",
+        "kind": "官方文档"
+      },
+      {
+        "id": "gpu-scoreboard",
+        "label": "Nsight Compute scoreboard 依赖等待",
+        "url": "#chapter/compiler-sync/source-gpu-scoreboard",
+        "note": "NVIDIA 官方文档，2026-10-26 查阅；只用于职责对照，不作为 518 实测或硬件实现证据。",
+        "kind": "官方文档"
+      },
+      {
+        "id": "sync-isa",
+        "label": "硬件推广与备选 ISA 假设",
+        "url": "#chapter/compiler-sync/source-sync-isa",
+        "note": "设计文档的硬件推广讨论；本节各备选是分析假设，不代表已实现。",
+        "kind": "设计分析"
+      }
+    ],
+    "takeaways": [
+      "先给硬件事件和资源读写建模，再决定哪些边需要 runtime mail。",
+      "snapshot、issue、done 与数据可见性是不同边界，no-mail proof 必须限定资源和依赖种类。",
+      "地址复用、lane 与跨迭代 epoch 能引入 SSA use-def 之外的真实依赖。",
+      "无 tag mailbox 要按 channel 规划整体 FIFO，逐边插通知不能自动组合成正确协议。",
+      "当前默认 staircase；历史 Phase 规划、设计目标、源码实现与实测证据必须分开。",
+      "冻结 schedule、唯一物化、最终 provenance 与独立验证各自承担不同责任；已知证明缺口也属于工程合同。"
+    ],
+    "legacyChapters": {
+      "sync-resource-events": {
+        "title": "InjectSync 的起点：资源、事件与真实依赖",
+        "section": "events",
+        "anchors": [
+          "se-events",
+          "se-taxonomy",
+          "se-hazards",
+          "se-diagonal",
+          "se-ct",
+          "se-lanes-si",
+          "se-obligation"
+        ],
+        "anchorMap": {
+          "se-events": "events",
+          "se-taxonomy": "resource-model",
+          "se-hazards": "hazards",
+          "se-diagonal": "same-unit",
+          "se-ct": "snapshot",
+          "se-lanes-si": "same-unit",
+          "se-obligation": "model-to-schedule"
+        },
+        "noteKey": "sync-resource-events"
+      },
+      "sync-staircase-planning": {
+        "title": "阶梯规划：把无标签 mailbox 变成可证明的顺序链",
+        "section": "untagged",
+        "anchors": [
+          "sp-channel",
+          "sp-coverage",
+          "sp-worked",
+          "sp-coarsen",
+          "sp-capacity",
+          "sp-virtual",
+          "sp-code"
+        ],
+        "anchorMap": {
+          "sp-channel": "untagged",
+          "sp-coverage": "points",
+          "sp-worked": "staircase-example",
+          "sp-coarsen": "capacity-cost",
+          "sp-capacity": "capacity-cost",
+          "sp-virtual": "capacity-cost",
+          "sp-code": "verification"
+        },
+        "noteKey": "sync-staircase-planning"
+      },
+      "sync-loop-branch-mailbox": {
+        "title": "循环与分支：mail 的世代、seed、drain 和吸收",
+        "section": "epochs",
+        "anchors": [
+          "lb-distance",
+          "lb-seed",
+          "lb-exits",
+          "lb-branches",
+          "lb-steal",
+          "lb-order",
+          "lb-implementation"
+        ],
+        "anchorMap": {
+          "lb-distance": "epochs",
+          "lb-seed": "seed-drain",
+          "lb-exits": "seed-drain",
+          "lb-branches": "branch-balance",
+          "lb-steal": "nested-credit",
+          "lb-order": "nested-credit",
+          "lb-implementation": "region-tree"
+        },
+        "noteKey": "sync-loop-branch-mailbox"
+      },
+      "sync-proof-implementation": {
+        "title": "同步闭环：从冻结模型到最终指令，证明做到哪一层",
+        "section": "model-to-schedule",
+        "anchors": [
+          "pv-pipeline",
+          "pv-three",
+          "pv-boundary",
+          "pv-provenance",
+          "pv-fixtures",
+          "pv-debug",
+          "pv-codesign"
+        ],
+        "anchorMap": {
+          "pv-pipeline": "model-to-schedule",
+          "pv-three": "verification",
+          "pv-boundary": "verification",
+          "pv-provenance": "frozen-materialization",
+          "pv-fixtures": "verification",
+          "pv-debug": "debug-interview",
+          "pv-codesign": "evolution"
+        },
+        "noteKey": "sync-proof-implementation"
+      },
+      "compiler-sync-proof": {
+        "title": "InjectSync：让每一封 mail 都有可解释的证明",
+        "section": "events",
+        "anchors": [
+          "timing",
+          "resources",
+          "linear",
+          "cfg-loop",
+          "balance",
+          "breg-contract",
+          "debug"
+        ],
+        "anchorMap": {
+          "timing": "events",
+          "resources": "resource-model",
+          "linear": "hazards",
+          "cfg-loop": "epochs",
+          "balance": "verification",
+          "breg-contract": "ra-contract",
+          "debug": "debug-interview"
+        },
+        "noteKey": "compiler-sync-proof"
+      }
+    }
+  }
+]

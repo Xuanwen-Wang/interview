@@ -67,8 +67,7 @@
     },
     "chapters": [
       "performance-model",
-      "compiler-518-hardware",
-      "compiler-real-case",
+      "compiler-lowering",
       "serving-runtime"
     ],
     "jobCode": "A54228",
@@ -152,11 +151,8 @@
       ]
     },
     "chapters": [
-      "compiler-triton-pipeline",
-      "compiler-schedule-memory",
-      "compiler-sync-proof",
-      "compiler-codegen-debug",
-      "compiler-518-hardware"
+      "compiler-lowering",
+      "compiler-sync"
     ]
   },
   {
@@ -232,7 +228,7 @@
     "chapters": [
       "compiler-foundations",
       "llvm-backend",
-      "compiler-codegen-debug"
+      "compiler-lowering"
     ]
   },
   {
@@ -312,9 +308,8 @@
       ]
     },
     "chapters": [
-      "compiler-schedule-memory",
-      "compiler-sync-proof",
-      "compiler-real-case",
+      "compiler-lowering",
+      "compiler-sync",
       "serving-runtime",
       "compiler-foundations"
     ]
@@ -446,8 +441,7 @@
       ]
     },
     "chapters": [
-      "compiler-triton-pipeline",
-      "compiler-codegen-debug",
+      "compiler-lowering",
       "serving-runtime"
     ]
   },
@@ -509,7 +503,7 @@
     "chapters": [
       "performance-model",
       "coding-kernels",
-      "compiler-real-case"
+      "compiler-lowering"
     ]
   },
   {
@@ -646,7 +640,7 @@
     },
     "chapters": [
       "compiler-foundations",
-      "compiler-codegen-debug"
+      "compiler-lowering"
     ]
   }
 ]

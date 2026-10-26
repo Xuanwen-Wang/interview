@@ -143,19 +143,23 @@
       "id": "hardware",
       "title": "518 硬件与后端",
       "number": "05",
-      "description": "把真实 PE、VP、存储、依赖与同步协议拆到实现层。",
+      "description": "先从硬件约束理解整体 lowering，再单独深入资源依赖与同步；PE、VP 的硬件细节作为配套长文。",
       "groups": [
         {
           "id": "backend",
-          "title": "518 编译链与真实案例",
+          "title": "整体 Lowering：一条完整的编译路线",
           "chapters": [
-            "compiler-518-hardware",
-            "compiler-triton-pipeline",
-            "compiler-schedule-memory",
-            "compiler-sync-proof",
-            "compiler-codegen-debug",
-            "compiler-real-case"
-          ]
+            "compiler-lowering"
+          ],
+          "continuousReading": true
+        },
+        {
+          "id": "synchronization",
+          "title": "依赖与同步：从资源事件到 mailbox 协议",
+          "chapters": [
+            "compiler-sync"
+          ],
+          "continuousReading": true
         },
         {
           "id": "pe",
@@ -169,16 +173,6 @@
           "title": "VP 架构：RTL 流水与实际算子",
           "chapters": [
             "hw-vp-architecture"
-          ]
-        },
-        {
-          "id": "synchronization",
-          "title": "InjectSync 设计与实现",
-          "chapters": [
-            "sync-resource-events",
-            "sync-staircase-planning",
-            "sync-loop-branch-mailbox",
-            "sync-proof-implementation"
           ]
         }
       ]

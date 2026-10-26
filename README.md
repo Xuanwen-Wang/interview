@@ -10,7 +10,7 @@
 
 ## 内容与导航
 
-当前使用 **8 个知识域 → 18 个专题 → 41 章** 的目录结构。侧边栏只展开当前专题；全站目录支持主题、标题/标签与阅读状态筛选。已有章节链接、笔记和学习记录保留。
+当前使用 **8 个知识域 → 18 个专题 → 28 章** 的目录结构。侧边栏只展开当前专题；全站目录支持主题、标题/标签与阅读状态筛选。已有章节链接、笔记和学习记录保留。
 
 | 知识域 | 内容 |
 | --- | --- |
@@ -18,12 +18,12 @@
 | 算法与数据流 | 两篇 decode 入门长文：Attention 的历史状态与长上下文；FFN 的参数、路由与权重复用。真实 shape 图贯穿计算和访存 |
 | GLM5Next 300B真实部署 | MoE 单篇：卡间 EP4、卡内 TP4 → token 往返 → Router/Shared/Routed/Reduce → 通信与验证；完整模型与 Attention 另有专题 |
 | Triton · MLIR · LLVM | AST/TTIR/布局、Op/Region/Dialect、PassManager与分析失效、Rewrite/Conversion、LLVM中后端 |
-| 518硬件与后端 | 真实pass、PE/MAC、minitile、AL1/WL1、hub/credit；VP wide/pipe、PRG、PostCal、多执行器；资源事件与InjectSync |
+| 518硬件与后端 | Lowering 架构长文与独立同步篇；从硬件约束解释描述符、边界、布局、控制流、VP 映射和代码生成，PE/VP 硬件长文作为配套 |
 | 性能与推理系统 | Nsight / Profiler、算子画像、Roofline、通信分析、模型负载、并发与容量、服务与运行时 |
 | 公司与面经 | 12个公司或公司组、28条来源，区分官方JD、个人面经、官方作业与第三方材料 |
 | Coding实作 | 算法、图/数据流、kernel、玩具pass；原创Python/C++参考与测试 |
 
-当前 **429 小节、308 道追问、134 张正文 SVG**。附全文搜索、图示放大、3个通用交互实验、2个PE交互演示、1个MoE拓扑/容量交互、4个性能分析实验区和2个decode shape/字节交互、术语表、阅读进度及本地笔记导入导出。SVG、样式和内容均内嵌；网页不依赖CDN、外部字体或第三方脚本。
+当前 **408 小节、253 道追问、146 张正文 SVG**。附全文搜索、图示放大、3个通用交互实验、2个PE交互演示、1个MoE拓扑/容量交互、4个性能分析实验区和2个decode shape/字节交互、术语表、阅读进度及本地笔记导入导出。SVG、样式和内容均内嵌；网页不依赖CDN、外部字体或第三方脚本。
 
 - [性能分析完整长文](https://xuanwen-wang.github.io/interview/performance.html)：57节、27道追问，先讲TPS、step time、请求与看板口径，再深入H200、Nsight、Roofline、Zeus Viewer、算子画像、通信与模型负载；含4个交互教学实验区，可独立离线阅读。
 - [性能分析审查与验收](evidence/review-performance-analysis.md)：来源、公式口径、教学边界与浏览器验证。
@@ -31,6 +31,8 @@
 - Attention / FFN decode 教程：原算法域 12 章合并为两篇，各一个 HTML；24 + 18 节、39 张真实 shape 或明确标注的教学图、2 个交互账本。旧 87 个内容锚点与个人笔记保留。详见[重构与验收](evidence/review-decode-guides.md)。
 - [MoE 完整长文](https://xuanwen-wang.github.io/interview/moe.html)：34节、9个阅读阶段、18道追问；按卡间EP4、卡内TP4，用T24贯穿部署与四个kernel。并列真实权重验收配置绑定链和当前开发四核链，保留旧15章/107节链接及个人笔记。
 - [MoE 单篇重构与验收](evidence/review-moe-continuous.md)：固定版本、纠错、旧链接迁移与浏览器验证。
+- [518 整体 Lowering](https://xuanwen-wang.github.io/interview/lowering.html)：32 节、13 张图、8 阶段交互；先解释硬件约束与 CUDA 职责差异，再贯通描述符、边界、控制流、VP 映射与代码生成。
+- [518 自动同步](https://xuanwen-wang.github.io/interview/sync.html)：26 节、9 张图；从资源事件与物理别名到无 tag mailbox、staircase、循环/分支和验证边界。两篇保留旧 10 章与 70 个历史锚点、笔记和阅读记录。详见[重写与验收](evidence/review-lowering-guides.md)。
 - [PE 完整长文](https://xuanwen-wang.github.io/interview/pe.html)：一个 HTML，沿整体边界与接口 → 8×8 阵列 → ALU/MAC → 累加与写回 → minitile 连续展开；23节、21张图、2个交互；新增MTW/MTC/MTK本质、GLM5Next Gate/Up/Down真实配置与逐坐标映射。
 - [VP 完整长文](https://xuanwen-wang.github.io/interview/vp.html)：开头展开完整 RTL 架构，沿控制/CDC/ECC、X/Y 分流、A/B 向量链、归约/反馈到写回，再讲 TopK、sigmoid、RMSNorm 与 CUDA；30节、21张图、27道追问。
 - [VP 架构审查与验收](evidence/review-vp.md)：RTL与编译器固定来源、关键事实修正及网页验收。

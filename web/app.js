@@ -76,8 +76,8 @@ function heroArt() { return `<div class="hero-art"><svg viewBox="0 0 490 346" ro
 <path d="M410 65h24v224h-10" fill="none" stroke="#c27c4d" stroke-dasharray="4 4"/><text x="454" y="190" font-family="monospace" font-size="8" fill="#b07951" transform="rotate(90 454 190)">EVIDENCE / FEEDBACK</text></svg><div class="art-caption">FIG. 01 — ONE WORKLOAD, FOUR LEVELS OF REASONING</div></div>`; }
 function card(c) { const context=chapterContext(c.id); const i=(context.module?moduleChapters(context.module):CHAPTERS).indexOf(c); return `<a class="chapter-card" href="#chapter/${c.id}"><div class="card-top"><b>${String(i+1).padStart(2,'0')} / ${esc(c.level)}</b><span>${c.minutes} MIN</span></div><h3>${esc(c.title)}</h3><p>${esc(c.subtitle)}</p><div class="card-foot"><span>${esc(c.tags.slice(0,2).join(' · '))}</span><span>${state.read.includes(c.id)?'已读 ✓':'开始阅读 ↗'}</span></div></a>`; }
 function renderHome(){renderKnowledgeHome();}
-function sourceUrl(s) { if (/^https?:\/\//.test(s.url)) return s.url; if (!s.url || s.url.startsWith('#')) return 'https://github.com/Xuanwen-Wang/interview/blob/main/'+(s.url?.slice(1)||'evidence/README.md'); return 'https://github.com/Xuanwen-Wang/interview/blob/main/'+s.url.replace(/^\.\//,''); }
-function sourceHTML(s) { return `<a href="${esc(sourceUrl(s))}" target="_blank" rel="noreferrer">${esc(s.label)} ↗</a><small>${esc(s.kind)} · ${esc(s.note || '')}</small>`; }
+function sourceUrl(s) { if (/^https?:\/\//.test(s.url) || /^#chapter\//.test(s.url)) return s.url; if (!s.url || s.url.startsWith('#')) return 'https://github.com/Xuanwen-Wang/interview/blob/main/'+(s.url?.slice(1)||'evidence/README.md'); return 'https://github.com/Xuanwen-Wang/interview/blob/main/'+s.url.replace(/^\.\//,''); }
+function sourceHTML(s) { const url=sourceUrl(s), external=/^https?:/.test(url); return `<a href="${esc(url)}"${external?' target="_blank" rel="noreferrer"':''}>${esc(s.label)} ↗</a><small>${esc(s.kind)} · ${esc(s.note || '')}</small>`; }
 function renderChapter(id, section) {
  const c = CHAPTERS.find(c=>c.id===id);
  if (!c) { renderNotFound(); return; }
@@ -94,6 +94,7 @@ function renderChapter(id, section) {
  initMoeExplorers();
  initPerformanceExplorers();
  initDecodeExplorers();
+ initLoweringExplorers();
  initAttentionLabs();
  enableFigureZoom();
  if(section)scrollChapterAnchor(section);

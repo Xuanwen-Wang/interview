@@ -1,0 +1,477 @@
+[
+  {
+    "id": "compiler-lowering",
+    "title": "518 编译器架构：从 Triton 语义到硬件程序",
+    "part": "518 硬件与编译器",
+    "order": 30,
+    "subtitle": "从硬件约束出发，贯通描述符、边界、布局、控制流、VP 映射和代码生成。",
+    "minutes": 100,
+    "level": "架构 → 实现",
+    "tags": [
+      "ZeusV3",
+      "518",
+      "3D DRAM",
+      "Triton",
+      "MLIR",
+      "Lowering",
+      "编译器架构"
+    ],
+    "lead": "整体 lowering 的设计，决定了哪些语义需要保留、哪些硬件限制必须提前处理、哪些物理决策应该推迟。用一个带尾块的计算串起表示变化，再沿真实源码展开中后端的取舍；同步综合另有完整长文。",
+    "sections": [
+      {
+        "id": "lowering-architecture",
+        "title": "先从芯片边界出发：我们究竟在编译什么机器？",
+        "html": "<p>本篇的 518 指 ZeusV3 这一 3D DRAM 近存架构目标。近存计算改变了数据供给与执行组织，编译器仍需把外部数据、片上存储和异构计算单元组织成合法的工作流。先看这些硬件合同，再决定 IR 分层。</p><p>设计整体 lowering，首先要回答目标硬件把哪些工作留给软件。这里的 518 不是把一个任意标量表达式交给通用 ALU 后就结束：它有承担不同职责的 PE、VP、DT、数据搬运通路与控制命令；张量访问由描述符参数化，多个执行单元可以异步工作。编译器不仅要保持数学结果，还要把<strong>数据放在哪里、哪种执行单元使用它、配置何时生效、结果何时可用</strong>变成可执行的程序。</p><p>PE 承担矩阵类计算，VP 提供向量计算能力，DT 参与数据变换或传送，控制侧组织配置、分支与命令。这里先把它们理解为职责不同的资源，具体内部结构分别见 <a href=\"#chapter/hw-memory-hierarchy\">PE 长文</a>和 <a href=\"#chapter/hw-vp-architecture\">VP 长文</a>。这些执行资源的命令顺序和数据完成顺序并不天然等价；把内存中的两个名字分开，也不保证它们在物理上不重叠。</p><p>因此，架构上的三个问题是相互牵连的：用什么 IR 保留足够的张量语义；在哪一层把硬件资源显式化；如何在最终资源布局上证明执行正确。过早降成细碎标量指令，会失去融合和张量访问的结构；过晚才发现描述符字段、物理容量或命令次序约束，又可能已经无法合法实现。</p><aside class=\"callout\"><strong>本篇的解释层次：</strong>当前行为由 <code>triton_shared@82613bc2eb30</code> 的入口、实现和回归支撑；“这样分层的收益与代价”是基于实现的架构分析。关于早期 SelectionDAG 方案的讨论，只保留本人回忆，未找到记录的决策动机不写成历史事实。本文没有新跑编译器、模型或芯片仿真。</aside><div class=\"table-wrap\"><table><thead><tr><th>后文用到的名称</th><th>先按什么职责理解</th></tr></thead><tbody><tr><td>GDG</td><td>全局存储访问域；描述符需要表达外部数据地址和访问范围。</td></tr><tr><td>L2</td><td>本核软件管理的片上 SRAM，显式规划地址与复用。</td></tr><tr><td>WDRAM / Weight DRAM</td><td>PE 的权重存储域，与普通激活访问分开建模。</td></tr><tr><td>BR / BReg</td><td>描述符寄存器状态，描述数据怎样被访问；并不是张量数据本身。</td></tr></tbody></table></div>"
+      },
+      {
+        "id": "lowering-cuda-responsibility",
+        "title": "与 CUDA 对照：差异在责任边界，不在有没有这些问题",
+        "html": "<p>CUDA 是编程平台，GPU 是硬件；与 518 对比时必须选同一层。普通线程代码常把数组访问表达为地址加索引，GPU 的指令执行和依赖跟踪承担一部分等待；跨线程共享、异步搬运和 Tensor Core 等路径仍需要对应的同步协议。不能把“用户没有手写 mailbox 收发”理解成“硬件没有数据依赖”。</p><figure class=\"diagram\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 900 500\" role=\"img\" aria-label=\"518与CUDA/GPU的职责对照\"><rect width=\"900\" height=\"500\" rx=\"12\" fill=\"#f5f4ec\"/><text x=\"26\" y=\"35\" font-family=\"sans-serif\" font-size=\"22\" font-weight=\"600\" fill=\"#294b3c\">同一个问题：算术、存储与异步完成，分别由谁负责？</text><text x=\"32\" y=\"82\" font-family=\"sans-serif\" font-size=\"21\" font-weight=\"600\" fill=\"#294b3c\">518：显式资源与命令</text><text x=\"470\" y=\"82\" font-family=\"sans-serif\" font-size=\"21\" font-weight=\"600\" fill=\"#294b3c\">CUDA / NVIDIA GPU：分层承担</text><rect x=\"28\" y=\"107\" width=\"406\" height=\"88\" rx=\"8\" fill=\"#e1e8db\" stroke=\"#b4c4af\"/><text x=\"46\" y=\"137\" font-family=\"sans-serif\" font-size=\"19\" font-weight=\"600\" fill=\"#294b3c\">张量表达 → 描述符与执行单元</text><text x=\"46\" y=\"168\" font-family=\"sans-serif\" font-size=\"17\" font-weight=\"400\" fill=\"#294b3c\">编译器表达 shape、访问域、格式</text><rect x=\"464\" y=\"107\" width=\"406\" height=\"88\" rx=\"8\" fill=\"#e7ebef\" stroke=\"#b4c4af\"/><text x=\"482\" y=\"137\" font-family=\"sans-serif\" font-size=\"19\" font-weight=\"600\" fill=\"#294b3c\">线程 / tile 表达 → GPU 指令</text><text x=\"482\" y=\"168\" font-family=\"sans-serif\" font-size=\"17\" font-weight=\"400\" fill=\"#294b3c\">编译器映射线程、寄存器和指令</text><rect x=\"28\" y=\"219\" width=\"406\" height=\"88\" rx=\"8\" fill=\"#e1e8db\" stroke=\"#b4c4af\"/><text x=\"46\" y=\"249\" font-family=\"sans-serif\" font-size=\"19\" font-weight=\"600\" fill=\"#294b3c\">有限片上空间 → 物理区间</text><text x=\"46\" y=\"280\" font-family=\"sans-serif\" font-size=\"17\" font-weight=\"400\" fill=\"#294b3c\">编译器权衡空间复用与在途访问</text><rect x=\"464\" y=\"219\" width=\"406\" height=\"88\" rx=\"8\" fill=\"#e7ebef\" stroke=\"#b4c4af\"/><text x=\"482\" y=\"249\" font-family=\"sans-serif\" font-size=\"19\" font-weight=\"600\" fill=\"#294b3c\">寄存器 / shared memory / cache</text><text x=\"482\" y=\"280\" font-family=\"sans-serif\" font-size=\"17\" font-weight=\"400\" fill=\"#294b3c\">分配、共享存储规划与硬件缓存协作</text><rect x=\"28\" y=\"331\" width=\"406\" height=\"88\" rx=\"8\" fill=\"#e1e8db\" stroke=\"#b4c4af\"/><text x=\"46\" y=\"361\" font-family=\"sans-serif\" font-size=\"19\" font-weight=\"600\" fill=\"#294b3c\">异步资源访问 → mail 协议</text><text x=\"46\" y=\"392\" font-family=\"sans-serif\" font-size=\"17\" font-weight=\"400\" fill=\"#294b3c\">编译器证明顺序、数量和 token 来源</text><rect x=\"464\" y=\"331\" width=\"406\" height=\"88\" rx=\"8\" fill=\"#e7ebef\" stroke=\"#b4c4af\"/><text x=\"482\" y=\"361\" font-family=\"sans-serif\" font-size=\"19\" font-weight=\"600\" fill=\"#294b3c\">依赖跟踪 + 显式同步机制</text><text x=\"482\" y=\"392\" font-family=\"sans-serif\" font-size=\"17\" font-weight=\"400\" fill=\"#294b3c\">scoreboard、barrier、async wait 等</text><text x=\"32\" y=\"465\" font-family=\"sans-serif\" font-size=\"18\" font-weight=\"400\" fill=\"#294b3c\">TMA 也有 tensor map；异步 GPU 操作同样需要完成与可见性约束。</text></svg><figcaption>图 01｜职责比较示意，不是硬件互连图或性能排名。右侧描述 NVIDIA GPU 的典型责任分布；具体指令和异步协议随架构、编程接口而变。</figcaption></figure><div class=\"table-wrap\"><table><thead><tr><th>要解决的问题</th><th>518 当前路径</th><th>CUDA / GPU 的对照</th><th>架构上的代价</th></tr></thead><tbody><tr><td>张量如何被硬件访问</td><td>中端构造 fmap / weight descriptor，低层落实 BR 状态</td><td>普通线程访存可走地址计算；TMA 则同样需要 tensor map</td><td>显式描述符有利于张量命令表达，但带来字段范围、格式和状态管理</td></tr><tr><td>片上空间怎样复用</td><td>显式地址布局必须考虑异步访问未完成的窗口</td><td>寄存器与 shared memory 也有容量、生命周期与同步约束</td><td>更紧凑布局可能换来额外等待；不能只优化总字节数</td></tr><tr><td>什么时候可以消费结果</td><td>资源事件与 mailbox 调度共同落实跨单元顺序</td><td>指令依赖跟踪与程序中的同步各承担对应职责；异步 copy 需要完成机制</td><td>无 tag mailbox 要求软件证明 FIFO token 对应关系；GPU 的异步协议也各有完成约束</td></tr><tr><td>怎样降成目标指令</td><td>MLIR 内继续表达目标语义，再交自有 RegAlloc / selector / encoder</td><td>CUDA 工具链也有目标相关优化、寄存器分配和机器码生成</td><td>专用路径可贴近目标合同，但维护、诊断和回归责任也留在项目中</td></tr></tbody></table></div><p>NVIDIA 文档明确给异步 copy 配套 barrier 或 pipeline，也介绍 tensor map。Nsight Compute 则把等待未满足 scoreboard 依赖列为一种 stall 原因。这些事实说明 GPU 并没有消除依赖问题。<a href=\"https://docs.nvidia.com/cuda/cuda-programming-guide/04-special-topics/async-copies.html\">CUDA 异步数据搬运</a>、<a href=\"https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html\">Nsight Compute 依赖等待指标</a>。</p>"
+      },
+      {
+        "id": "lowering-map",
+        "title": "先读总图：每一次下降究竟补齐了什么",
+        "html": "<p>下面按“程序越来越具体”的方向阅读。Phase A 保留通用计算和存储结构；Phase B 让它满足 518 的张量访问与执行约束；Phase C 把这些结构变成配置、控制流、同步和指令。阶段之间的接口比 pass 数量更重要：前一层必须留下后一层证明合法性所需的类型、布局、别名和资源信息。</p><figure class=\"diagram\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 900 640\" role=\"img\" aria-label=\"从TTIR到zbin的表示与合同\"><rect width=\"900\" height=\"640\" rx=\"12\" fill=\"#f5f4ec\"/><text x=\"26\" y=\"36\" font-family=\"sans-serif\" font-size=\"22\" font-weight=\"600\" fill=\"#294b3c\">一条下降链：每层承诺更多具体信息，仍保留上一层语义</text><rect x=\"28\" y=\"65\" width=\"844\" height=\"68\" rx=\"8\" fill=\"#dce7d4\"/><text x=\"48\" y=\"93\" font-family=\"sans-serif\" font-size=\"20\" font-weight=\"600\" fill=\"#294b3c\">Triton / TTIR</text><text x=\"48\" y=\"118\" font-family=\"sans-serif\" font-size=\"17\" font-weight=\"400\" fill=\"#294b3c\">张量计算、mask、程序实例与类型</text><path d=\"M450 136v15m-5-6 5 6 5-6\" fill=\"none\" stroke=\"#ae7546\" stroke-width=\"2\"/><rect x=\"28\" y=\"157\" width=\"844\" height=\"68\" rx=\"8\" fill=\"#dce7d4\"/><text x=\"48\" y=\"185\" font-family=\"sans-serif\" font-size=\"20\" font-weight=\"600\" fill=\"#294b3c\">Linalg + MemRef</text><text x=\"48\" y=\"210\" font-family=\"sans-serif\" font-size=\"17\" font-weight=\"400\" fill=\"#294b3c\">结构化计算、buffer / view 与存储关系</text><path d=\"M450 228v15m-5-6 5 6 5-6\" fill=\"none\" stroke=\"#ae7546\" stroke-width=\"2\"/><rect x=\"28\" y=\"249\" width=\"844\" height=\"68\" rx=\"8\" fill=\"#dce7d4\"/><text x=\"48\" y=\"277\" font-family=\"sans-serif\" font-size=\"20\" font-weight=\"600\" fill=\"#294b3c\">ZeusHigh</text><text x=\"48\" y=\"302\" font-family=\"sans-serif\" font-size=\"17\" font-weight=\"400\" fill=\"#294b3c\">硬件维度、执行单元、描述符、边界与片上布局</text><path d=\"M450 320v15m-5-6 5 6 5-6\" fill=\"none\" stroke=\"#ae7546\" stroke-width=\"2\"/><rect x=\"28\" y=\"341\" width=\"844\" height=\"68\" rx=\"8\" fill=\"#e5e8ed\"/><text x=\"48\" y=\"369\" font-family=\"sans-serif\" font-size=\"20\" font-weight=\"600\" fill=\"#294b3c\">ZeusLow + CFG</text><text x=\"48\" y=\"394\" font-family=\"sans-serif\" font-size=\"17\" font-weight=\"400\" fill=\"#294b3c\">配置和执行命令、片上地址、执行器归属与控制流</text><path d=\"M450 412v15m-5-6 5 6 5-6\" fill=\"none\" stroke=\"#ae7546\" stroke-width=\"2\"/><rect x=\"28\" y=\"433\" width=\"844\" height=\"68\" rx=\"8\" fill=\"#e5e8ed\"/><text x=\"48\" y=\"461\" font-family=\"sans-serif\" font-size=\"20\" font-weight=\"600\" fill=\"#294b3c\">InjectSync</text><text x=\"48\" y=\"486\" font-family=\"sans-serif\" font-size=\"17\" font-weight=\"400\" fill=\"#294b3c\">从资源冲突建立依赖，规划并验证 mailbox 调度</text><path d=\"M450 504v15m-5-6 5 6 5-6\" fill=\"none\" stroke=\"#ae7546\" stroke-width=\"2\"/><rect x=\"28\" y=\"525\" width=\"844\" height=\"68\" rx=\"8\" fill=\"#e5e8ed\"/><text x=\"48\" y=\"553\" font-family=\"sans-serif\" font-size=\"20\" font-weight=\"600\" fill=\"#294b3c\">CodeGen → zbin</text><text x=\"48\" y=\"578\" font-family=\"sans-serif\" font-size=\"17\" font-weight=\"400\" fill=\"#294b3c\">寄存器分配、指令选择、最终合法化、编码与装载信息</text></svg><figcaption>图 02｜概念总图，反映本次核对的设备下降主线；不是逐 pass 清单。ZeusHigh 内部同时包含规范化、调度和物理布局；具体顺序与可选开关在后文展开。</figcaption></figure><p>本篇会反复使用四个问题：输入 IR 还不知道什么；本层新增哪类事实；为什么在这一层决定；下一层依靠哪个不变量。一个合理的 pipeline 顺序，是让后一个决策所需的信息刚好已经可用，同时避免过早丢失高层结构。</p><p>依赖篇单独解释 <a href=\"#chapter/compiler-sync\">资源事件、mailbox 与循环/分支的同步综合</a>。本篇只保留同步在全链路中的位置与接口，不要求先理解整套 token 规划才能读后端。</p>"
+      },
+      {
+        "id": "lowering-entry-paths",
+        "title": "先找真实入口：同一组 lowering，有两种设备编译驱动",
+        "html": "\n<p>不能从一个叫 <code>compiler.py</code> 的文件就推断完整设备链。当前 ZECC 路径先用 Python helper 把 Triton kernel、signature、constexpr 和参数属性变成 TTIR，再调用统一工具 <code>zeus-compiler</code>。它在一个进程内串起 Phase A、ZeusHigh pipeline 和后端，最终输出 zbin。</p>\n<table><thead><tr><th>入口</th><th>实际调用</th><th>适合解释什么</th></tr></thead><tbody><tr><td>ZECC / 运行时 JIT</td><td><code>gen_ttir.py → kernel_to_ttir.py → zeus-compiler</code></td><td>真实部署的特化、工具链与缓存边界</td></tr><tr><td>离线 <code>zeus_compile.py</code></td><td><code>triton-shared-opt</code> 跑 A+B，再把 ZeusHigh 交给 <code>zeusv3-backend</code></td><td>分阶段保存 IR、比较中端与后端结果</td></tr><tr><td><code>backend/compiler.py</code> 的完整 <code>add_stages</code></td><td><code>ttir → ttsharedir → llir → obj</code></td><td>包含 CPU/LLVM 路径，不能直接替代设备 zbin 链</td></tr></tbody></table>\n<p>ZECC 的 TTIR helper 确实复用了 <code>CPUBackend.make_ttir</code>，但只调用了 TTIR 生成和优化；它随后把 TTIR 交给 Zeus 工具，而不是继续调用该 backend 的全部 <code>llir/obj</code> 阶段。因此“用了 CPUBackend 这个类”与“设备通过 CPU 后端生成机器码”是两件事。</p>\n<p>统一驱动省去了 A/B/C 之间的中间文件交接；分段驱动更方便定位错误。它们共享核心 Pass，却仍有独立的选项转发、入口清理和诊断逻辑。对照实验必须核对实际工具与开关，不能只说“都是同一个仓库”。</p>\n<details class=\"pe-deep-dive\"><summary>对应源码与验证边界</summary><p><code>tools/zecc/csrc/triton_bridge.cpp:169–240</code>；<code>tools/zecc/kernel_to_ttir.py:76–110</code>；<code>zeus_compile.py:309–455</code>；<code>backend/compiler.py:284–312</code>。统一工具额外入口处理见 <code>tools/zeus-compiler/zeus-compiler.cpp:861–884</code>。</p><p>依据为 2026-10-26 对 triton_shared @ 82613bc2eb30 的静态源码核对；本节未重新构建编译器或执行仿真。教学图是结构示意，不表示性能比例。</p></details>"
+      },
+      {
+        "id": "lowering-running-example",
+        "title": "用一个有尾块的计算，固定整篇的讨论对象",
+        "html": "\n<p>以下是<strong>教学假设</strong>：输入 <code>X</code> 与输出 <code>Y</code> 都是 BF16 的二维数组，逻辑形状为 <code>[6,32]</code>。第一个轴是行，第二个轴是每行元素；计算 <code>Y=max(X+2,0)</code>，名义块大小为 <code>[4,32]</code>。输入只取有限、足够小且可精确表示的整数，避免把 BF16 舍入或 NaN 的讨论混入这条形状主线。实际优化仍必须保留真实程序的中间精度与舍入规则。</p>\n<p>第一块覆盖行 0–3，第二块从行 4 开始，只有两行有效。编译器仍可能为一个完整块预留空间，但不能把预留容量误认为合法读写范围。对元素独立的这条计算，沿合法两行完成计算和写回即可；若换成归约，未加载位置的填充值也会成为算法语义。</p>\n<figure class=\"diagram\"><svg viewBox=\"0 0 960 400\" role=\"img\" aria-label=\"六行三十二列输入由两个四行块处理，最后一块仅两行有效\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"mid-example-arrow\" markerWidth=\"8\" markerHeight=\"8\" refX=\"7\" refY=\"4\" orient=\"auto\"><path d=\"M0 0 L8 4 L0 8 Z\" fill=\"#506b73\"/></marker></defs><rect width=\"960\" height=\"400\" rx=\"12\" fill=\"#f7f8f5\"/><g font-family=\"sans-serif\" font-size=\"18\" fill=\"#183c42\"><text x=\"30\" y=\"35\">教学形状：X[6,32] → Y=max(X+2,0) → Y[6,32]，BF16</text><text x=\"30\" y=\"70\">纵轴：行；横向整条表示 32 个元素，不逐元素按比例绘制</text><rect x=\"88\" y=\"100\" width=\"320\" height=\"29\" fill=\"#c8e1d4\" stroke=\"#80978d\"/><text x=\"34\" y=\"121\">0</text><rect x=\"88\" y=\"132\" width=\"320\" height=\"29\" fill=\"#c8e1d4\" stroke=\"#80978d\"/><text x=\"34\" y=\"153\">1</text><rect x=\"88\" y=\"164\" width=\"320\" height=\"29\" fill=\"#c8e1d4\" stroke=\"#80978d\"/><text x=\"34\" y=\"185\">2</text><rect x=\"88\" y=\"196\" width=\"320\" height=\"29\" fill=\"#c8e1d4\" stroke=\"#80978d\"/><text x=\"34\" y=\"217\">3</text><rect x=\"88\" y=\"228\" width=\"320\" height=\"29\" fill=\"#f2d1ae\" stroke=\"#80978d\"/><text x=\"34\" y=\"249\">4</text><rect x=\"88\" y=\"260\" width=\"320\" height=\"29\" fill=\"#f2d1ae\" stroke=\"#80978d\"/><text x=\"34\" y=\"281\">5</text><text x=\"165\" y=\"318\">每行 32 个元素</text><rect x=\"493\" y=\"95\" width=\"430\" height=\"100\" rx=\"9\" fill=\"#e3eee9\" stroke=\"#a7bcb5\"/><text x=\"511\" y=\"126\">块 0：起点 row=0</text><text x=\"511\" y=\"153\">名义 tile=[4,32]，有效 tile=[4,32]</text><rect x=\"493\" y=\"222\" width=\"430\" height=\"100\" rx=\"9\" fill=\"#fff0dd\" stroke=\"#a7bcb5\"/><text x=\"511\" y=\"253\">块 1：起点 row=4</text><text x=\"511\" y=\"280\">名义 tile=[4,32]，有效 tile=[2,32]</text><path d=\"M414 155 L485 155\" fill=\"none\" stroke=\"#506b73\" stroke-width=\"2.5\" marker-end=\"url(#mid-example-arrow)\"/><path d=\"M414 265 L485 265\" fill=\"none\" stroke=\"#506b73\" stroke-width=\"2.5\" marker-end=\"url(#mid-example-arrow)\"/><text x=\"30\" y=\"366\">输出只有 6 行；不存在可以随意写出的“第 6、7 行”。</text></g></svg><figcaption>图 03｜同一条线区分逻辑数组、名义 tile 和有效 tile。本例没有运行编译器，也不是任何模型的业务 shape 或测量结果。</figcaption></figure><details class=\"pe-deep-dive\"><summary>对应源码与验证边界</summary><p>此节是显式教学构造。目标 IR 的 shape/descriptor 语义由 <code>ZeusHighTypes.td</code> 与 <code>Ops/ZeusHighDescOps.td</code> 核对；并未声称生成了某段真实汇编或性能数字。</p><p>依据为 2026-10-26 对 triton_shared @ 82613bc2eb30 的静态源码核对；本节未重新构建编译器或执行仿真。教学图是结构示意，不表示性能比例。</p></details>"
+      },
+      {
+        "id": "lowering-walkthrough",
+        "title": "交互总览：跟着一个尾块逐层检查信息",
+        "html": "<p>采用一个明确的教学计算：<code>Y = max(X + 2, 0)</code>，输入输出为 BF16，逻辑形状是 <code>[6,32]</code>，每个程序块请求 <code>[4,32]</code>。第二块从行索引 4（从 0 计）开始，因此只有 2 行有效。它同时涉及张量计算、维度映射、访存边界和最终执行，足以解释基础合同。</p><p>这里<strong>不声称该表达式一定被当前某个 VP recipe 融合，也不提供伪造的实际编译输出</strong>。后文分别用源码中的可验证机制说明它需要哪些能力；真实 selector/回归例子另标出处。</p><div data-lowering-explorer></div>"
+      },
+      {
+        "id": "lowering-pointer-semantics",
+        "title": "Phase A：先把一堆指针，变成可证明的访问结构",
+        "html": "\n<p>Triton 中一个 tile 的地址，可能来自标量 base、<code>arange</code>、广播、乘 stride、加偏移以及 mask。后端需要知道这些地址能否组成连续或规则的张量窗口。若一开始就为每个元素生成地址计算，规则行搬运、整块 DMA 和后续布局分析的机会就会丢失。</p>\n<p>Phase A 先尝试结构化指针表示，再把剩余形式交给非结构化路径；随后将张量算术转为 Linalg，将地址访问转为 MemRef。<code>FlattenMultiAxisGatherPtr</code> 位于结构化分析之前，说明“调整表达形式以暴露规律”也是入口职责。这里的结构化不是猜测：无法证明的访问不能强行当成规则连续块。</p>\n<p>在教学例子中，二维连续输入的元素地址是 <code>base + (row×32+col)×2</code> 字节。乘 2 来自 BF16 元素宽度；row 是逻辑行，32 是行跨度的元素数。把它表示成 MemRef 后，shape、offset、stride 与读取的元素类型仍然必须保留。后续若把指针 reinterpret 成字节访问，可以共享同一个分配根，却不能继续按旧的 BF16 数据格式解释它。</p>\n<p><strong>取舍：</strong>规则访存交给结构化表示，有利于合并搬运和描述符生成；复杂 gather 需要专门路径和更强的索引边界证明。面试中的重点是“哪些表达式能证明规则、失败时怎么办”，而不是只背 <code>PtrAnalysis</code> 的名字。</p>\n<details class=\"pe-deep-dive\"><summary>对应源码与验证边界</summary><p><code>lib/Conversion/TritonToLinalgExperimental/TritonToLinalgExperimentalPass.cpp:470–501</code>；<code>lib/Analysis/PtrAnalysis.cpp</code>；<code>lib/Conversion/StructuredToMemref/StructuredToMemref.cpp:1010–1303</code>。</p><p>依据为 2026-10-26 对 triton_shared @ 82613bc2eb30 的静态源码核对；本节未重新构建编译器或执行仿真。教学图是结构示意，不表示性能比例。</p></details>"
+      },
+      {
+        "id": "lowering-bufferization-choice",
+        "title": "为什么先多用一些缓冲，再决定原地复用",
+        "html": "\n<p>张量 SSA 描述“这个值由谁产生”；设备执行却要读写可变内存。Bufferization 必须决定一个新结果能否覆盖旧输入。越早复用，表面上越省空间；但两个值一旦共用内存，后续融合就必须同时考虑内容覆盖、多个消费者和写入先后。</p>\n<p>当前 Phase A 的 OneShotBufferize 明确设置 <code>copyBeforeWrite=true</code>，先让写入落到独立缓冲，并采用 16 字节对齐。源码解释了这个选择：下游 VP chaining、尤其 cast 融合，依赖单一写入者的关系。待融合决策完成，Phase B 的 <code>InplaceBufferize</code> 再根据 MemRef 的真实读写关系回收可复用空间。</p>\n<p>这不是“保守实现之后补个优化”那么简单：它选择在不同阶段分别优化<strong>证明难度</strong>和<strong>存储容量</strong>。先保留较清晰的数据流，能避免融合误删仍有消费者的 producer；随后原地化与地址分配，再处理更精确的生命周期和空间压力。</p>\n<p>循环累加还要特殊处理。<code>SimplifyForLoopIterArgs</code> 会把 Bufferization 产生的每轮缓冲和迭代参数规整成后端理解的形式；之后使用 SafeLICM，而不是无条件套用所有 CPU 风格的 allocation hoisting。把缓冲或 descriptor 提到循环外，可能延长 BReg 活跃区间，省掉的“分配动作”未必抵得上寄存器压力。</p>\n<details class=\"pe-deep-dive\"><summary>对应源码与验证边界</summary><p><code>lib/Conversion/TritonToLinalgExperimental/TritonToLinalgExperimentalPass.cpp:512–564</code> 的 <code>copyBeforeWrite</code>、<code>SimplifyForLoopIterArgs</code>、<code>SafeLICM</code> 与禁用 BufferLoopHoisting 的说明；<code>lib/Dialect/ZeusHigh/Transforms/ZeusHighPipeline.cpp:241–263</code> 的融合后原地化顺序。</p><p>依据为 2026-10-26 对 triton_shared @ 82613bc2eb30 的静态源码核对；本节未重新构建编译器或执行仿真。教学图是结构示意，不表示性能比例。</p></details>"
+      },
+      {
+        "id": "lowering-br-contract",
+        "title": "BR 不是只存 shape：它描述一次硬件访问怎样发生",
+        "html": "\n<p>PE、VP、DT 和搬运单元需要按各自的硬件规则遍历张量。BR 是这些命令使用的描述符寄存器。把它简称为“shape 寄存器”容易遗漏三个问题：<strong>从哪个地址开始、沿什么物理布局走、这次只操作哪块区域</strong>。</p>\n<table><thead><tr><th>信息</th><th>要回答的问题</th><th>教学例子中的含义</th></tr></thead><tbody><tr><td>Base / address mode / data format</td><td>地址来源、存储域、元素如何解释</td><td>X 的基址，BF16，每元素 2 字节</td></tr><tr><td>Tensor extent</td><td>描述符覆盖的张量与寻址布局</td><td>连续布局对应 [1,1,6,32]；有行间 padding 时不能直接照抄逻辑 shape</td></tr><tr><td>Tile extent</td><td>当前一次命令处理多少</td><td>首块 [1,1,4,32]，尾块 [1,1,2,32]</td></tr><tr><td>Position</td><td>当前 tile 位于何处</td><td>第二块的行起点 4</td></tr></tbody></table>\n<p>MemRef 的任意 stride 也不能直接等同于“硬件 BR 可以编码任意 stride”。中端需要把可表示的步长转换成硬件 extent、position 或基址重定位；无法满足约束的形状要合法化、物化重排或拒绝。描述符字段宽度、对齐与布局限制都是 lowering 的合法性条件。</p>\n<p><strong>与 GPU 的准确对照：</strong>GPU 同样存在描述符。NVIDIA 的 TMA tensor map 就包含地址、维度、stride 与 tile 等参数。这里值得比较的是责任分布：当前 ZeusHigh 让 descriptor 成为通用中端规划对象，后端再具体配置 BR；不能归纳为“GPU 只有标量地址，518 才有描述符”。<a href=\"https://docs.nvidia.com/cuda/cuda-driver-api/cuda_driver_api/group__CUDA__TENSOR__MEMORY.html\" target=\"_blank\" rel=\"noopener\">NVIDIA Tensor Map API</a></p>\n<details class=\"pe-deep-dive\"><summary>对应源码与验证边界</summary><p><code>include/triton-shared/Dialect/ZeusLow/IR/Ops/ZeusLowRegCfgOps.td:302–465</code>；<code>lib/Dialect/ZeusHigh/Transforms/LegalizeBRAddressing.cpp</code>；<code>lib/Dialect/ZeusHigh/Transforms/ValidateDescWidths.cpp</code>。GPU 对照只采用官方 Tensor Map API 中明确公开的字段与约束。</p><p>依据为 2026-10-26 对 triton_shared @ 82613bc2eb30 的静态源码核对；本节未重新构建编译器或执行仿真。教学图是结构示意，不表示性能比例。</p></details>"
+      },
+      {
+        "id": "lowering-descriptor-families",
+        "title": "为什么先抽象 fmap / weight descriptor，而不直接分配 BR",
+        "html": "\n<p>中端需要讨论“这个逻辑视图以什么方式供给某个单元”，但此时不应被某个物理 BR 编号锁死。ZeusHigh 因而用 <code>fmap_desc</code> 与 <code>weight_desc</code> 表达语义：前者描述 GDG 或 L2 上的四维特征图窗口，后者描述供 PE 读取的三维 Weight DRAM 数据。两者共用 <code>set_pos</code> 和 <code>update_tile</code> 这类操作，却保持不同的布局合同。</p>\n<figure class=\"diagram\"><svg viewBox=\"0 0 960 360\" role=\"img\" aria-label=\"fmap 与 weight 描述符分别连接特征图和近存权重路径\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"mid-desc-arrow\" markerWidth=\"8\" markerHeight=\"8\" refX=\"7\" refY=\"4\" orient=\"auto\"><path d=\"M0 0 L8 4 L0 8 Z\" fill=\"#506b73\"/></marker></defs><rect width=\"960\" height=\"360\" rx=\"12\" fill=\"#f7f8f5\"/><g font-family=\"sans-serif\" font-size=\"18\" fill=\"#183c42\"><rect x=\"25\" y=\"70\" width=\"280\" height=\"130\" rx=\"9\" fill=\"#e3eee9\" stroke=\"#a7bcb5\"/><text x=\"43\" y=\"101\">fmap_desc：NHWC 4D</text><text x=\"43\" y=\"128\">GDG / L2 访问视图</text><text x=\"43\" y=\"155\">Tensor + Tile + Pos</text><rect x=\"655\" y=\"70\" width=\"280\" height=\"130\" rx=\"9\" fill=\"#fff0dd\" stroke=\"#a7bcb5\"/><text x=\"673\" y=\"101\">weight_desc：NKC 3D</text><text x=\"673\" y=\"128\">Weight DRAM 访问视图</text><text x=\"673\" y=\"155\">权重格式、分块与位置</text><rect x=\"345\" y=\"100\" width=\"270\" height=\"80\" rx=\"9\" fill=\"#e3eee9\" stroke=\"#a7bcb5\"/><text x=\"363\" y=\"131\">PE 计算命令</text><text x=\"363\" y=\"158\">输入、权重、输出均需契约</text><path d=\"M310 140 L337 140\" fill=\"none\" stroke=\"#506b73\" stroke-width=\"2.5\" marker-end=\"url(#mid-desc-arrow)\"/><path d=\"M650 140 L623 140\" fill=\"none\" stroke=\"#506b73\" stroke-width=\"2.5\" marker-end=\"url(#mid-desc-arrow)\"/><rect x=\"25\" y=\"236\" width=\"910\" height=\"91\" rx=\"9\" fill=\"#eef1f4\" stroke=\"#a7bcb5\"/><text x=\"43\" y=\"267\">fmap 也供 LD/ST、VP、DT 使用；weight 的 PE 路径从 Weight DRAM 取数。</text><text x=\"43\" y=\"294\">这是两类接口的结构对照；NKC 的字母不能直接当作算法 GEMM 的 M/N/K。</text><text x=\"30\" y=\"35\">箭头表示 PE 消费描述符所标识的数据，不是 descriptor 自身搬运数据</text></g></svg><figcaption>图 04｜描述符描述数据访问；创建描述符本身不等于完成 DMA。Weight DRAM 的 PE 读取路径不能画成必然先把全部权重搬到 L2。</figcaption></figure>\n<p><code>create_fmap_desc</code> 捕捉基址、tensor/tile 形状、动态偏移以及分配属性；<code>set_pos</code> 覆盖当前位置，<code>update_tile</code> 覆盖当前块大小。这里的“覆盖”不是在旧 position 上再累加一次。描述符 SSA 链让循环中每次消费所需的状态可追踪，后端再把它实现为 BR 配置。</p>\n<p><strong>取舍：</strong>增加一层类型与操作，带来 verifier、映射和状态传播的维护成本；换来融合、尾块、分配等 Pass 能围绕同一访问接口协作。后续低层 IR 又将逻辑 descriptor resource、可重放 recipe 与物理 BR residency 分开，这是进一步推迟物理决策的同一思路。</p>\n<details class=\"pe-deep-dive\"><summary>对应源码与验证边界</summary><p><code>include/triton-shared/Dialect/ZeusHigh/IR/ZeusHighTypes.td</code>；<code>IR/Ops/ZeusHighDescOps.td</code>；<code>IR/Ops/ZeusHighWeightDescOps.td</code>；<code>include/triton-shared/Dialect/ZeusLow/IR/Ops/ZeusLowAllocOps.td:44–89</code>。</p><p>依据为 2026-10-26 对 triton_shared @ 82613bc2eb30 的静态源码核对；本节未重新构建编译器或执行仿真。教学图是结构示意，不表示性能比例。</p></details><p>PE 内部怎样切 minitile、在激活驻留与权重供给间取舍，可继续阅读<a href=\"#chapter/hw-memory-hierarchy\">PE 架构长文</a>；这里聚焦编译器如何保留两类输入的访问合同。</p>"
+      },
+      {
+        "id": "lowering-rank-normalization",
+        "title": "ExpandDim：统一坐标接口，不能顺手改了数据布局",
+        "html": "\n<p>硬件接口采用有限的维度合同，用户程序却可能只有一维、二维，或带 keep-dims 的归约视图。若每个 PE/VP/DT lowering 都独立处理所有 rank 组合，维度补齐、axis 和边界索引很容易各写一套。当前 <code>ExpandDim</code> 把 fmap 规整为 NHWC 四维，把相应 PE weight 规整为 NKC 三维，主要通过前置长度为 1 的维度完成。</p>\n<figure class=\"diagram\"><svg viewBox=\"0 0 960 300\" role=\"img\" aria-label=\"二维逻辑形状通过前置单位维映射到四维 fmap 坐标\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"mid-rank-arrow\" markerWidth=\"8\" markerHeight=\"8\" refX=\"7\" refY=\"4\" orient=\"auto\"><path d=\"M0 0 L8 4 L0 8 Z\" fill=\"#506b73\"/></marker></defs><rect width=\"960\" height=\"300\" rx=\"12\" fill=\"#f7f8f5\"/><g font-family=\"sans-serif\" font-size=\"18\" fill=\"#183c42\"><rect x=\"25\" y=\"68\" width=\"330\" height=\"115\" rx=\"9\" fill=\"#e3eee9\" stroke=\"#a7bcb5\"/><text x=\"43\" y=\"99\">逻辑二维：row × col</text><text x=\"43\" y=\"126\">Tensor [6,32]</text><text x=\"43\" y=\"153\">Tile [4,32]</text><rect x=\"505\" y=\"68\" width=\"430\" height=\"115\" rx=\"9\" fill=\"#e3eee9\" stroke=\"#a7bcb5\"/><text x=\"523\" y=\"99\">硬件接口：N,H,W,C</text><text x=\"523\" y=\"126\">Tensor [1,1,6,32]</text><text x=\"523\" y=\"153\">Tile [1,1,4,32]</text><path d=\"M365 125 L495 125\" fill=\"none\" stroke=\"#506b73\" stroke-width=\"2.5\" marker-end=\"url(#mid-rank-arrow)\"/><text x=\"376\" y=\"103\">前置 1,1</text><text x=\"28\" y=\"35\">本例：row → W，col → C；不把 W 解释为新的算法维度</text><text x=\"28\" y=\"225\">元素总数不变：6×32 = 1×1×6×32；地址顺序不因补 1 而改变</text><text x=\"28\" y=\"263\">尾块行检查：旧 axis 0 → 新 axis 2；相关 view 和控制流类型一起更新</text></g></svg><figcaption>图 05｜补单位维只是坐标接口规整，不是复制数据、拆开一个真实维度，也不是自动把 strided view 变成连续存储。</figcaption></figure>\n<p>因此这绝不是只改一个 <code>MemRefType</code>。原有 stride、offset、subview、transpose permutation、boundary axis，以及 <code>scf.for</code>/<code>scf.while</code> 传递的类型，都要同步更新。非单位维的步长不能因为“看起来已经是四维”就重新按连续布局计算。</p>\n<p><strong>取舍：</strong>统一 rank 降低下游处理的组合数，但把类型传播和 view 维护的复杂度集中到规范化阶段。对无法证明的 rank-reduced view，报错比猜一个 reshape 更安全。面试时可用“while 的 before/after/condition/yield 为什么都要一致”检验是否真正理解了跨区域类型合同。</p>\n<details class=\"pe-deep-dive\"><summary>对应源码与验证边界</summary><p><code>lib/Dialect/ZeusHigh/Transforms/ExpandDim.cpp:25–100</code> 定义目标 rank 与非单位 stride 保留原则；<code>:381–468</code> 重建 reinterpret 并移动 boundary 轴；<code>:505–815</code> 处理 view、for/while 与 fixpoint。</p><p>依据为 2026-10-26 对 triton_shared @ 82613bc2eb30 的静态源码核对；本节未重新构建编译器或执行仿真。教学图是结构示意，不表示性能比例。</p></details>"
+      },
+      {
+        "id": "lowering-memory-identity",
+        "title": "同一地址，不等于同一描述符；同一描述符，也不等于同一访问范围",
+        "html": "\n<p>必须分别追踪三件事：<strong>存储身份</strong>（哪个 allocation 或外部基址）、<strong>视图语义</strong>（元素类型、shape、stride、offset）、<strong>当前访问</strong>（position、有效 tile 与读写方式）。三个问题混为一谈，会同时破坏类型正确性和依赖分析。</p>\n<p>例如，同一块底层内存通过 i32 指针和 i8 指针访问，地址根可以相同，BR 的数据格式及偏移单位却不同。沿 pointer chain 找到了根节点，不表示可以把最终访问类型也退回根类型。当前 CreateFmapDesc 保留 <code>logicalElementType</code> 并物化 <code>logical_element_type</code>，用于表达这类区别。</p>\n<p>反过来，两个不同的 MemRef SSA 值也可能是同一缓冲的切片。编译器不能因为 descriptor 不同就认定不存在冲突；而同一个逻辑 descriptor 在不同循环迭代更新了 position，其访问窗口也不相同。后端同步需要的是精确到当前命令的读写域，不能只比较 SSA 名字。</p>\n<p><strong>架构取舍：</strong>把 memory identity 留给别名与生命周期分析，把 descriptor state 留给访问配置，把物理 BR 编号留给后端物化与分配。这样各类优化可以分别变换，但跨层必须保留映射。这个区别也是理解“为什么分配后还会出现新的 WAR/WAW 依赖”的前提。</p>\n<details class=\"pe-deep-dive\"><summary>对应源码与验证边界</summary><p><code>lib/Dialect/ZeusHigh/Transforms/CreateFmapDesc.cpp:1610–1638,1780–1794</code>；低层身份与配置版本分离见 <code>include/triton-shared/Dialect/ZeusLow/IR/ZeusLowTypes.td:43–58</code> 与 <code>Ops/ZeusLowAllocOps.td:44–89</code>。</p><p>依据为 2026-10-26 对 triton_shared @ 82613bc2eb30 的静态源码核对；本节未重新构建编译器或执行仿真。教学图是结构示意，不表示性能比例。</p></details>"
+      },
+      {
+        "id": "lowering-shape-stride-bounds",
+        "title": "逻辑 shape 与物理行距：同一个数字不能兼任两种边界",
+        "html": "\n<p>继续沿教学例子，但显式更换存储条件：逻辑数据仍是 <code>[6,32]</code>，每行之后额外留 16 个 BF16 元素的 padding，因此行跨度为 <code>48</code> 个元素，即 <code>96</code> 字节。访问 <code>X[row,col]</code> 的地址变为 <code>base+(row×48+col)×2</code>；合法列范围仍然只是 <code>0≤col&lt;32</code>。</p>\n<figure class=\"diagram\"><svg viewBox=\"0 0 960 326\" role=\"img\" aria-label=\"逻辑三十二列和物理四十八元素行距必须独立表示\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"mid-pitch-arrow\" markerWidth=\"8\" markerHeight=\"8\" refX=\"7\" refY=\"4\" orient=\"auto\"><path d=\"M0 0 L8 4 L0 8 Z\" fill=\"#506b73\"/></marker></defs><rect width=\"960\" height=\"326\" rx=\"12\" fill=\"#f7f8f5\"/><g font-family=\"sans-serif\" font-size=\"18\" fill=\"#183c42\"><text x=\"28\" y=\"35\">教学布局变体：BF16，每行逻辑 32 元素，物理 pitch=48 元素=96 B</text><text x=\"28\" y=\"94\">row 0</text><rect x=\"130\" y=\"65\" width=\"470\" height=\"43\" fill=\"#c8e1d4\" stroke=\"#80978d\"/><rect x=\"600\" y=\"65\" width=\"235\" height=\"43\" fill=\"#f2d1ae\" stroke=\"#c39262\"/><text x=\"252\" y=\"93\">逻辑有效：32 元素</text><text x=\"625\" y=\"93\">padding：16 元素</text><text x=\"28\" y=\"160\">row 1</text><rect x=\"130\" y=\"131\" width=\"470\" height=\"43\" fill=\"#c8e1d4\" stroke=\"#80978d\"/><rect x=\"600\" y=\"131\" width=\"235\" height=\"43\" fill=\"#f2d1ae\" stroke=\"#c39262\"/><text x=\"252\" y=\"159\">逻辑有效：32 元素</text><text x=\"625\" y=\"159\">padding：16 元素</text><text x=\"28\" y=\"226\">row 2</text><rect x=\"130\" y=\"197\" width=\"470\" height=\"43\" fill=\"#c8e1d4\" stroke=\"#80978d\"/><rect x=\"600\" y=\"197\" width=\"235\" height=\"43\" fill=\"#f2d1ae\" stroke=\"#c39262\"/><text x=\"252\" y=\"225\">逻辑有效：32 元素</text><text x=\"625\" y=\"225\">padding：16 元素</text><text x=\"28\" y=\"285\">寻址走 48 的行距；边界检查守住 32 的逻辑宽度。</text></g></svg><figcaption>图 06｜横轴是每行元素位置，本图 32:16 的块宽比例有意义；只画三行解释行距，不代表逻辑输入只有三行。</figcaption></figure>\n<p>若 descriptor 只写逻辑宽度 32，下一行地址可能被算短；若边界分析只看到用于寻址的宽度 48，就可能把 padding 误判成有效数据。当前 CreateFmapDesc 中有从 stride 恢复物理 extent 的逻辑，并为相应行距路径保存 <code>logical_inner_extent</code>。UnifiedBoundaryGuard 调用 <code>getLogicalGdgShape</code>，按逻辑域裁剪 tile；LegalizeBRAddressing 随后处理硬件可编码的地址表达。</p>\n<p>这体现了“何时下降”的取舍：太早把一切折进基址和硬件 extent，会让逻辑边界丢失；太晚处理物理行距，又会让底层发现非法 descriptor 时难以还原上游语义。必须明确谁保留逻辑域、谁计算物理步长，以及何时才允许移除辅助属性。</p>\n<details class=\"pe-deep-dive\"><summary>对应源码与验证边界</summary><p><code>lib/Dialect/ZeusHigh/Transforms/CreateFmapDesc.cpp:1228–1513</code>；<code>lib/Dialect/ZeusHigh/Transforms/UnifiedBoundaryGuard.cpp:471–506</code>；<code>test/ZeusV3Midend/Unit/Transforms/create_fmap_desc_runtime_gdg_pitch.mlir</code> 与相应 invalid 回归；<code>legalize_gdg_row_pitch.mlir</code>。图中 [6,32]/pitch48 为独立教学数值。</p><p>依据为 2026-10-26 对 triton_shared @ 82613bc2eb30 的静态源码核对；本节未重新构建编译器或执行仿真。教学图是结构示意，不表示性能比例。</p></details>"
+      },
+      {
+        "id": "lowering-tail-semantics",
+        "title": "边界保护：裁剪 DMA 只是第一步，padding 和空任务还要分别处理",
+        "html": "\n<p>教学第二块从 row=4 开始，剩余有效行数为 <code>6−4=2</code>，所以有效 tile 是 <code>[2,32]</code>。CreateFmapDesc/WeightDesc 提供 tensor、tile 与 position；UnifiedBoundaryGuard 再沿数据流维护有效 shape，并让源和目的 descriptor 的传输域保持一致。尾块不是只有 load 要改：compute 的输入/输出域、transpose/reduce 的维度变换和最终 store 都必须相容。</p>\n<table><thead><tr><th>问题</th><th>正确语义</th><th>不能混淆的实现</th></tr></thead><tbody><tr><td>越界 load</td><td>不能访问非法全局地址</td><td>缩小 DMA 不代表未写入的片上元素自动具有正确值</td></tr><tr><td>显式 mask 和 other</td><td>无效位置遵守程序的填充值</td><td>Phase A 可先 fill，再只复制有效部分；这份 padding 可能被后续操作读取</td></tr><tr><td>越界 store</td><td>只能写合法输出域</td><td>输入有 padding 不能授权输出多写几行</td></tr><tr><td>全空 tile / 空核</td><td>相应工作不执行</td><td>硬件 tile 字段能编码一个正数，不表示该地址访问合法</td></tr></tbody></table>\n<p>当前普通 GDG 动态尾块使用 <code>min(block, max(remaining,1))</code>，原因是硬件 size-minus-one 编码不允许随意发出零大小 tile。这里的下界 1 只是保护字段编码，<strong>不能拿它证明 remaining≤0 时可以读一个元素</strong>；空核的正确性由后续 GuardEmptyCore 处理。显式零大小 store 还有独立 guard。</p>\n<p>对归约尤其要区分访问安全与数值语义：求和的 padding 常用 0，最大值归约可能需要负无穷，具体取决于程序合同。当前实现还会检查某些 gather snapshot 是否依赖完整 padding 读域，不能把所有用户都一律缩到最后一次 DMA 的有效窗口。</p>\n<p><strong>架构取舍：</strong>逐元素 predicate 直观但未必匹配块执行硬件；整块裁剪更适合 descriptor 驱动的访问，却要求跨算子传播有效域。不同路径可能同时存在，不能把 UnifiedBoundaryGuard 理解为一个适用于所有 mask 的万能 <code>if</code>。</p>\n<details class=\"pe-deep-dive\"><summary>对应源码与验证边界</summary><p><code>lib/Conversion/StructuredToMemref/StructuredToMemref.cpp:349–379,1075–1078,1264–1303</code>；<code>lib/Dialect/ZeusHigh/Transforms/BoundaryGuardUtils.cpp:104–168</code>；<code>UnifiedBoundaryGuard.cpp:446–545,1989–2077,2292–2329</code>；<code>ZeusHighPipeline.cpp:350–365</code>。</p><p>依据为 2026-10-26 对 triton_shared @ 82613bc2eb30 的静态源码核对；本节未重新构建编译器或执行仿真。教学图是结构示意，不表示性能比例。</p></details>"
+      },
+      {
+        "id": "lowering-order-contracts",
+        "title": "Pass 顺序不是一张清单，而是一组不能倒置的证明前提",
+        "html": "\n<p>阅读当前中端，先把几十个 Pass 收束成五组决策：表达规整、硬件映射、访问描述、并行与寿命规划、物理放置。然后再问每一组需要上一组已经完成什么。这样比背完整类名更能解释架构，也能辨认一个新优化应该插在哪里。</p>\n<figure class=\"diagram\"><svg viewBox=\"0 0 960 434\" role=\"img\" aria-label=\"中端五组决策及关键顺序依赖\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"mid-order-arrow\" markerWidth=\"8\" markerHeight=\"8\" refX=\"7\" refY=\"4\" orient=\"auto\"><path d=\"M0 0 L8 4 L0 8 Z\" fill=\"#506b73\"/></marker></defs><rect width=\"960\" height=\"434\" rx=\"12\" fill=\"#f7f8f5\"/><g font-family=\"sans-serif\" font-size=\"18\" fill=\"#183c42\"><rect x=\"30\" y=\"48\" width=\"265\" height=\"105\" rx=\"9\" fill=\"#e3eee9\" stroke=\"#a7bcb5\"/><text x=\"48\" y=\"79\">① 表达规整</text><text x=\"48\" y=\"106\">LowerReshape / ExpandDim</text><text x=\"48\" y=\"133\">保留真实 layout 与语义</text><rect x=\"347\" y=\"48\" width=\"265\" height=\"105\" rx=\"9\" fill=\"#e3eee9\" stroke=\"#a7bcb5\"/><text x=\"365\" y=\"79\">② 硬件映射与融合</text><text x=\"365\" y=\"106\">HWAdapt → 单元 / modules</text><text x=\"365\" y=\"133\">先形成可实现的计算</text><rect x=\"664\" y=\"48\" width=\"265\" height=\"105\" rx=\"9\" fill=\"#e3eee9\" stroke=\"#a7bcb5\"/><text x=\"682\" y=\"79\">③ 访问域与合法性</text><text x=\"682\" y=\"106\">CreateDesc → Boundary</text><text x=\"682\" y=\"133\">再重定位 / 检查字段宽度</text><path d=\"M300 100 L340 100\" fill=\"none\" stroke=\"#506b73\" stroke-width=\"2.5\" marker-end=\"url(#mid-order-arrow)\"/><path d=\"M618 100 L656 100\" fill=\"none\" stroke=\"#506b73\" stroke-width=\"2.5\" marker-end=\"url(#mid-order-arrow)\"/><path d=\"M797 159 L797 194 L162 194 L162 230\" fill=\"none\" stroke=\"#506b73\" stroke-width=\"2.5\" marker-end=\"url(#mid-order-arrow)\"/><rect x=\"30\" y=\"237\" width=\"425\" height=\"110\" rx=\"9\" fill=\"#e3eee9\" stroke=\"#a7bcb5\"/><text x=\"48\" y=\"268\">④ 并行、调度、寿命</text><text x=\"48\" y=\"295\">按开关运行 DoubleBuffer / parallel 等</text><text x=\"48\" y=\"322\">最终资源需求必须反映新增缓冲</text><rect x=\"505\" y=\"237\" width=\"425\" height=\"110\" rx=\"9\" fill=\"#e3eee9\" stroke=\"#a7bcb5\"/><text x=\"523\" y=\"268\">⑤ 地址分配与最终合同</text><text x=\"523\" y=\"295\">AddressAllocation → SISO plan</text><text x=\"523\" y=\"322\">VerifyNoReshape → Phase C</text><path d=\"M462 288 L497 288\" fill=\"none\" stroke=\"#506b73\" stroke-width=\"2.5\" marker-end=\"url(#mid-order-arrow)\"/><text x=\"30\" y=\"395\">顺序来自当前源码分组；框内省略清理 Pass，启用条件不能从箭头推断。</text></g></svg><figcaption>图 07｜每个箭头传递的是分析前提。此图不是全部 Pass 的逐条展开；可选优化并非全部默认开启。</figcaption></figure>\n<table><thead><tr><th>必须保持的顺序</th><th>倒置会丢掉什么</th></tr></thead><tbody><tr><td>LowerAffine 在 ExpandDim 前；HWAdapt 在执行单元映射前</td><td>前者避免旧 rank 的 affine 索引滞留；后者先把算法形式变为硬件可实现的形式</td></tr><tr><td>VP 配置/融合在最终 descriptor 与寿命规划之前</td><td>融合会删改中间值与访问，过早固定资源会让分析失效</td></tr><tr><td>边界与空核分析在 BR 地址合法化之前</td><td>逻辑坐标必须先完成有效域分析，之后才允许坐标重定位</td></tr><tr><td>地址分配晚于可能改变布局和缓冲的变换</td><td>分配的容量、别名与位置必须描述最终存储需求</td></tr></tbody></table>\n<p>还要纠正一句常见简写：“AddressAllocation 是中端最后一个 Pass”。当前源码在它后面还有 <code>SisoPairPlanning</code> 和 <code>VerifyNoReshape</code>。准确说法是：它处于会改变 descriptor/布局的规划之后，后续仍有基于已分配地址的计划与合同校验。</p>\n<p>ParallelExecutor、DoubleBuffer、loop scheduling 等还具有选项或 kernel hint 门槛。架构文档应同时写“可用机制”和“当前启用条件”，不能把实验选项画成所有 kernel 的必经优化，更不能用相邻版本的实验结果证明当前默认收益。</p>\n<details class=\"pe-deep-dive\"><summary>对应源码与验证边界</summary><p><code>lib/Dialect/ZeusHigh/Transforms/ZeusHighPipeline.cpp:153–215,241–350,353–365,375–546</code>。本文把 Pass 组织为教学分组；完整顺序以该 commit 的源码为准。</p><p>依据为 2026-10-26 对 triton_shared @ 82613bc2eb30 的静态源码核对；本节未重新构建编译器或执行仿真。教学图是结构示意，不表示性能比例。</p></details>"
+      },
+      {
+        "id": "lowering-placement",
+        "title": "片上布局与并行：地址是调度决策的一部分",
+        "html": "<p>518 的本核 L2 在这条路径上是软件显式管理的片上空间。把 buffer 放进哪个区间、哪些 view 共用它、何时允许复用，都会改变可行的执行顺序。这里的 L2 不能直接套成 GPU 的透明二级缓存；更合适的局部对照，是 CUDA 显式 shared memory 的容量、生命周期与异步访问约束。</p><p>可选的双缓冲、循环调度和 ParallelExecutor 需要一起回答两个问题：<strong>有没有足够的存储放并行副本；这些副本是否真的可以同时访问</strong>。双缓冲用额外一份空间尝试重叠搬运与计算；更多 lane 也会扩大存储占用、描述符状态和同步需求。它们不是每个 kernel 必经的固定阶段，而是受选项、hint 和合法性限制的规划。</p><p>中端在 AddressAllocation 前形成必要的执行单元与并行规划，并把真实视图、别名和寿命交给分配器；低层 CFG 建立后还会完成实际执行器分配，不能把两步混成一次“分配稳定”。地址分配也不是 ZeusHigh 最后一项工作，后面仍有 SISO 配对规划与残余 reshape 检查。</p><div class=\"table-wrap\"><table><thead><tr><th>规划希望得到什么</th><th>必须付出的成本</th><th>应该拒绝的简化</th></tr></thead><tbody><tr><td>搬运与计算 overlap</td><td>在途数据的独立驻留、足够的传输与计算资源</td><td>把文本上的 dealloc 当作硬件完成</td></tr><tr><td>多 lane 处理独立迭代</td><td>副本空间、对齐与尾块、lane 对应的依赖</td><td>只按总元素字节数估算可并行宽度</td></tr><tr><td>更紧凑的物理布局</td><td>共址可能制造 WAR/WAW，增加等待</td><td>认为逻辑值不同就不会冲突</td></tr></tbody></table></div><p class=\"source-note\">当前依据：<code>lib/Dialect/ZeusHigh/Transforms/ZeusHighPipeline.cpp</code>、<code>AddressAllocation.cpp</code> 的组件访问摘要、物理别名与复用代价。具体支持范围以本篇冻结版本为准。</p>"
+      },
+      {
+        "id": "lowering-placement-case",
+        "title": "真实反例：省一块 1 KiB，为什么可能增加等待",
+        "html": "<p>切换到一个独立的真实回归例子，不再使用前面的 [6,32] 向量计算。<code>address_allocation_pe_inflight_reuse.mlir</code> 的 <code>@independent</code> 连续计算 <code>a×w→y</code> 和 <code>b×w→z</code>；每个 activation 是 <code>[1,1,4,128]</code> BF16，大小为 <code>1×1×4×128×2 = 1024 B</code>。这是同一 PE 队列中的两条计算命令；两个 GEMM 没有生产者—消费者 RAW，但后一个输出可能覆盖前一个还在读取的输入。</p><figure class=\"diagram\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 900 415\" role=\"img\" aria-label=\"PE独立计算的两种地址布局\"><rect width=\"900\" height=\"415\" rx=\"12\" fill=\"#f5f4ec\"/><text x=\"26\" y=\"35\" font-family=\"sans-serif\" font-size=\"22\" font-weight=\"600\" fill=\"#294b3c\">同一个逻辑程序：地址放置改变了必须等待的关系</text><text x=\"30\" y=\"80\" font-family=\"sans-serif\" font-size=\"18\" font-weight=\"400\" fill=\"#294b3c\">同一 PE 队列：命令 1 读 a → 写 y；命令 2 读 b → 写 z。</text><rect x=\"28\" y=\"105\" width=\"410\" height=\"95\" rx=\"8\" fill=\"#e1e8db\" stroke=\"#b4c4af\"/><text x=\"46\" y=\"135\" font-family=\"sans-serif\" font-size=\"19\" font-weight=\"600\" fill=\"#294b3c\">方案 A：复用旧 a 的空间</text><text x=\"46\" y=\"166\" font-family=\"sans-serif\" font-size=\"17\" font-weight=\"400\" fill=\"#294b3c\">z = [1024,2048) 字节</text><rect x=\"462\" y=\"105\" width=\"410\" height=\"95\" rx=\"8\" fill=\"#e7ebef\" stroke=\"#b4c4af\"/><text x=\"480\" y=\"135\" font-family=\"sans-serif\" font-size=\"19\" font-weight=\"600\" fill=\"#294b3c\">方案 B：为 z 留独立空间</text><text x=\"480\" y=\"166\" font-family=\"sans-serif\" font-size=\"17\" font-weight=\"400\" fill=\"#294b3c\">z = [3072,4096) 字节</text><rect x=\"28\" y=\"220\" width=\"410\" height=\"95\" rx=\"8\" fill=\"#f0e3d8\" stroke=\"#b4c4af\"/><text x=\"46\" y=\"250\" font-family=\"sans-serif\" font-size=\"19\" font-weight=\"600\" fill=\"#294b3c\">旧 a 的异步读仍可能在途</text><text x=\"46\" y=\"281\" font-family=\"sans-serif\" font-size=\"17\" font-weight=\"400\" fill=\"#294b3c\">写 z 前必须保护旧读取</text><rect x=\"462\" y=\"220\" width=\"410\" height=\"95\" rx=\"8\" fill=\"#e7ebef\" stroke=\"#b4c4af\"/><text x=\"480\" y=\"250\" font-family=\"sans-serif\" font-size=\"19\" font-weight=\"600\" fill=\"#294b3c\">a 与 z 物理区间不重叠</text><text x=\"480\" y=\"281\" font-family=\"sans-serif\" font-size=\"17\" font-weight=\"400\" fill=\"#294b3c\">消除这条由复用新增的 WAR</text><path d=\"M233 202v16m-5-6 5 6 5-6\" fill=\"none\" stroke=\"#aa7547\" stroke-width=\"2\"/><path d=\"M667 202v16m-5-6 5 6 5-6\" fill=\"none\" stroke=\"#aa7547\" stroke-width=\"2\"/><text x=\"30\" y=\"354\" font-family=\"sans-serif\" font-size=\"18\" font-weight=\"400\" fill=\"#294b3c\">代价：独立放置多保留一块 1024 B；并不保证两条 PE 命令完全重叠。</text><text x=\"30\" y=\"384\" font-family=\"sans-serif\" font-size=\"17\" font-weight=\"400\" fill=\"#294b3c\">图为地址关系示意，无时间比例；地址来自已入库测试的 FileCheck 预期。</text></svg><figcaption>图 08｜从测试预期解释地址复用的代价。BASE 的 z 地址为 1024，AVOID 为 3072；这不是本次新生成的编译结果，也不表示测得了加速。</figcaption></figure><p>实现中的 <code>findPaidReusePair</code> 把这种复用记为一种布局代价，<code>chargePEReuse</code> 受 <code>avoid-pe-inflight-reuse</code> 控制；此选项在当前 ODS 中默认关闭。它允许“空间足够时减少这条额外等待”，不能充当“这里不需要同步”的证明。后端仍必须对最终选中的物理布局保证正确性。</p><p>两个反例限定优化范围。<code>@raw_reuse</code> 的第二个 PE 确实消费第一个结果，既有 RAW 已要求等待，另开空间未必有收益，测试两种策略都保留地址 0。<code>@capacity_fallback</code> 放不下第四块独立空间，测试保留可行复用；一个性能偏好不能让本来合法的分配失败。</p><p>还有另一份后端回归 <code>inject_sync_same_unit_linear_war.mlir</code>：PE 读 <code>[8192,8320)</code>，后续 PE 写 <code>[8256,8384)</code>，两者重叠 64 B，FileCheck 预期包含 PE→PE 的 send/recv。这是独立的同步夹具，不能假装它是上面中端例子实际编译出的下一阶段。完整依赖模型见<a href=\"#chapter/compiler-sync/alias\">同步篇的物理别名</a>。</p><p>这件事最值得从架构上讲清楚：<strong>地址优化和同步优化共享物理访问事实，但职责不同</strong>。前者选择较好的合法布局，后者证明选中的布局能安全执行。把二者合成一句“减少内存所以更快”会漏掉真正的取舍。</p><p class=\"source-note\">依据：<code>test/ZeusV3Midend/Unit/Transforms/address_allocation_pe_inflight_reuse.mlir</code>，<code>AddressAllocation.cpp::findPaidReusePair</code>，<code>test/ZeusV3Backend/Unit/Transforms/inject_sync_same_unit_linear_war.mlir</code>。本轮只读核对源码和断言，未执行测试。</p>"
+      },
+      {
+        "id": "backend-contract",
+        "title": "从 ZeusHigh 到 ZeusLow：把“计算什么”变成“配置谁、何时启动”",
+        "html": "\n<p>经过中端，矩阵或向量运算已经有目标执行器、fmap/weight descriptor、片上地址和边界条件。后端接手的任务是把这些对象变成控制处理器能够发出的命令：建立描述符寄存器状态、写入 PE/VP 配置、计算动态标量、表达跳转，以及启动异步单元。<strong>ZeusLow 是目标相关的 MLIR，不是已经编码的机器码。</strong>它仍有 SSA 值、block argument 和未分配的寄存器资源。</p>\n<table><thead><tr><th>输入里仍然抽象的内容</th><th>后端需要作出的决定</th><th>暂时不能丢的信息</th></tr></thead><tbody><tr><td>fmap/weight descriptor</td><td>构造 logical resource/version 与可物化的配置 recipe，最终使用 BReg</td><td>根存储、物理地址范围、各次配置版本与使用者</td></tr><tr><td>VP 的有序 modules</td><td>读模式、配置字段、标量参数和一次或多次执行命令</td><td>输入角色、舍入边界、状态来源与执行 lane</td></tr><tr><td>结构化循环与条件</td><td>基本块、边上传值、比较和跳转</td><td>循环回边、带入值、零次执行及分支路径</td></tr><tr><td>目标相关 SSA 值</td><td>选择物理寄存器、插入必要的复制或 spill/reload</td><td>寄存器类别、固定绑定、同步和别名证明</td></tr></tbody></table>\n<p>可以把一个高层操作理解成一份“执行意图”。它可能展开为多个配置和启动操作；反过来，多个高层逐元素计算也可能由同一次 VP 命令内部的流水线完成。编译器必须保留这些关系，不能把“一个 op”当作“一个周期”或“一条 ISA”。</p>\n<p><strong>架构选择与代价：</strong>一种方案是很早就让 kernel 作者显式配置 BR、VP 和 mail，后端只负责编码；它让原型容易贴近硬件，但每个 kernel 都要承担硬件布局、尾块和状态管理。当前路径把这些责任集中到目标 IR 和 pass，再由 low-level 接口表达必要的精确约束。代价是跨层契约更多，编译器必须为每次配置版本、别名和执行器选择建立一致模型。这是在当前实现上可分析的取舍，并不替代历史决策记录。</p>\n<p class=\"source-note\">源码定位（仓库内相对位置）：<code>lib/Conversion/ZeusHighToZeusLow/ZeusHighToZeusLow.cpp; lib/Target/ZeusV3/CodeGen/CodeGenPass.cpp</code>。Zeus 依据为 2026-10-26 只读核对的 <code>triton_shared@82613bc2eb30feb9ef7f57aef20584df0ef9e28a</code>，上述实现文件没有本地改动；本轮未重新构建或运行编译器、模型与仿真。</p>"
+      },
+      {
+        "id": "backend-control-flow",
+        "title": "控制流为什么分成 SCF → CF → ZeusLow，而不一次改写完",
+        "html": "\n<p>以一个动态上界的循环为例：<code>for i in [0, n)</code>，每次更新累加值。结构化 IR 把循环边界、body 和返回给下一轮的值放在一起，适合判断循环不变量；硬件却只理解比较、跳转和寄存器状态。<strong>下降要逐步显式化语义，先把循环变成图，再让图中的节点符合目标指令约束。</strong></p>\n<figure class=\"diagram\"><svg viewBox=\"0 0 1000 400\" role=\"img\" aria-label=\"控制流分层下降的输入输出。上排是表示变换，下排说明两侧分别适合做什么分析；所有框均为结构示意。\"><defs><marker id=\"be-cf-arrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto\"><path d=\"M0 0 L10 5 L0 10 Z\" fill=\"#687c6c\"/></marker></defs><rect x=\"25\" y=\"50\" width=\"280\" height=\"100\" rx=\"10\" fill=\"#edf3ee\" stroke=\"#87998b\"/><text x=\"165.0\" y=\"87.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">结构化 SCF</text><text x=\"165.0\" y=\"113.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">for / if / iter_args</text><rect x=\"360\" y=\"50\" width=\"280\" height=\"100\" rx=\"10\" fill=\"#edf3ee\" stroke=\"#87998b\"/><text x=\"500.0\" y=\"87.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">标准 CF</text><text x=\"500.0\" y=\"113.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">基本块 + 边上传值</text><rect x=\"695\" y=\"50\" width=\"280\" height=\"100\" rx=\"10\" fill=\"#edf3ee\" stroke=\"#87998b\"/><text x=\"835.0\" y=\"87.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">ZeusLow CFG</text><text x=\"835.0\" y=\"113.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">目标类型 + 跳转</text><path d=\"M305,100 L360,100\" fill=\"none\" stroke=\"#687c6c\" stroke-width=\"2\" marker-end=\"url(#be-cf-arrow)\"/><path d=\"M640,100 L695,100\" fill=\"none\" stroke=\"#687c6c\" stroke-width=\"2\" marker-end=\"url(#be-cf-arrow)\"/><text x=\"332\" y=\"185\" text-anchor=\"middle\" font-size=\"17\" fill=\"#425849\">SCFToControlFlow</text><text x=\"667\" y=\"185\" text-anchor=\"middle\" font-size=\"17\" fill=\"#425849\">LowerArith / LowerStandardCF</text><rect x=\"60\" y=\"235\" width=\"390\" height=\"90\" rx=\"10\" fill=\"#f5f0e5\" stroke=\"#87998b\"/><text x=\"255.0\" y=\"267.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">在结构仍清楚时做 LICM</text><text x=\"255.0\" y=\"293.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">循环不变量的外提要保持副作用</text><rect x=\"550\" y=\"235\" width=\"390\" height=\"90\" rx=\"10\" fill=\"#f5f0e5\" stroke=\"#87998b\"/><text x=\"745.0\" y=\"267.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">在真实 CFG 上做后续分析</text><text x=\"745.0\" y=\"293.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">边拆分 → executor → 同步 → RA</text><text x=\"500\" y=\"365\" text-anchor=\"middle\" font-size=\"17\" fill=\"#425849\">箭头表示 IR 变换；图不是芯片执行时间轴，也不是所有 pass 的完整清单。</text></svg><figcaption>图 09｜控制流分层下降的输入输出。上排是表示变换，下排说明两侧分别适合做什么分析；所有框均为结构示意。</figcaption></figure>\n<p>当前两个编译入口都按如下次序编排：<code>ZeusLowLICM →（可选 LiftControlFlowToSCF）→ SCFToControlFlow → LowerArith → LowerStandardCF → ReconcileUnrealizedCasts → SplitCriticalEdges</code>。先利用结构化循环，再用 MLIR 的 SCF-to-CF 把循环/条件展开成标准 CFG；算术和条件跳转随后转到 ZeusLow。最终执行器分配、配置清理与 InjectSync 在这些变换之后。</p>\n<p><strong>为什么在这里展开：</strong>一直保留 SCF，循环边界容易识别，但最终分支、edge-copy 和硬件执行路径还没显式出现；过早展开，则一些循环变换需要重新从 CFG 恢复结构。当前顺序让 LICM 使用结构化信息，让晚期同步、复制与分配面对最终控制流。代价是同步需要处理真实 CFG、循环回边和不规则路径，不能再只按一棵 SCF 语法树统计次数。</p>\n<p>可选的 <code>LiftControlFlowToSCF</code> 不是无理由地来回转换：它仅对区域树暂不能接受的 raw CF 尝试重构，已能接受的 CFG 保持不变；这样把需要处理的 CFG 规整为可识别的结构化区域，使默认 staircase 路径后续能够恢复可组合的 Seq / If / Loop 关系。再下降后的 CFG 仍是实际跳转的表达；同步怎样利用区域树，见<a href=\"#chapter/compiler-sync/region-tree\">同步篇的控制流区域</a>。</p><p>循环 header 必须先判断 <code>i &lt; n</code>，才能正确处理 <code>n = 0</code>。有结果的循环，还需让初始值从入口流入 header，让新值沿回边流入下一轮，并把最终值传给出口。正文中的 CFG 是语义示意，实际块布局和跳转方向由后续变换决定。</p>\n<pre><code>// Teaching CFG: preserve zero-trip execution and loop-carried values.\nentry:  jump header(i=0, acc=init)\nheader(i, acc):\n  if i &lt; n: jump body(i, acc)\n  else:     jump exit(acc)\nbody(i, acc):\n  next_acc = update(acc, i)\n  jump header(i+1, next_acc)\nexit(result): return result</code></pre>\n<p><strong>历史核对：</strong>仓库内 2026-03-11 的控制流设计文档仍写着“先 InjectSync，再 LICM 和 SCF-to-CF”。它能说明旧设计曾这样描述，不能作为当前执行顺序。判断当前系统必须回到两个工具入口中的 <code>pm.addPass</code>。</p>\n<p class=\"source-note\">源码定位（仓库内相对位置）：<code>tools/zeus-compiler/zeus-compiler.cpp:946–1005; tools/zeusv3-backend/zeusv3-backend.cpp:314–365; docs/Zeus_Backend_Control_Flow_Lowering.md</code>。Zeus 依据为 2026-10-26 只读核对的 <code>triton_shared@82613bc2eb30feb9ef7f57aef20584df0ef9e28a</code>，上述实现文件没有本地改动；本轮未重新构建或运行编译器、模型与仿真。</p>"
+      },
+      {
+        "id": "backend-block-arguments",
+        "title": "Block argument 如何变成寄存器：先确定边，再解决并行复制",
+        "html": "\n<p>MLIR 用目标基本块的参数表达汇合值，作用类似 SSA 的 φ：进入哪个前驱边，就取那条边传来的值。它不是在块开头运行一条“选择前驱”的硬件指令。寄存器分配后，如果来源和目标已分到同一个物理寄存器，复制可以消失；否则必须在对应边上安排复制。</p>\n<p><code>SplitCriticalEdges</code> 当前实现会为带参数的条件后继插入 trampoline block。这样在条件块里只做分支选择，被选择的小块通过无条件 <code>jump</code> 携带参数，指令选择器就有一个只在该路径执行的复制落点。实现的拆分条件是“条件边带参数”，比只识别教科书定义的 critical edge 更直接。</p>\n<figure class=\"diagram\"><svg viewBox=\"0 0 1000 390\" role=\"img\" aria-label=\"边上传值与并行复制。上排演示两个 GPR 交换；箭头表示实现推导，不表示错误方案会出现在正确编译结果中。下排说明复制只能放在实际走过的边上。\"><defs><marker id=\"be-phi-arrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto\"><path d=\"M0 0 L10 5 L0 10 Z\" fill=\"#687c6c\"/></marker></defs><rect x=\"20\" y=\"50\" width=\"270\" height=\"105\" rx=\"10\" fill=\"#edf3ee\" stroke=\"#87998b\"/><text x=\"155.0\" y=\"76.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">边上的同时赋值</text><text x=\"155.0\" y=\"102.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">R1 ← old R2</text><text x=\"155.0\" y=\"128.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">R2 ← old R1</text><rect x=\"365\" y=\"50\" width=\"270\" height=\"105\" rx=\"10\" fill=\"#f8e9e3\" stroke=\"#87998b\"/><text x=\"500.0\" y=\"76.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">错误的顺序复制</text><text x=\"500.0\" y=\"102.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">R1 ← R2</text><text x=\"500.0\" y=\"128.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">R2 ← R1（旧值丢失）</text><rect x=\"710\" y=\"35\" width=\"270\" height=\"135\" rx=\"10\" fill=\"#edf3ee\" stroke=\"#87998b\"/><text x=\"845.0\" y=\"63.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">用同类临时寄存器破环</text><text x=\"845.0\" y=\"89.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">T ← R2</text><text x=\"845.0\" y=\"115.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">R2 ← R1</text><text x=\"845.0\" y=\"141.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">R1 ← T</text><path d=\"M290,100 L365,100\" fill=\"none\" stroke=\"#687c6c\" stroke-width=\"2\" marker-end=\"url(#be-phi-arrow)\"/><path d=\"M635,100 L710,100\" fill=\"none\" stroke=\"#687c6c\" stroke-width=\"2\" marker-end=\"url(#be-phi-arrow)\"/><rect x=\"90\" y=\"230\" width=\"330\" height=\"85\" rx=\"10\" fill=\"#f5f0e5\" stroke=\"#87998b\"/><text x=\"255.0\" y=\"259.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">条件块</text><text x=\"255.0\" y=\"285.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">只选择 true / false 边</text><rect x=\"580\" y=\"230\" width=\"330\" height=\"85\" rx=\"10\" fill=\"#f5f0e5\" stroke=\"#87998b\"/><text x=\"745.0\" y=\"259.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">被选边的 trampoline</text><text x=\"745.0\" y=\"285.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">先复制参数，再无条件跳转</text><path d=\"M420,272 L580,272\" fill=\"none\" stroke=\"#687c6c\" stroke-width=\"2\" marker-end=\"url(#be-phi-arrow)\"/><text x=\"500\" y=\"355\" text-anchor=\"middle\" font-size=\"17\" fill=\"#425849\">示例仅使用 GPR；AReg、VReg 与非 GPR 复制环有不同的支持边界。</text></svg><figcaption>图 10｜边上传值与并行复制。上排演示两个 GPR 交换；箭头表示实现推导，不表示错误方案会出现在正确编译结果中。下排说明复制只能放在实际走过的边上。</figcaption></figure>\n<p>复制集合必须按“同时赋值”解释。<code>R1 ← R2; R2 ← R1</code> 若直接顺序发出，第二步读到的是新 R1。当前 selector 先发出不会覆盖任何未读取源值的 move；剩余形成环时借临时 GPR 备份，再继续。立即数写入也不能抢先覆盖其他 move 还要读取的旧值。</p>\n<p>这里有真实硬件边界：AReg 没有通用 AR→AR 复制指令，selector 拒绝需要这种 φ copy 的形态；VReg 复制和非 GPR 复制环也不会默默套用整数 MOV。<strong>“寄存器有一个编号”不足以判断可复制性，寄存器文件和对应 opcode 也是语义的一部分。</strong></p>\n<p class=\"source-note\">源码定位（仓库内相对位置）：<code>lib/Dialect/ZeusLow/Transforms/SplitCriticalEdgesPass.cpp; lib/Target/ZeusV3/CodeGen/InstructionSelector.cpp::lowerBranchDataFlow; test/ZeusV3Backend/Unit/CodeGen/phi_parallel_copy.mlir</code>。Zeus 依据为 2026-10-26 只读核对的 <code>triton_shared@82613bc2eb30feb9ef7f57aef20584df0ef9e28a</code>，上述实现文件没有本地改动；本轮未重新构建或运行编译器、模型与仿真。</p>"
+      },
+      {
+        "id": "backend-branch-semantics",
+        "title": "比较与跳转：保住 signed / unsigned，不能只看一个小于号",
+        "html": "\n<p><code>cf.cond_br</code> 的条件可能直接来自 <code>arith.cmpi</code>，也可能是已经计算出的布尔值。<code>StandardCFLowering</code> 尽可能把比较与跳转合并成目标的 <code>jump_if_less / jump_if_greater_equal / jump_if_zero / jump_if_not_zero</code>，并携带原比较的 signed/unsigned 语义。当前入口对直接比较的类型要求是 i32 或 index；不支持的位宽应报错，不能截断后继续。</p>\n<p>为什么同一个“小于”需要区别？教学反例：32-bit 位模式 <code>0xffffffff</code> 按有符号数是 −1，按无符号数是 4,294,967,295；与 1 比较时，signed less 为真，unsigned less 为假。因此不能把两者都编成“做减法，看结果符号”。</p>\n<p>当前 selector 的 unsigned 路径使用 <code>SUBU</code> 及 carry/borrow 条件跳转；signed 路径保留溢出处理，不能只发一条 <code>SUB + JL</code> 就结束。原因已写在实现中：冻结 RTL 的部分条件码行为与诊断模拟器不同，显式的 overflow 分支与条件码处理让两边保持同一有符号比较语义。</p>\n<p>这也约束了后续 peephole：减法结果寄存器即使没有普通 SSA 使用者，它产生的条件码仍被分支读取。删除“死标量定义”必须同时建模 flag 的使用，否则优化会让分支读到上一条算术指令的条件码。这是从 IR def-use 走向机器状态时很值得讲清的一处变化。</p>\n<p class=\"source-note\">源码定位（仓库内相对位置）：<code>lib/Dialect/ZeusLow/Transforms/StandardCFLowering.cpp; lib/Target/ZeusV3/CodeGen/InstructionSelector.cpp::lowerJL/lowerJGE; lib/Target/ZeusV3/CodeGen/PeepholeOptimizer.cpp</code>。Zeus 依据为 2026-10-26 只读核对的 <code>triton_shared@82613bc2eb30feb9ef7f57aef20584df0ef9e28a</code>，上述实现文件没有本地改动；本轮未重新构建或运行编译器、模型与仿真。</p>"
+      },
+      {
+        "id": "backend-vp-mapping",
+        "title": "VP 映射的单位是“数据通路配方”，不是逐个算术符号",
+        "html": "\n<p>普通 CPU 后端常把标量运算映射到独立算术指令。这里 VP 的多个模块按硬件顺序连接，输入选择器、旁路、查表反馈、归约与输出转换共同决定一次向量计算。中端先用 <code>AddModuleListForVP</code> 为语义操作选择有序 modules，再在可证明合法时 chaining；后端把 modules 转成 <code>vp_config</code> 字段和参数设置，最后发出执行命令。</p>\n<p>继续主线教学计算 <code>Y = max(X + 2, 0)</code>：X/Y 是 BF16 的 <code>[6,32]</code> 张量，块为 <code>[4,32]</code>，第二块只有 <code>[2,32]</code> 有效。后端既要保住“加常量再截到非负”的计算顺序，也要让 descriptor 的有效窗口只覆盖那两行。它可以成为讨论“分成两次 VP”与“合法时组成一条模块链”的例子；<strong>这里没有运行该表达式，不宣称当前 matcher 一定识别成某条融合配方。</strong>下面另用已核实的双 FP32 标量乘法说明真实配方机制，与 BF16 主线明确区分。</p>\n<figure class=\"diagram\"><svg viewBox=\"0 0 1000 460\" role=\"img\" aria-label=\"VP 配方从语义到指令的映射。上排为编译表示变换，下排为简化数据通路；未绘出全部硬件模块，所有箭头均为数据或配置关系，不表示测得的延迟。\"><defs><marker id=\"be-vp-arrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto\"><path d=\"M0 0 L10 5 L0 10 Z\" fill=\"#687c6c\"/></marker></defs><rect x=\"20\" y=\"45\" width=\"220\" height=\"100\" rx=\"10\" fill=\"#edf3ee\" stroke=\"#87998b\"/><text x=\"130.0\" y=\"69.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">向量语义</text><text x=\"130.0\" y=\"95.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">如 y=(x×a)×b</text><text x=\"130.0\" y=\"121.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">保留两次 FP32 舍入</text><rect x=\"290\" y=\"45\" width=\"250\" height=\"100\" rx=\"10\" fill=\"#edf3ee\" stroke=\"#87998b\"/><text x=\"415.0\" y=\"69.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">有序 modules</text><text x=\"415.0\" y=\"95.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">MUL → PostCal</text><text x=\"415.0\" y=\"121.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">输入角色 + 模式 + scalar</text><rect x=\"590\" y=\"45\" width=\"390\" height=\"100\" rx=\"10\" fill=\"#edf3ee\" stroke=\"#87998b\"/><text x=\"785.0\" y=\"69.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">硬件配置与执行</text><text x=\"785.0\" y=\"95.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">VP_SETV / VP_SETM_*</text><text x=\"785.0\" y=\"121.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">VP_STSR 或 VP_DTSR</text><path d=\"M240,95 L290,95\" fill=\"none\" stroke=\"#687c6c\" stroke-width=\"2\" marker-end=\"url(#be-vp-arrow)\"/><path d=\"M540,95 L590,95\" fill=\"none\" stroke=\"#687c6c\" stroke-width=\"2\" marker-end=\"url(#be-vp-arrow)\"/><rect x=\"25\" y=\"230\" width=\"200\" height=\"90\" rx=\"10\" fill=\"#f5f0e5\" stroke=\"#87998b\"/><text x=\"125.0\" y=\"262.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">X 主数据流</text><text x=\"125.0\" y=\"288.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">有 shape / dtype</text><rect x=\"310\" y=\"230\" width=\"370\" height=\"90\" rx=\"10\" fill=\"#f5f0e5\" stroke=\"#87998b\"/><text x=\"495.0\" y=\"262.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">固定顺序的 CAL 运算模块</text><text x=\"495.0\" y=\"288.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">输入选择 + 状态 + 舍入</text><rect x=\"770\" y=\"230\" width=\"200\" height=\"90\" rx=\"10\" fill=\"#f5f0e5\" stroke=\"#87998b\"/><text x=\"870.0\" y=\"262.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">输出</text><text x=\"870.0\" y=\"288.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">张量或标量路径</text><path d=\"M225,275 L310,275\" fill=\"none\" stroke=\"#687c6c\" stroke-width=\"2\" marker-end=\"url(#be-vp-arrow)\"/><path d=\"M680,275 L770,275\" fill=\"none\" stroke=\"#687c6c\" stroke-width=\"2\" marker-end=\"url(#be-vp-arrow)\"/><path d=\"M495 395 L495 320\" stroke=\"#687c6c\" stroke-width=\"2\" marker-end=\"url(#be-vp-arrow)\"/><text x=\"495\" y=\"425\" text-anchor=\"middle\" font-size=\"17\" fill=\"#425849\">external Y / PRG.b / 其他 feedback：共享入口，不能任意同时占用</text></svg><figcaption>图 11｜VP 配方从语义到指令的映射。上排为编译表示变换，下排为简化数据通路；未绘出全部硬件模块，所有箭头均为数据或配置关系，不表示测得的延迟。</figcaption></figure>\n<p><code>VPModuleDefs.h</code> 明确区分无后缀的 64 通道模块、L0/L1 的 32 通道模式，以及经过 tree 路径进入的 scalar 模块。<code>VPModuleToConfigMapping</code> 据模块列表选择 <code>lane_64 / lane_32</code> 和 WHC/CWH 读序。这里的通道模式描述真实硬件配置；不能把它简单等同于 Triton 的 tensor 长度，更不能直接据此推算吞吐率。</p>\n<p>后端还需把逻辑 X/Y 对应到两个真实的 tensor descriptor。单 tensor 输入和双 tensor 输入分别选 <code>VP_STSR</code> 与 <code>VP_DTSR</code>；scalar 参数与反馈状态另行表达，不能将它们混入 tensor 输入计数。同一 <code>vp_config</code> 可以生成 LUT、CMD、CFS、SPM 多类配置指令。一个 vector op 最终发几条机器指令，取决于配方、标量参数、descriptor 和可复用配置状态。</p>\n<p><strong>可替代方案：</strong>逐个算子各发一次 VP，配方较短、调试较直接，却可能为中间结果多做一次写回和读取；跨算子组织模块链能减少这类流量，却受固定模块顺序、X/Y 入口、反馈状态和精度约束。选择 modules 作为中层表达，就是把“硬件内可组合什么”做成显式对象，而非让后端看见任意算术链后再猜配方。</p>\n<p class=\"source-note\">源码定位（仓库内相对位置）：<code>include/triton-shared/Dialect/ZeusHigh/IR/VPModuleDefs.h; lib/Conversion/ZeusHighToZeusLow/VPModuleToConfigMapping.cpp; lib/Target/ZeusV3/CodeGen/InstructionSelector.cpp::lowerVPConfig/lowerVPCompute</code>。Zeus 依据为 2026-10-26 只读核对的 <code>triton_shared@82613bc2eb30feb9ef7f57aef20584df0ef9e28a</code>，上述实现文件没有本地改动；本轮未重新构建或运行编译器、模型与仿真。</p>"
+      },
+      {
+        "id": "backend-vp-fusion",
+        "title": "能融合不等于应该融合：模块顺序、FIFO、读写移动与舍入要同时成立",
+        "html": "\n<p>假设两条 VP 先计算 <code>tmp = x + y</code>，再计算 <code>out = sigmoid(tmp)</code>。表面上中间值只被用一次，去掉一次 SRAM 写回/读入很有吸引力。但 sigmoid 配方可能从 PRG 得到反馈，而第一条加法又消耗 external Y；当前 CAL 通路的共享 FIFO 输入不能容纳任意两种来源。<strong>“模块排得进去”只能证明顺序的一部分，不能证明整个数据流能实现。</strong></p>\n<table><thead><tr><th>必须证明的问题</th><th>不成立时的具体风险</th></tr></thead><tbody><tr><td>中间 buffer 由本地 alloc 拥有、用户和 alias 闭合</td><td>删掉 producer 后，其他使用者或对外可见结果消失</td></tr><tr><td>producer 的 input read 移到融合位置仍读同一版本</td><td>中间一次写入改变了 x，延迟读取不再等价</td></tr><tr><td>X/Y 角色与广播域保持一致</td><td>把行标量放到不支持 C 广播的 X 路径，或交换非交换操作的两侧</td></tr><tr><td>tensor operand 位置、tensor-Y consumer、FIFO source 不超额</td><td>SSA 值相同也可能占多个输入位置，资源计数不能按值去重</td></tr><tr><td>中间格式、舍入顺序和特殊值语义保持</td><td>去掉 BF16 中间存储，也可能去掉一次舍入，结果不再逐位相同</td></tr></tbody></table>\n<p>一个更具体的成功配方是两次 FP32 标量乘法：<code>round_f32(round_f32(X × a) × b)</code>。当前闭合 PostCal 配方把 a 与 b 分别放到前后两个乘法阶段，保留两次乘法次序；不能先算 <code>a × b</code> 再只乘一次 X。它还要求精确的 modules 和 scalar 顺序，配方闭合后不再随意吸收额外 cast 或算子。</p>\n<p>这种设计把“有没有收益”与“能否证明等价”拆开：不满足门禁时保留原来的两条 VP。面试时最好用一个允许融合和一个拒绝融合的例子，说明自己如何把硬件资源限制、buffer ownership 与数值语义合成同一套判断。</p>\n<p class=\"source-note\">源码定位（仓库内相对位置）：<code>lib/Dialect/ZeusHigh/Transforms/VPChaining/VPChainingLegality.cpp; docs/architecture/vp_chaining_legality.md; docs/architecture/vp_closed_recipes_and_certificates.md</code>。Zeus 依据为 2026-10-26 只读核对的 <code>triton_shared@82613bc2eb30feb9ef7f57aef20584df0ef9e28a</code>，上述实现文件没有本地改动；本轮未重新构建或运行编译器、模型与仿真。</p>"
+      },
+      {
+        "id": "backend-vp-state",
+        "title": "配置具有历史：PRG 初始化、sticky 字段与执行 lane 不能丢",
+        "html": "\n<p>配置寄存器不是每条 VP 命令结束就自动清零。一个 PRG 表加载命令写入状态，后续命令读取；pooling、读序或 segment 字段也可能保留上次的值。因此后端必须区分“当前配方没有使用某字段”与“硬件已经处于该字段的正确默认值”。</p>\n<p>当前映射代码对每条新配置明确重写 pooling 标志，并先把 PRG 专属 loader/segment 字段置为普通计算的默认值，再让本配方的 PRG 模块覆盖。selector 的 LUT 配置同样处理从非零到零的变化；不能只在开启某个功能时写一次配置，而漏掉关闭动作。</p>\n<p>多 VP 又增加一个维度：PRG 表属于特定物理 VP lane 的本地状态。<code>lowerVP</code> 会针对实际需要读取 PRG 的 split lane 建立加载/广播布局，不能假定一次 AUTO 加载自动覆盖所有 lane。与此同时，当前 <code>VPCompute</code> 最终编码把缺省/AUTO 规范到 VP0，以与同步分析使用的默认 lane 保持一致；显式 lane 则保留。</p>\n<p>这里的“lane”是哪个执行实例负责整条命令，与一条 VP 内部 32/64 通道数据模式是两个维度。把它们混为一谈，会同时写错并行度、状态归属和依赖。同步专篇会继续解释：数据不相交，也不自动消除共享配置或内部状态上的依赖。</p>\n<p class=\"source-note\">源码定位（仓库内相对位置）：<code>lib/Conversion/ZeusHighToZeusLow/VPModuleToConfigMapping.cpp:204–218; lib/Conversion/ZeusHighToZeusLow/ZeusHighToZeusLow.cpp::lowerVP; lib/Target/ZeusV3/CodeGen/InstructionSelector.cpp::emitSetMLutIfNeeded/lowerVPCompute</code>。Zeus 依据为 2026-10-26 只读核对的 <code>triton_shared@82613bc2eb30feb9ef7f57aef20584df0ef9e28a</code>，上述实现文件没有本地改动；本轮未重新构建或运行编译器、模型与仿真。</p>"
+      },
+      {
+        "id": "backend-register-allocation",
+        "title": "同步之后为什么还可以分配寄存器：关键是保存合同并重新验证",
+        "html": "\n<p>前面中端已经分过 L2 SRAM 地址，后端仍要把 SSA 资源放进有限的寄存器文件。两者对象不同：一个决定张量字节放在哪里，另一个决定标量、地址、descriptor 等状态用哪个物理寄存器保存。当前 <code>CodeGenPass</code> 在 InjectSync 之后运行，并在内部执行寄存器分配。</p>\n<figure class=\"diagram\"><svg viewBox=\"0 0 1000 410\" role=\"img\" aria-label=\"片上地址分配、同步与寄存器分配的区别。上排是当前主路径的编译顺序；下排表示晚期变换后的检查，不是自动重新运行同步 pass。\"><defs><marker id=\"be-ra-arrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto\"><path d=\"M0 0 L10 5 L0 10 Z\" fill=\"#687c6c\"/></marker></defs><rect x=\"20\" y=\"45\" width=\"280\" height=\"115\" rx=\"10\" fill=\"#edf3ee\" stroke=\"#87998b\"/><text x=\"160.0\" y=\"76.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">中端：片上存储规划</text><text x=\"160.0\" y=\"102.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">决定 allocation 的地址/寿命</text><text x=\"160.0\" y=\"128.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">输出真实 SRAM 重叠关系</text><rect x=\"360\" y=\"45\" width=\"280\" height=\"115\" rx=\"10\" fill=\"#edf3ee\" stroke=\"#87998b\"/><text x=\"500.0\" y=\"76.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">InjectSync：证明依赖</text><text x=\"500.0\" y=\"102.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">CFG + executor + 资源事件</text><text x=\"500.0\" y=\"128.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">附带寄存器复用契约</text><rect x=\"700\" y=\"45\" width=\"280\" height=\"115\" rx=\"10\" fill=\"#edf3ee\" stroke=\"#87998b\"/><text x=\"840.0\" y=\"76.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">CodeGen：寄存器分配</text><text x=\"840.0\" y=\"102.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">SSA → R / FR / AR / BR…</text><text x=\"840.0\" y=\"128.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">spill / reload / recipe replay</text><path d=\"M300,100 L360,100\" fill=\"none\" stroke=\"#687c6c\" stroke-width=\"2\" marker-end=\"url(#be-ra-arrow)\"/><path d=\"M640,100 L700,100\" fill=\"none\" stroke=\"#687c6c\" stroke-width=\"2\" marker-end=\"url(#be-ra-arrow)\"/><rect x=\"145\" y=\"245\" width=\"710\" height=\"90\" rx=\"10\" fill=\"#f5f0e5\" stroke=\"#87998b\"/><text x=\"500.0\" y=\"277.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">后端变换后再验：分配策略、descriptor 区域、mailbox balance</text><text x=\"500.0\" y=\"303.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">已建立的正确性证明必须仍覆盖最终 IR / 机器操作数</text><path d=\"M840 160 L840 220 L750 220 L750 245\" fill=\"none\" stroke=\"#687c6c\" stroke-width=\"2\" marker-end=\"url(#be-ra-arrow)\"/><text x=\"500\" y=\"380\" text-anchor=\"middle\" font-size=\"17\" fill=\"#425849\">“片上地址分配”与“寄存器分配”不是同一个 pass，也不处于同一位置。</text></svg><figcaption>图 12｜片上地址分配、同步与寄存器分配的区别。上排是当前主路径的编译顺序；下排表示晚期变换后的检查，不是自动重新运行同步 pass。</figcaption></figure>\n<p>分配器需要维护 live interval、CFG 回边、fixed register 和复制合并。R、FReg、AReg、BReg、VReg 等类别不能混用；某个寄存器文件耗尽时，也不能拿另一个类别的空槽直接顶替。默认 <code>auto</code> 策略以 Greedy 为主并保留 LinearScan fallback；另有显式实验性 allocator，不能把它们都写成默认路径。</p>\n<p>spill 也不只是统一的“存到内存”：标量、descriptor、硬件栈和 compiler-stack 路径的保存/恢复方式不同。BReg 的晚期物化则可以在消费者附近重放完整 recipe 来缩短活跃区间，但要同时评估新增标量压力与 spill 代价，不能只看 BReg 数下降。</p>\n<p>晚期变化不能破坏同步阶段所依据的事实。当前 CodeGen 会读取 InjectSync 发布的 BReg allocation contract，核对实际分配决策；recipe 最终物化后检查 IR、mailbox balance，以及开启相关优化时的 VP out-of-place 证明。物理寄存器编号确定后还要检查真实操作数。某些证明失效时是拒绝生成，而不是自动删掉证书或悄悄撤销等待。</p>\n<p><strong>与 CUDA/GPU 对照：</strong>GPU 同样需要表达异步操作完成。CUDA 的异步拷贝通过 barrier 或 pipeline 等机制提供完成信号；参与线程的同步与异步 copy 的完成也不是同一件事。这里的架构问题是“谁表达依赖、谁证明、谁执行等待”：CUDA API/编程模型公开协议，编译器把它实现到目标机制；本路径还从目标资源事件中自动推导 mail。两边都不能把“命令已发出”当成“数据可安全读取”，也不能把硬件的自动等待理解为覆盖任意共享内存通信。参见 <a href=\"https://docs.nvidia.com/cuda/cuda-programming-guide/04-special-topics/async-copies.html\">NVIDIA 官方异步拷贝指南</a>。</p>\n<p class=\"source-note\">源码定位（仓库内相对位置）：<code>lib/Target/ZeusV3/CodeGen/CodeGenPass.cpp:650–855; RegisterAllocatorBase.cpp; RegisterAllocationDriver.cpp; AllocatorFactory.cpp</code>。Zeus 依据为 2026-10-26 只读核对的 <code>triton_shared@82613bc2eb30feb9ef7f57aef20584df0ef9e28a</code>，上述实现文件没有本地改动；本轮未重新构建或运行编译器、模型与仿真。</p>"
+      },
+      {
+        "id": "backend-selectiondag-choice",
+        "title": "“没有走 SelectionDAG”到底意味着什么：换的是承载层，不是省掉问题",
+        "html": "\n<p>传统 LLVM SelectionDAG 路线把 LLVM IR 形成 DAG，经过 combine、类型/向量/操作合法化、目标指令选择，再进入机器级调度和后续过程。本机上游 <code>SelectionDAGISel.cpp</code> 可以看到 <code>LegalizeTypes</code>、<code>LegalizeVectors</code>、<code>Legalize</code> 与 <code>DoInstructionSelection</code> 的不同责任。它提供对照概念；本机源码 revision 无法可靠确认，不能冒充本项目准确依赖版本。</p>\n<p>当前 Zeus NPU 路线在 MLIR 中把语义逐步下沉到目标相关 ZeusLow，接着由仓库内的 <code>RegisterAllocationDriver</code>、<code>InstructionSelector</code>、ISA encoder 与 zbin builder 完成后端。这条实际调用链未经过 LLVM IR → SelectionDAG 的机器后端。与此同时，项目仍大量使用 MLIR 和 LLVM 的基础设施，仓库也有独立 CPU backend 路径；“不走 SelectionDAG”不能写成“不用 LLVM”。</p>\n<table><thead><tr><th>共同要解决的问题</th><th>当前 Zeus 路径在哪里承担</th></tr></thead><tbody><tr><td>输入类型和操作是否受目标支持</td><td>Dialect Conversion、type converter、descriptor 字段校验、目标 recipe 门禁</td></tr><tr><td>运算如何实现成目标指令</td><td>中端 module/硬件适配 + ZeusLow lowering + InstructionSelector</td></tr><tr><td>有限寄存器与边上传值</td><td>自有 RegAlloc、spill/reload、φ parallel copy</td></tr><tr><td>最终码流能否被硬件安全执行</td><td>同步证明、最终 operands verifier、机器码布局及 CT fetch legalization</td></tr></tbody></table>\n<p><strong>可讨论的架构取舍：</strong>在本架构中，保留 descriptor、执行器状态与异步依赖的目标语义，能让这些分析直接共享 MLIR 表达；代价是项目要自行维护机器级寄存器分配、φ copy、条件码、编码和验证。这个取舍分析来自当前结构，不是对当年团队动机的历史断言。</p>\n<p><strong>证据边界：</strong>“早期评估过 SelectionDAG”目前来自本人回忆。本轮在相关设计文档和提交说明中未找到那次决策记录；能确认的是 2026-03-03 的 <code>d2a23642a</code> 已入库直接处理 ZeusLow 的 selector。它不证明更早没有讨论或原型。正式讲述宜把“当时评估过什么”与“现在代码怎样工作”分开。</p>\n<p class=\"source-note\">源码定位（仓库内相对位置）：<code>tools/zeus-compiler/zeus-compiler.cpp; lib/Target/ZeusV3/CodeGen/CodeGenPass.cpp; llvm-project: llvm/lib/CodeGen/SelectionDAG/SelectionDAGISel.cpp</code>。Zeus 依据为 2026-10-26 只读核对的 <code>triton_shared@82613bc2eb30feb9ef7f57aef20584df0ef9e28a</code>，上述实现文件没有本地改动；本轮未重新构建或运行编译器、模型与仿真。 LLVM 对照文件 revision unknown，SHA256：<code>dda3d47c2dfe69ee50366c0e6d22ad7f49046060ae99efa9e15461bd7615f361</code>；不等同项目准确依赖版本。</p>"
+      },
+      {
+        "id": "backend-machine-selection",
+        "title": "InstructionSelector 之后仍不能直接写文件：配置差分与最终合法化",
+        "html": "\n<p>InstructionSelector 消费已分配寄存器的 ZeusLow，产生自有 <code>Instruction</code> 序列。这里会消去纯载体操作、展开分支和配置，生成 label，并把 mail 属性写成指令操作数。不认识的残留操作必须失败：例如未降完的浮点累加若被忽略，程序可能合法编码却永远只返回初始值。</p>\n<p>接着的 peephole 处理已知物理寄存器后的冗余，例如立即数字段相同的 BReg 配置和可证明的标量常量传播。这个位置与中端配置优化不同：中端面对逻辑资源与 CFG 的 must-information，机器级面对具体物理寄存器和码流。跨跳转、copy/pop 或未知状态时，要按实现约束清空推导，不能把线性发射顺序当成所有运行路径都经过的事实。</p>\n<p>最终还有 CT fetch 合法化。它需要真实 code section 的文件偏移，因为参数描述符和常量大小会移动代码起点，硬件取指限制与最终地址相关。当前代码在 peephole 后计算布局，调用 <code>legalizeFrozenRTLFetch</code> 并再次验证；Builder 也保留末端校验。<strong>这说明“合法化”分布在多个层次：类型/shape 合法、目标 recipe 合法、最终机器地址合法，各自需要不同信息。</strong></p>\n<p>不能在正文里把这些步骤统称为“LLVM legalize”，也不能说自有后端没有合法化。更准确的表达是：目标约束被显式分配到中端、ZeusLow 和最终码流三个层次，每层拒绝自己无法证明的形态。</p>\n<p class=\"source-note\">源码定位（仓库内相对位置）：<code>lib/Target/ZeusV3/CodeGen/InstructionSelector.cpp; CodeGen/PeepholeOptimizer.cpp; CodeGen/CodeGenPass.cpp:941–1085; Binary/CTFetchErratum.cpp</code>。Zeus 依据为 2026-10-26 只读核对的 <code>triton_shared@82613bc2eb30feb9ef7f57aef20584df0ef9e28a</code>，上述实现文件没有本地改动；本轮未重新构建或运行编译器、模型与仿真。</p>"
+      },
+      {
+        "id": "backend-zbin-runtime",
+        "title": "zbin 是编译器和 Runtime 的接口：编码、布局与重定位需要一致",
+        "html": "\n<p>机器指令本身还不能说明程序如何被装载：Runtime 需要知道代码和常量在哪里、每个核从哪开始、参数 buffer 怎样布局，以及哪些地址字段要在装载时补齐。当前 zbin 把这些约定写入可变长度 header，并接上常量和指令区。</p>\n<figure class=\"diagram\"><svg viewBox=\"0 0 1000 475\" role=\"img\" aria-label=\"当前 zbin 的内容与 Runtime 输入。上部为文件结构、下部为运行时提供的信息；箭头表示 header 指向文件区段，不表示执行顺序。\"><defs><marker id=\"be-zbin-arrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto\"><path d=\"M0 0 L10 5 L0 10 Z\" fill=\"#687c6c\"/></marker></defs><rect x=\"40\" y=\"50\" width=\"920\" height=\"85\" rx=\"10\" fill=\"#edf3ee\" stroke=\"#87998b\"/><text x=\"500.0\" y=\"92.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">Header：核入口、参数描述、code/const offsets、runtime patch positions</text><rect x=\"40\" y=\"160\" width=\"445\" height=\"85\" rx=\"10\" fill=\"#f5f0e5\" stroke=\"#87998b\"/><text x=\"262.5\" y=\"189.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">常量区</text><text x=\"262.5\" y=\"215.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">编译时确定的 bytes + alignment</text><rect x=\"515\" y=\"160\" width=\"445\" height=\"85\" rx=\"10\" fill=\"#f5f0e5\" stroke=\"#87998b\"/><text x=\"737.5\" y=\"189.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">机器码区</text><text x=\"737.5\" y=\"215.5\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">label 布局后编码；每条 8 B</text><path d=\"M260,135 L260,160\" fill=\"none\" stroke=\"#687c6c\" stroke-width=\"2\" marker-end=\"url(#be-zbin-arrow)\"/><path d=\"M740,135 L740,160\" fill=\"none\" stroke=\"#687c6c\" stroke-width=\"2\" marker-end=\"url(#be-zbin-arrow)\"/><rect x=\"40\" y=\"305\" width=\"445\" height=\"90\" rx=\"10\" fill=\"#eaf0f7\" stroke=\"#87998b\"/><text x=\"262.5\" y=\"337.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">Runtime 提供参数 buffer</text><text x=\"262.5\" y=\"363.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">AR30 / ArgsBase 重定位</text><rect x=\"515\" y=\"305\" width=\"445\" height=\"90\" rx=\"10\" fill=\"#eaf0f7\" stroke=\"#87998b\"/><text x=\"737.5\" y=\"337.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">Runtime 确定 kernel 加载基址</text><text x=\"737.5\" y=\"363.0\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"18\" fill=\"#23362c\">AR31 / KernelBase 重定位</text><text x=\"500\" y=\"445\" text-anchor=\"middle\" font-size=\"17\" fill=\"#425849\">示意不按字节比例绘制；参数描述在文件中，参数的实际值不嵌为独立 args 段。</text></svg><figcaption>图 13｜当前 zbin 的内容与 Runtime 输入。上部为文件结构、下部为运行时提供的信息；箭头表示 header 指向文件区段，不表示执行顺序。</figcaption></figure>\n<p><code>CodeEmitter</code> 从函数属性推导参数描述并先收集常量。<code>Builder</code> 计算最终 label PC、编码 little-endian 指令，并记录核入口以及 AR30/AR31 地址补丁位置。文件里的参数描述包括 type、size、offset、alignment；参数实际值由 Runtime 通过 ArgsBase 提供，不能把 header 中的描述符条数当成参数字节数。</p>\n<p>一个可复算的布局例子：当前固定 header 为 160 B、每条参数描述 16 B、tail 为 2 B，整体按 64 B 对齐。若有两条参数描述，<code>align_up(160 + 2×16 + 2, 64) = 256 B</code>；代码起点还要加上常量区并再次对齐。因此“所有 kernel 都从同一个固定 offset 开始”不成立。</p>\n<p>本文说的 Runtime 重定位与前文 descriptor 的地址重基不是同一件事：前者把加载地址写入指定机器指令字段，后者改变描述窗口的 base/position 表达。调试时还应区分 <code>zbin 文件偏移</code>、<code>code-relative offset</code> 和实际运行 PC。当前 debug 信息独立存放并用原始 zbin SHA256 绑定；不能拿装载后已打补丁的内存镜像去匹配原文件 hash。</p>\n<p class=\"source-note\">源码定位（仓库内相对位置）：<code>lib/Target/ZeusV3/CodeEmitter.cpp; Binary/Builder.cpp; include/triton-shared/Target/ZeusV3/Binary/Format.h; docs/architecture/zbin_format.md</code>。Zeus 依据为 2026-10-26 只读核对的 <code>triton_shared@82613bc2eb30feb9ef7f57aef20584df0ef9e28a</code>，上述实现文件没有本地改动；本轮未重新构建或运行编译器、模型与仿真。</p>"
+      },
+      {
+        "id": "backend-interview-evidence",
+        "title": "怎样讲清“负责整体 lowering”：讲接口选择、反例和验证闭环",
+        "html": "\n<p>面试官通常不需要听完整 pass 名称表。他更需要确认：你为什么把某个决定放在这一层，输入允许什么、输出保证什么，下一层依靠什么，以及遇到反例怎样定位。可选择三条互补主线：一条控制流、一条 VP 配方、一条存储/同步合同。不要把当前团队代码中所有能力都自动归为个人实现。</p>\n<table><thead><tr><th>项目叙述</th><th>应能画出的中间形态</th><th>应主动准备的反例</th></tr></thead><tbody><tr><td>设计 SCF→CF→目标控制流</td><td>循环 header/body/exit、带入值、分支 trampoline</td><td>零次循环、signed overflow、φ 交换环、无复制指令的寄存器类</td></tr><tr><td>设计 VP modules 与硬件配置映射</td><td>语义 op→有序 modules→配置→启动，X/Y/feedback 来源</td><td>共享 FIFO 冲突、广播角色错误、融合改变舍入、sticky 状态残留</td></tr><tr><td>设计同步与寄存器分配的接口</td><td>物理地址/执行器确定→依赖计划→晚期 RA→最终验证</td><td>descriptor 复用、spill 后证明失效、同编号不同寄存器文件</td></tr><tr><td>把后端做成可交付工具链</td><td>参数描述、常量、label、code offset 与 Runtime patch</td><td>常量区移动代码、参数 ABI 不一致、调试文件匹配错 binary</td></tr></tbody></table>\n<p>验证应分层表述：IR/FileCheck 证明变换形态；独立并行复制 oracle 证明复制语义；功能模拟或真实输入回放检查数值；CycleSim 做其模型范围内的时序评估；VCS/RTL 检查相应硬件执行。<strong>本轮是源码与既有测试设计的只读核对，没有重建编译器、运行上述测试或重新测量性能。</strong>已有测试文件不是这次“测试通过”的证据。</p>\n<p>一个完整回答可按五句话组织：原输入与失败/低效之处是什么；为什么已有抽象不够；新 IR 或 pass 增加了什么契约；用哪个负例限制它；最终在哪一层验证。这样才把“参与度高”转换成可核对的设计能力。</p>\n<p class=\"source-note\">源码定位（仓库内相对位置）：<code>test/ZeusV3Backend/Unit/CodeGen/phi_parallel_copy.mlir; test/ZeusV3Backend/Unit/Transforms/split_critical_edges_unsigned_compare.mlir; test/ZeusV3Backend/Unit/Conversion/vp_postcal_scalar.mlir</code>。Zeus 依据为 2026-10-26 只读核对的 <code>triton_shared@82613bc2eb30feb9ef7f57aef20584df0ef9e28a</code>，上述实现文件没有本地改动；本轮未重新构建或运行编译器、模型与仿真。</p>"
+      },
+      {
+        "id": "lowering-decision-ledger",
+        "title": "架构设计的核心：哪些决定应该推迟，哪些必须提前",
+        "html": "<p>多层 IR 的价值，不只是把大问题切小，而是控制决策时机。越早决定物理细节，后续越难重新安排；越晚落实硬件限制，前面生成的程序越可能无法执行。518 的分层可以按下面的责任表理解。表中的收益与代价属于架构分析，并非未经证实的历史会议结论。</p><div class=\"table-wrap\"><table><thead><tr><th>决策</th><th>当前路径需要的信息</th><th>太早决定的风险</th><th>太晚决定的风险</th></tr></thead><tbody><tr><td>shape 与描述符</td><td>张量维度、访问类型、布局、tile 和 mask</td><td>把可变的数学结构锁死成一个特定硬件字段组合</td><td>指令层才发现维度或边界无法表示</td></tr><tr><td>VP 融合和执行器映射</td><td>算术结构、数值语义、硬件 recipe 与资源约束</td><td>未看到完整消费者或转换，选错组合</td><td>中间数据已经被物化，错失减少搬运的机会</td></tr><tr><td>片上地址分配</td><td>buffer 大小、视图别名、寿命、调度与执行单元</td><td>限制并行与后续重排空间</td><td>无法分析由共址产生的真实物理冲突</td></tr><tr><td>同步注入</td><td>物理区间、执行器、CFG 和资源时点</td><td>只看逻辑值，漏掉地址复用或最终执行路径</td><td>机器码展开后难以恢复完整语义与证明依据</td></tr><tr><td>寄存器分配与编码</td><td>最终控制流、live range、寄存器类与指令约束</td><td>过早固定物理寄存器阻碍变换</td><td>最后仍须保证 spill、隐式使用与取指展开不破坏此前合同</td></tr></tbody></table></div><p>因此，不能把“简化后端”理解成删除问题。项目选择继续使用 MLIR 表达目标操作，再用自有目标代码生成路径解决剩余问题。是否值得使用更通用的机器后端框架，要结合寄存器、指令和调度模型的适配成本，以及团队希望复用的分析和调试能力讨论。</p>"
+      },
+      {
+        "id": "lowering-architecture-review",
+        "title": "从面试官视角审视这套架构：回答取舍，不背 pass 名",
+        "html": "<p>要证明能够负责整体 lowering，最有价值的回答是把接口、失败条件和替代方案说完整。以下每个问题都应能落到一个具体例子，而不是复述“我们用了 MLIR”。</p><ol><li><strong>为什么在中端抽象描述符，而不让每个后端 pattern 自己拼 BR？</strong>解释公共表示如何统一 shape、边界和寻址约束，以及它给跨 pass 协作带来的新合同。</li><li><strong>为什么保留结构化控制流，又在同步前展开 CFG？</strong>分别指出结构化优化与最终路径分析依赖的信息，说明旧设计与当前实现的差异。</li><li><strong>什么时候融合是不合法或不划算的？</strong>用精度、recipe 支持、资源压力和消费者行为说明约束；算子数量减少不自动等于更快。</li><li><strong>为什么更省 SRAM 的布局可能更慢？</strong>区分逻辑寿命和异步访问完成，给出新增 WAR 或 WAW 的具体区间。</li><li><strong>自有代码生成省掉了什么，又留下什么？</strong>说明 LLVM/MLIR 基础设施仍在，目标指令选择、RA、合法化与编码也仍在；不能以代码规模证明方案普遍更优。</li><li><strong>换成另一颗芯片会改哪些层？</strong>区分可保留的数学语义与需要重做的 descriptor、执行器、存储、完成协议和 ABI，避免把 518 的限制当成通用编译原理。</li></ol><p>验证也应沿接口分层：IR verifier 检查结构和类型；针对性回归检验变换与反例；功能仿真检查数值与行为；VCS/RTL 检查更具体的硬件合同；性能数据则另外固定输入、工具链、时钟和计时区间。本次工作是源码与网页讲解核对，没有把任何一层的既有记录升级成新实验结论。</p>"
+      },
+      {
+        "id": "lowering-source-snapshot",
+        "title": "源码快照与证据边界：这篇文章依据哪一版实现",
+        "html": "<p>采集日期：2026-10-26。当前实现绑定 <code>triton_shared@82613bc2eb30feb9ef7f57aef20584df0ef9e28a</code>。所引 tracked 源文件与该版本一致；全仓另有 <code>ci/test_job_vcs_case.txt</code> 改动和未跟踪文件，未作为本文依据。证据层级为源码、ODS、设计文档与已入库测试预期；未构建或运行编译器、模型、CycleSim、VCS。</p><p>主入口位于 <code>tools/zeus-compiler/zeus-compiler.cpp</code> 与 <code>tools/zeusv3-backend/zeusv3-backend.cpp</code>；中端编排见 <code>lib/Dialect/ZeusHigh/Transforms/ZeusHighPipeline.cpp</code>；后端行为由转换、RegAlloc、InstructionSelector 和编码实现共同确认。各节注明所用文件与符号。架构取舍属于从实现出发的分析，SelectionDAG 早期讨论属于本人回忆，二者不混作已证实的历史会议结论。</p><details class=\"pe-deep-dive\"><summary>地址复用例子的文件校验值</summary><p>以下 hash 方便有源码权限的读者核对同一版本；完整中端与后端清单保存在指南源码的 evidence 记录中。</p><div class=\"table-wrap\"><table><thead><tr><th>相对文件位置</th><th>SHA256</th></tr></thead><tbody><tr><td><code>test/ZeusV3Midend/Unit/Transforms/address_allocation_pe_inflight_reuse.mlir</code></td><td><code>c14d89f609d5ee2d0396de034c8bea48e6dbb311e68768976851888adb9e0d70</code></td></tr><tr><td><code>test/ZeusV3Backend/Unit/Transforms/inject_sync_same_unit_linear_war.mlir</code></td><td><code>76b9bd759738280bea66ffc6c52d6c90f5f9d1a9a60922d1c352bb8a323b834e</code></td></tr><tr><td><code>lib/Dialect/ZeusHigh/Transforms/AddressAllocation.cpp</code></td><td><code>4c6485f82b7420062ba389f056c3389a46eb66d625aa7ab3176a104e109cf05f</code></td></tr><tr><td><code>include/triton-shared/Dialect/ZeusHigh/Transforms/Passes.td</code></td><td><code>cdcadce3d8473b1d8d46dfdaca843453703771640a3aa46d9d8a652e5363f19b</code></td></tr></tbody></table></div></details><p>通用 LLVM 讨论使用本机依赖快照辅助核对，revision 不明处保留文件 hash，不能用它冒充当前项目所链接二进制的完整版本证明。CUDA 对照只取 NVIDIA 官方文档所述的职责与协议，不比较未经测量的性能。</p>"
+      }
+    ],
+    "readingStages": [
+      {
+        "id": "lowering-stage-architecture",
+        "title": "目标机器与整体路线",
+        "summary": "先解释硬件职责、CUDA 对照和真正的设备编译入口。",
+        "sections": [
+          "lowering-architecture",
+          "lowering-cuda-responsibility",
+          "lowering-map",
+          "lowering-entry-paths"
+        ]
+      },
+      {
+        "id": "lowering-stage-semantics",
+        "title": "从 Triton 保留计算与存储语义",
+        "summary": "用一个带尾块的计算，追踪指针、view、mask 和 bufferization。",
+        "sections": [
+          "lowering-running-example",
+          "lowering-walkthrough",
+          "lowering-pointer-semantics",
+          "lowering-bufferization-choice"
+        ]
+      },
+      {
+        "id": "lowering-stage-descriptors",
+        "title": "描述符、维度与访问边界",
+        "summary": "区分 BR 状态、fmap / weight、逻辑 shape、物理 pitch 与空核。",
+        "sections": [
+          "lowering-br-contract",
+          "lowering-descriptor-families",
+          "lowering-rank-normalization",
+          "lowering-memory-identity",
+          "lowering-shape-stride-bounds",
+          "lowering-tail-semantics"
+        ]
+      },
+      {
+        "id": "lowering-stage-placement",
+        "title": "中端顺序、片上布局与并行",
+        "summary": "让硬件合法性、生命周期和资源容量共同约束优化。",
+        "sections": [
+          "lowering-order-contracts",
+          "lowering-placement",
+          "lowering-placement-case"
+        ]
+      },
+      {
+        "id": "lowering-stage-control",
+        "title": "控制流怎样成为实际跳转",
+        "summary": "从结构化区域到 CFG，再处理 block arguments、比较和临界边。",
+        "sections": [
+          "backend-contract",
+          "backend-control-flow",
+          "backend-block-arguments",
+          "backend-branch-semantics"
+        ]
+      },
+      {
+        "id": "lowering-stage-vp",
+        "title": "向量计算怎样映射 VP 硬件",
+        "summary": "从 tensor 运算选择模块配方，检查融合收益与配置状态。",
+        "sections": [
+          "backend-vp-mapping",
+          "backend-vp-fusion",
+          "backend-vp-state"
+        ]
+      },
+      {
+        "id": "lowering-stage-codegen",
+        "title": "自有目标后端与二进制交付",
+        "summary": "解释 RA、SelectionDAG 取舍、指令选择、最终合法化及 zbin。",
+        "sections": [
+          "backend-register-allocation",
+          "backend-selectiondag-choice",
+          "backend-machine-selection",
+          "backend-zbin-runtime"
+        ]
+      },
+      {
+        "id": "lowering-stage-review",
+        "title": "架构取舍、验证与面试追问",
+        "summary": "用跨层合同和反例组织回答，并区分源码与实验所能证明的范围。",
+        "sections": [
+          "backend-interview-evidence",
+          "lowering-decision-ledger",
+          "lowering-architecture-review",
+          "lowering-source-snapshot"
+        ]
+      }
+    ],
+    "readingLabel": "沿硬件约束走完一次下降",
+    "readingStageLabel": "架构层次",
+    "portableReading": {
+      "file": "lowering.html",
+      "download": "518-lowering.html",
+      "label": "保存完整 Lowering HTML ↓"
+    },
+    "questions": [
+      {
+        "id": "lowering-q1",
+        "q": "为什么是 ZeusHigh / ZeusLow 两层，而不是 TTIR 直接到指令？",
+        "a": "ZeusHigh 保留张量、描述符、布局和融合所需的结构；ZeusLow 表达配置、命令和控制流，为依赖分析与目标代码生成提供具体资源语义。层数本身不是目标，关键是让每层决策拿到足够信息。",
+        "followup": "新增加一个布局时，哪层应检查合法性，哪层保留来源？"
+      },
+      {
+        "id": "lowering-q2",
+        "q": "BR 为什么不能只被介绍成 shape？",
+        "a": "它是硬件访问描述状态，除了张量尺寸还有 tile、position、格式、地址模式与地址。逻辑 descriptor、底层存储身份和物理 BR 驻留是不同维度。",
+        "followup": "同 shape 不同 dtype 或 pitch，会在哪一层出错？"
+      },
+      {
+        "id": "lowering-q3",
+        "q": "补 unit dimension 为什么不等于完成布局转换？",
+        "a": "补维使 rank 满足硬件表示，不改变元素数量或任意物理 stride；layout、格式、边界和字段可编码性仍需各自验证。",
+        "followup": "逻辑 [6,32]、物理 pitch 48 元素的尾块怎样限制访问？"
+      },
+      {
+        "id": "lowering-q4",
+        "q": "为什么 DMA 裁边不能直接删掉 masked-load 的 padding？",
+        "a": "裁边只限制外部访问，未定义块内无效位置的值；other 若被后续计算读取，先填后拷贝的语义仍需要保留。空核又是另一项控制流合同。",
+        "followup": "把 tile 最小值夹到 1，能证明空核安全吗？"
+      },
+      {
+        "id": "lowering-q5",
+        "q": "更紧凑的地址分配为何可能降低性能？",
+        "a": "逻辑生命周期结束不等于异步读写完成。共址可能新增 WAR/WAW；分开放置可消除该冲突，但还受容量、执行资源和既有真实依赖限制。",
+        "followup": "如何用 independent、raw_reuse、capacity_fallback 三个反例限定收益？"
+      },
+      {
+        "id": "lowering-q6",
+        "q": "VP fusion 能否只按少几个算子决定？",
+        "a": "要看硬件模块配方、精度与舍入、输入类型、可用资源、live range 和中间物化成本。必须说明被省掉的读写与新增约束。",
+        "followup": "一个 tensor 加 scalar 属于单 tensor 还是双 tensor 输入？"
+      },
+      {
+        "id": "lowering-q7",
+        "q": "没走 LLVM SelectionDAG，是不是也不需要合法化？",
+        "a": "仍需要类型与操作合法化、指令选择、RA、spill 和最终取指约束处理。当前项目在 MLIR 和自有目标后端完成这些职责。",
+        "followup": "新增一类指令会影响哪些表示、约束和测试？"
+      },
+      {
+        "id": "lowering-q8",
+        "q": "与 CUDA 相比，518 为什么需要这么多显式同步设计？",
+        "a": "责任分配不同：518 显式异步资源与无 tag mailbox 要求编译器处理物理依赖、FIFO 对应与容量。GPU 也有依赖等待、共享存储与显式异步完成协议，不能声称没有这些问题。",
+        "followup": "如果 ISA 提供带 tag 完成事件，软件能简化什么，又新增什么状态成本？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "lowering-current-source",
+        "label": "本篇源码快照与证据边界",
+        "url": "#chapter/compiler-lowering/lowering-source-snapshot",
+        "kind": "源码",
+        "note": "当前 triton_shared 版本、相关文件状态与回归预期；可离线阅读。"
+      },
+      {
+        "id": "lowering-cuda-copy",
+        "label": "CUDA 异步数据搬运",
+        "url": "https://docs.nvidia.com/cuda/cuda-programming-guide/04-special-topics/async-copies.html",
+        "kind": "官方文档",
+        "note": "2026-10-26 查阅；用于职责对照，不作 518 实现证据。"
+      },
+      {
+        "id": "lowering-gpu-scoreboard",
+        "label": "Nsight Compute 依赖等待指标",
+        "url": "https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html",
+        "kind": "官方文档",
+        "note": "scoreboard stall 与 GPU 执行依赖。"
+      }
+    ],
+    "takeaways": [
+      "每层 IR 应留下后一层完成合法性判断所需的信息，并明确它新增了什么。",
+      "descriptor、存储身份、物理 BR 驻留要分开；shape、pitch、有效域也要分开。",
+      "片上地址与异步访问共同决定依赖，容量节约不自动等于更高性能。",
+      "VP 映射、控制流和代码生成仍需要具体硬件合同，省略框架不等于省略问题。",
+      "架构选择用收益、代价、失败反例和验证边界来解释；与 GPU 对比先对齐责任层次。"
+    ],
+    "legacyChapters": {
+      "compiler-518-hardware": {
+        "title": "把 518 看成一台可编程的数据流机器",
+        "section": "lowering-architecture",
+        "anchors": [
+          "contract",
+          "memory",
+          "descriptor",
+          "pe",
+          "isa",
+          "gpu",
+          "architecture-answer"
+        ],
+        "anchorMap": {
+          "contract": "lowering-architecture",
+          "memory": "lowering-placement",
+          "descriptor": "lowering-br-contract",
+          "pe": "lowering-descriptor-families",
+          "isa": "lowering-decision-ledger",
+          "gpu": "lowering-cuda-responsibility",
+          "architecture-answer": "lowering-architecture-review"
+        },
+        "noteKey": "compiler-518-hardware"
+      },
+      "compiler-triton-pipeline": {
+        "title": "Triton 怎样真正接入一颗自研芯片",
+        "section": "lowering-entry-paths",
+        "anchors": [
+          "entry",
+          "levels",
+          "gemm",
+          "high-order",
+          "low-order",
+          "bringup",
+          "ecosystem"
+        ],
+        "anchorMap": {
+          "entry": "lowering-entry-paths",
+          "levels": "lowering-map",
+          "gemm": "lowering-walkthrough",
+          "high-order": "lowering-order-contracts",
+          "low-order": "backend-contract",
+          "bringup": "lowering-decision-ledger",
+          "ecosystem": "backend-selectiondag-choice"
+        },
+        "noteKey": "compiler-triton-pipeline"
+      },
+      "compiler-schedule-memory": {
+        "title": "调度与地址分配：用容量换并行，还是用同步换空间",
+        "section": "lowering-placement",
+        "anchors": [
+          "dag",
+          "double",
+          "parallel",
+          "physical-window",
+          "placement",
+          "probe",
+          "autotune"
+        ],
+        "anchorMap": {
+          "dag": "lowering-placement",
+          "double": "lowering-placement",
+          "parallel": "lowering-placement",
+          "physical-window": "lowering-placement-case",
+          "placement": "lowering-placement-case",
+          "probe": "lowering-placement",
+          "autotune": "lowering-decision-ledger"
+        },
+        "noteKey": "compiler-schedule-memory"
+      },
+      "compiler-codegen-debug": {
+        "title": "从寄存器分配到证据闭环：把编译器做成可交付系统",
+        "section": "backend-register-allocation",
+        "anchors": [
+          "ra",
+          "breg",
+          "late",
+          "spill",
+          "machine",
+          "debug-ladder",
+          "evidence",
+          "story"
+        ],
+        "anchorMap": {
+          "ra": "backend-register-allocation",
+          "breg": "lowering-memory-identity",
+          "late": "backend-vp-state",
+          "spill": "backend-register-allocation",
+          "machine": "backend-machine-selection",
+          "debug-ladder": "backend-interview-evidence",
+          "evidence": "lowering-source-snapshot",
+          "story": "lowering-architecture-review"
+        },
+        "noteKey": "compiler-codegen-debug"
+      },
+      "compiler-real-case": {
+        "title": "真实案例：省下 1 KiB，为什么反而让 PE 等待",
+        "section": "lowering-placement-case",
+        "anchors": [
+          "case-identity",
+          "case-address-time",
+          "case-allocator",
+          "case-to-sync",
+          "case-counterexamples",
+          "case-interview-evidence"
+        ],
+        "anchorMap": {
+          "case-identity": "lowering-placement-case",
+          "case-address-time": "lowering-placement-case",
+          "case-allocator": "lowering-placement-case",
+          "case-to-sync": "lowering-placement-case",
+          "case-counterexamples": "lowering-placement-case",
+          "case-interview-evidence": "lowering-placement-case"
+        },
+        "noteKey": "compiler-real-case"
+      }
+    }
+  }
+]
