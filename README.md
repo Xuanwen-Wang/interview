@@ -23,7 +23,7 @@
 | 岗位与面试题 | 两份完整 HTML：13 份岗位记录；43 个场次或材料组、328 个问题项；保留题源、重复题跳转与缺失题说明 |
 | Coding实作 | 算法、图/数据流、kernel、玩具pass；原创Python/C++参考与测试 |
 
-当前 **434 小节、259 道章节追问（另有 328 个场次题目项）、138 张正文 SVG**。附全文搜索、图示放大、3个通用交互实验、2个PE交互演示、1个MoE拓扑/容量交互、4个性能分析实验区和2个decode shape/字节交互、术语表、阅读进度及本地笔记导入导出。SVG、样式和内容均内嵌；网页不依赖CDN、外部字体或第三方脚本。
+当前 **465 小节、259 道章节追问（另有 328 个场次题目项）、139 张正文 SVG**。附全文搜索、图示放大、3个通用交互实验、2个PE交互演示、1个MoE拓扑/容量交互、4个性能分析实验区和2个decode shape/字节交互、术语表、阅读进度及本地笔记导入导出。SVG、样式和内容均内嵌；网页不依赖CDN、外部字体或第三方脚本。
 
 - [岗位介绍完整长文](https://xuanwen-wang.github.io/interview/interview-jobs.html)：四份岗位转录与九条已有岗位，按职责、能力差距和项目证据逐一解释。
 - [公司面试题完整长文](https://xuanwen-wang.github.io/interview/interview-questions.html)：按公司与每场面试展开；含新材料 230 项、此前来源 50 项、原创准备 48 项。回答覆盖机制、约束、取舍、验证与追问；原创与缺失题面分别标明，不冒充真实原题。
@@ -35,7 +35,7 @@
 - [MoE 完整长文](https://xuanwen-wang.github.io/interview/moe.html)：34节、9个阅读阶段、18道追问；按卡间EP4、卡内TP4，用T24贯穿部署与四个kernel。并列真实权重验收配置绑定链和当前开发四核链，保留旧15章/107节链接及个人笔记。
 - [MoE 单篇重构与验收](evidence/review-moe-continuous.md)：固定版本、纠错、旧链接迁移与浏览器验证。
 - [518 整体 Lowering](https://xuanwen-wang.github.io/interview/lowering.html)：33 节、8 张案例图、8 阶段真实 IR 检查台；以同一次 GEMM 编译贯穿 TTIR、Linalg、ZeusHigh、ZeusLow 与汇编，解释权重打包、尾块、地址复用、同步、VP 累加及实际 spill。
-- [518 自动同步](https://xuanwen-wang.github.io/interview/sync.html)：26 节、9 张图；从资源事件与物理别名到无 tag mailbox、staircase、循环/分支和验证边界。两篇保留旧 10 章与 70 个历史锚点、笔记和阅读记录。详见[重写与验收](evidence/review-lowering-guides.md)。
+- [518 自动同步](https://xuanwen-wang.github.io/interview/sync.html)：57 节；页首用三个完整主问题解释抽象、建模算法与硬件分工，随后深入资源依赖、单调链、循环/分支、源码和验证。新增七节 GPU/CUDA 扩展，覆盖 scoreboard、线程内存顺序、异步完成、双缓冲及 stream 边界。旧章节、问答锚点、笔记和阅读记录保留；详见[问答与 CUDA 扩展验收](evidence/review-sync-qa-cuda.md)。
 - [PE 完整长文](https://xuanwen-wang.github.io/interview/pe.html)：一个 HTML，沿整体边界与接口 → 8×8 阵列 → ALU/MAC → 累加与写回 → minitile 连续展开；23节、21张图、2个交互；新增MTW/MTC/MTK本质、GLM5Next Gate/Up/Down真实配置与逐坐标映射。
 - [VP 完整长文](https://xuanwen-wang.github.io/interview/vp.html)：开头展开完整 RTL 架构，沿控制/CDC/ECC、X/Y 分流、A/B 向量链、归约/反馈到写回，再讲 TopK、sigmoid、RMSNorm 与 CUDA；30节、21张图、27道追问。
 - [VP 架构审查与验收](evidence/review-vp.md)：RTL与编译器固定来源、关键事实修正及网页验收。

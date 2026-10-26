@@ -155,7 +155,7 @@
         },
         {
           "id": "synchronization",
-          "title": "依赖与同步：从资源事件到 mailbox 协议",
+          "title": "依赖与同步：核心设计、Mailbox 与 CUDA 对照",
           "chapters": [
             "compiler-sync"
           ],
