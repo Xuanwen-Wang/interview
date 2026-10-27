@@ -26,6 +26,33 @@ for (const m of [1,8,64,256,1024,4096]) {
   }
 }
 
+// Public Qwen3-8B Gate dimensions; expected counts were computed separately.
+const qwenGate = model.roofline({m:8,n:12288,overheadUs:0});
+assert.equal(qwenGate.flops,805306368);
+assert.equal(qwenGate.bytes,100925440);
+close(qwenGate.transferUs,50.46272);
+const qwenPrefill = model.roofline({m:2048,n:12288,overheadUs:0});
+assert.equal(qwenPrefill.flops,206158430208);
+assert.equal(qwenPrefill.bytes,167772160);
+close(qwenPrefill.intensity,1228.8);
+assert.equal(qwenPrefill.dominant,'compute');
+// Swapping K/N preserves this cold-read byte model, not real kernel latency.
+const qwenDown = model.roofline({m:8,k:12288,n:4096,overheadUs:0});
+assert.equal(qwenDown.bytes,qwenGate.bytes);
+assert.equal(qwenDown.flops,qwenGate.flops);
+assert.equal(model.roofline({m:105}).dominant,'transfer');
+assert.equal(model.roofline({m:106}).dominant,'compute');
+for(const n of [4096,12288]) {
+  let previousIntensity=0;
+  for(const m of [1,8,64,256,1024,2048,4096]) {
+    const r=model.roofline({m,n});
+    assert.ok(r.intensity>previousIntensity);
+    assert.ok(r.intensity<m); // Activation/output bytes prevent I == M.
+    assert.ok(r.budgetTflops<r.ceilingTflops);
+    previousIntensity=r.intensity;
+  }
+}
+
 const overlap = model.overlap();
 assert.equal(overlap.overlapMs,3);
 assert.equal(overlap.totalMs,11);

@@ -111,15 +111,16 @@ function performanceBind(root,update) {
 
 function renderPerformanceRoofline(root) {
   root.classList.add('performance-explorer');
-  root.innerHTML=`<header class="performance-widget-head"><span class="eyebrow">ROOFLINE LAB</span><h3>同一个 GEMM，为什么小 M 难以跑满算力？</h3><p>虚构教学机器；N=K=4096，BF16 A/B/C，β=0。假设每个输入元素冷读一次、输出写一次，以此构造单次最低流量估计。</p></header>
+  root.innerHTML=`<header class="performance-widget-head"><span class="eyebrow">ROOFLINE LAB</span><h3>同一个 GEMM，为什么小 M 难以跑满算力？</h3><p>虚构教学机器；可切换方阵与 Qwen3-8B Gate 的真实维度。A/W/C 均为 BF16，β=0；输入冷读一次、输出写一次，图中是条件预算。</p></header>
     <div class="performance-controls">
-      <label>M：一次参与计算的行数<select data-control="m"><option value="1">1</option><option value="8">8</option><option value="64" selected>64</option><option value="256">256</option><option value="1024">1024</option><option value="4096">4096</option></select></label>
+      <label>线性层 shape<select data-control="n"><option value="4096">教学方阵：K=4096，N=4096</option><option value="12288">Qwen3-8B Gate：K=4096，N=12288</option></select></label>
+      <label>M：一次参与计算的行数<select data-control="m"><option value="1">1</option><option value="8">8</option><option value="64" selected>64</option><option value="256">256</option><option value="1024">1024</option><option value="2048">2048</option><option value="4096">4096</option></select></label>
       <label>算术峰值 P <output data-value="peakTflops"></output><input data-control="peakTflops" type="range" min="50" max="500" step="10" value="200" aria-label="假设算术峰值，TFLOP每秒"></label>
       <label>带宽 BW <output data-value="bandwidthTbps"></output><input data-control="bandwidthTbps" type="range" min="0.5" max="5" step="0.1" value="2" aria-label="假设内存带宽，TB每秒"></label>
       <label>额外固定开销 L <output data-value="overheadUs"></output><input data-control="overheadUs" type="range" min="0" max="30" step="1" value="5" aria-label="额外固定开销，微秒"></label>
     </div><div class="performance-stats" data-view="stats" aria-live="polite"></div>
     <div class="performance-chart" data-view="chart"></div>
-    <div class="performance-legend"><span class="performance-roof">理论 Roofline</span><span class="performance-budget">含 L 的预算点（非实测）</span><span class="performance-ridge">转折点 P/BW</span></div>
+    <div class="performance-legend"><span class="performance-roof">理论 Roofline</span><span class="performance-budget">含 L 的预算点（非实测）</span><span class="performance-ridge">转折点 P/BW</span><span class="performance-reference">同 shape 的 M=1 / 2048 上界</span></div>
     <div class="performance-verdict" data-view="verdict" aria-live="polite"></div>
     <div class="performance-formula" data-view="formula"></div>
     <p class="performance-model-note">Q 是在上述冷读条件下的最低字节数估计，不是实际 DRAM 计数器。重复搬运、缓存命中、布局转换、写分配、融合与设备执行效率都会改变实测位置。P 与 BW 必须匹配运算精度、访存层级和同一设备条件。固定开销在本模型中单独串行相加。</p>`;
@@ -136,9 +137,13 @@ function renderPerformanceRoofline(root) {
     const grid=ticksX.map(v=>`<line x1="${x(v)}" y1="42" x2="${x(v)}" y2="273" class="performance-gridline"/><text x="${x(v)}" y="294" text-anchor="${v===4096?'end':'middle'}" class="performance-tick">${v}</text>`).join('')+
       ticksY.map(v=>`<line x1="70" y1="${y(v)}" x2="610" y2="${y(v)}" class="performance-gridline"/><text x="59" y="${y(v)+5}" text-anchor="end" class="performance-tick">${v}</text>`).join('');
     const roof=`${x(0.5)},${y(0.5*input.bandwidthTbps)} ${x(r.ridge)},${y(input.peakTflops)} ${x(4096)},${y(input.peakTflops)}`;
-    view('chart').innerHTML=`<svg viewBox="0 0 640 330" role="img" aria-label="对数坐标 Roofline。当前算术强度 ${performanceNumber(r.intensity)} FLOP每字节，含固定开销预算吞吐 ${performanceNumber(r.budgetTflops)} TFLOP每秒，点为理论预算而非测量。"><text x="70" y="22" class="performance-svg-title">吞吐 TFLOP/s · 双对数坐标</text>${grid}<line x1="70" y1="273" x2="610" y2="273" class="performance-axis"/><line x1="70" y1="42" x2="70" y2="273" class="performance-axis"/><line x1="${x(r.ridge)}" y1="${y(input.peakTflops)}" x2="${x(r.ridge)}" y2="273" class="performance-ridge-line"/><polyline points="${roof}" class="performance-roof-line"/><line x1="${x(r.intensity)}" y1="${y(r.ceilingTflops)}" x2="${x(r.intensity)}" y2="${y(r.budgetTflops)}" class="performance-budget-gap"/><circle cx="${x(r.intensity)}" cy="${y(r.budgetTflops)}" r="7" class="performance-budget-point"/><text x="340" y="321" text-anchor="middle" class="performance-tick">算术强度 AI · FLOP / byte</text></svg>`;
+    const referencePoints=[1,2048].map(m=>{
+      const point=PerformanceModel.roofline({...input,m,overheadUs:0});
+      return `<circle cx="${x(point.intensity)}" cy="${y(point.ceilingTflops)}" r="5" fill="#fffefa" stroke="#426f93" stroke-width="2"/>`;
+    }).join('');
+    view('chart').innerHTML=`<svg viewBox="0 0 640 330" role="img" aria-label="对数坐标 Roofline。当前算术强度 ${performanceNumber(r.intensity)} FLOP每字节，含固定开销预算吞吐 ${performanceNumber(r.budgetTflops)} TFLOP每秒，点为理论预算而非测量。"><text x="70" y="22" class="performance-svg-title">吞吐 TFLOP/s · 双对数坐标</text><rect x="70" y="42" width="${x(r.ridge)-70}" height="231" fill="#faeee8"/><rect x="${x(r.ridge)}" y="42" width="${610-x(r.ridge)}" height="231" fill="#eaf2e7"/>${grid}<line x1="70" y1="273" x2="610" y2="273" class="performance-axis"/><line x1="70" y1="42" x2="70" y2="273" class="performance-axis"/><line x1="${x(r.ridge)}" y1="${y(input.peakTflops)}" x2="${x(r.ridge)}" y2="273" class="performance-ridge-line"/><polyline points="${roof}" class="performance-roof-line"/>${referencePoints}<line x1="${x(r.intensity)}" y1="${y(r.ceilingTflops)}" x2="${x(r.intensity)}" y2="${y(r.budgetTflops)}" class="performance-budget-gap"/><circle cx="${x(r.intensity)}" cy="${y(r.budgetTflops)}" r="7" class="performance-budget-point"/><text x="340" y="321" text-anchor="middle" class="performance-tick">算术强度 AI · FLOP / byte</text></svg>`;
     view('verdict').innerHTML=`<strong>Roofline 主导项：${r.dominant==='compute'?'算术':'搬运'}。</strong> 算术下界 ${performanceNumber(r.computeUs)} μs；搬运下界 ${performanceNumber(r.transferUs)} μs。取较大值 ${performanceNumber(r.lowerUs)} μs，再加 L=${input.overheadUs} μs。${input.overheadUs>r.lowerUs?'当前额外固定开销比两项资源下界都大。':''}`;
-    view('formula').innerHTML=`F = 2MNK = <b>${performanceNumber(r.flops,0)}</b> FLOP<br>Q = 2(MK + KN + MN) = <b>${performanceNumber(r.bytes,0)}</b> byte<br>AI = F/Q；T = max(F/P, Q/BW) + L；预算点 = F/T<br><span>按一次乘加 = 2 FLOP；1 TFLOP/s = 10¹² FLOP/s，1 TB/s = 10¹² byte/s。</span>`;
+    view('formula').innerHTML=`A[${input.m},4096] × W[4096,${input.n}] → C[${input.m},${input.n}]<br>F = 2MNK = <b>${performanceNumber(r.flops,0)}</b> FLOP<br>Q = 2(MK + KN + MN) = <b>${performanceNumber(r.bytes,0)}</b> byte<br>AI = F/Q；T = max(F/P, Q/BW) + L；预算点 = F/T<br><span>按一次乘加 = 2 FLOP；1 TFLOP/s = 10¹² FLOP/s，1 TB/s = 10¹² byte/s。</span>`;
   });
 }
 
