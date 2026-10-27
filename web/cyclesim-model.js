@@ -10,7 +10,74 @@ function cycleCaseInteger(value, name, min, max) {
   if (!Number.isSafeInteger(value) || value < min || value > max) throw new RangeError(`Unsupported ${name}`);
 }
 
+// Source arithmetic for ordinary 8/16/32-bit LSU descriptors. No bus simulation.
+function cycleLsuModel(input) {
+  cycleCaseInput(input, ['store', 'tile', 'src', 'dst', 'bits', 'dense', 'address', 'pathExtra', 'local']);
+  const {store = false, tile, src, dst, bits = 8, dense = true, address = 0, pathExtra = 0, local = false} = input;
+  if (![8,16,32].includes(bits) || typeof store !== 'boolean' || typeof dense !== 'boolean' || typeof local !== 'boolean' || (store && local)) throw new RangeError('Unsupported LSU profile');
+  for (const dims of [tile, src, dst]) {
+    if (!Array.isArray(dims) || dims.length !== 4) throw new RangeError('Expected NHWC dimensions');
+    dims.forEach(v => cycleCaseInteger(v, 'extent', 1, 65536));
+  }
+  if (tile.some((v,i) => v > src[i] || v > dst[i])) throw new RangeError('Tile exceeds allocation');
+  cycleCaseInteger(address, 'address', 0, 2**40);
+  cycleCaseInteger(pathExtra, 'pathExtra', 0, 4096);
+  if (tile.reduce((a,b)=>a*b,1) > 1048576) throw new RangeError('Teaching calculator size limit');
+  const [N,H,W,C] = tile, granule = 128 / bits, eb = bits/8;
+  const pad = c => dense ? c : Math.ceil(c/granule)*granule;
+  const mergeC = store ? src[3] === C && dst[3] === C && C % granule === 0 : pad(src[3]) === pad(C);
+  const mergeW = src[2] === W && (!store || dst[2] === W);
+  const mergeH = src[1] === H && (!store || dst[1] === H);
+  const mode = !mergeC ? 0 : !mergeW ? 1 : mergeH ? 3 : 2;
+  const global = store ? dst : src, inner = store ? C : pad(C), pitchC = pad(global[3]);
+  const runBytes = inner * eb * (mode >= 1 ? W : 1) * (mode >= 2 ? H : 1) * (mode === 3 ? N : 1);
+  const runs = [];
+  for (let n=0;n<(mode===3?1:N);n++) for(let h=0;h<(mode>=2?1:H);h++) for(let w=0;w<(mode>=1?1:W);w++) {
+    runs.push({address: address+(n*global[1]*global[2]+h*global[2]+w)*pitchC*eb, bytes: runBytes});
+  }
+  const counts = {beats:0, bursts:0, partialBeats:0, partialBursts:0, primingRuns:0};
+  for(const run of runs) {
+    const first = Math.floor(run.address/128)*128, stop=run.address+run.bytes;
+    const B=Math.ceil((stop-first)/128), burst=[];
+    // The C++ model chunks by max length before splitting each chunk at 4 KiB.
+    for(let i=0;i<B;i+=32) {
+      const a=first+i*128, len=Math.min(32,B-i), toPage=(4096-a%4096)/128;
+      if(len>toPage) {burst.push({address:a,beats:toPage});burst.push({address:a+toPage*128,beats:len-toPage});}
+      else burst.push({address:a,beats:len});
+    }
+    let P=0,Q=0;
+    for(const b of burst) {
+      let partial=false;
+      for(let j=0;j<b.beats;j++) {
+        const a=b.address+j*128, valid=Math.max(0,Math.min(stop,a+128)-Math.max(run.address,a));
+        if(valid<128){P++;partial=true;}
+      }
+      if(partial)Q++;
+    }
+    Object.assign(run,{beats:B,bursts:burst,partialBeats:P,partialBursts:Q});
+    counts.beats+=B;counts.bursts+=burst.length;counts.partialBeats+=P;counts.partialBursts+=Q;
+    counts.primingRuns+=Number(run.bytes>=128);
+  }
+  const {beats:B,partialBursts:Q,primingRuns:R}=counts;
+  const data = Math.ceil(B*(store?248:100)/100), prime=store?0:Math.max(0,R-1);
+  const rmw=store&&Q ? (Q-1)*36+22 : 0, serialRmw=store?Q*36:0;
+  const globalLatency=store?67:(local?128:76), l2=13, setup=store?22:17, path=local?0:pathExtra;
+  const terms=[['传输服务',data],['多段 priming',prime],['部分写 RMW',rmw],['外部往返',globalLatency],['L2 响应',l2],['DMA 启动',setup],['命令项',1],['路径附加',path]];
+  const duration=terms.reduce((s,t)=>s+t[1],0);
+  const occupancy=store?Math.max(data+serialRmw,24+l2+B):Math.max(data+prime+1,l2+3);
+  const depth=store?4:1, hold=store?Math.max(duration,occupancy):occupancy;
+  // Queue-only projection: all commands ready at zero, no shared-port wait.
+  const slots=Array(depth).fill(0), commands=[];let free=0;
+  for(let i=0;i<6;i++) {
+    const slot=slots.indexOf(Math.min(...slots)), start=Math.max(free,slots[slot]);
+    commands.push({start,end:start+duration,release:start+occupancy,slot});
+    free=start+occupancy;slots[slot]=start+hold;
+  }
+  return {mode,runs,...counts,useful:N*H*W*C*eb,transferBytes:B*128,readOldBytes:store?counts.partialBeats*128:0,data,prime,rmw,serialRmw,terms,duration,occupancy,depth,hold,commands};
+}
+
 var CycleCaseModel = Object.freeze({
+  lsu: cycleLsuModel,
   union(intervals) {
     const sorted = intervals.map(x => [x[0], x[1]]).sort((a, b) => a[0] - b[0]);
     let total = 0, end = -Infinity;

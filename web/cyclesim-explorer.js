@@ -19,7 +19,10 @@ function initCycleCasebooks() {
       const c = group.cases[selected], f = c.frames[step];
       q('.cc-context').innerHTML = `<strong>${esc(c.shape)}</strong><p>${esc(c.conditions)}</p><small>${esc(c.boundary)}</small>`;
       q('.cc-stats').innerHTML = c.stats.map(s => `<div><small>${esc(s.label)}</small><strong>${esc(s.value)}</strong><span>${esc(s.unit || '')}</span></div>`).join('');
-      if (c.modelInput) {
+      if (c.lsuModel) {
+        const m = CycleCaseModel.lsu(c.lsuModel);
+        q(".cc-stats").innerHTML = [["独立预测 latency",m.duration,"core cycles"],["串行资源 occupancy",m.occupancy,"core cycles"],["工作量 B / J",`${m.beats} / ${m.bursts}`,"beat / burst"],["部分覆盖 P / Q",`${m.partialBeats} / ${m.partialBursts}`,"partial beat / burst"]].map(([label,value,unit])=>`<div><small>${esc(label)}</small><strong>${esc(value)}</strong><span>${esc(unit)}</span></div>`).join("");
+      } else if (c.modelInput) {
         const m = CycleCaseModel.bf16Mini(c.modelInput);
         q('.cc-stats').innerHTML += `<div><small>浏览器按公式重算</small><strong>${m.cycles}</strong><span>max(${m.work_plus_envelope}, ${m.write_path_total})；受限台架配置</span></div>`;
       } else if (c.dtGeometry) {
@@ -33,7 +36,12 @@ function initCycleCasebooks() {
       q('[data-cc-next]').disabled = step === c.frames.length - 1;
       q('.cc-frame').innerHTML = `<div class="cc-step-label">${f.cycle === undefined ? `推导 ${step + 1}` : `${esc(f.cycle)} ${esc(c.clockLabel || 'core cycle')}`}</div><h4>${esc(f.title)}</h4><p>${esc(f.text)}</p>${f.equation ? `<div class="cc-equation">${esc(f.equation)}</div>` : ''}${f.values ? `<dl>${Object.entries(f.values).map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>` : ''}`;
       q('.cc-drawing').innerHTML = cycleCaseDrawing(c, f, step);
-      q('.cc-ledger').innerHTML = `<details class="cc-full-ledger"><summary>展开完整计算账与所有步骤（打印时完整显示）</summary><div class="table-wrap"><table><caption>${esc(c.ledgerTitle || '事件、计算与本项贡献')}</caption><thead><tr><th>步骤</th><th>计算 / 观测</th><th>为什么要计入</th></tr></thead><tbody>${c.frames.map((x, i) => `<tr${i === step ? ' class="cc-current-row"' : ''}><td>${esc(x.title)}${x.cycle === undefined ? '' : `<br>${esc(x.cycle)} ${esc(c.clockLabel || 'core cycle')}`}</td><td>${esc(x.equation || Object.entries(x.values || {}).map(([k,v]) => `${k}=${v}`).join('；') || '见右侧解释')}</td><td>${esc(x.text)}</td></tr>`).join('')}</tbody></table></div></details>`;
+      let modelLedger = '';
+      if(c.lsuModel) {
+        const m=CycleCaseModel.lsu(c.lsuModel);
+        modelLedger=`<p>按当前输入独立计算：${m.runs.length} run，B=${m.beats}，J=${m.bursts}，P=${m.partialBeats}，Q=${m.partialBursts}，R=${m.primingRuns}。</p><p>L = ${m.terms.map(x=>x[1]).join(' + ')} = ${m.duration}；O=${m.occupancy}；H=${m.hold}；D=${m.depth}。</p><p>六条模型 start：${m.commands.map(x=>x.start).join(' / ')}；done：${m.commands.map(x=>x.end).join(' / ')}。</p><table><thead><tr><th>贡献项</th><th>core cycles</th></tr></thead><tbody>${m.terms.map(([name,value])=>`<tr><td>${esc(name)}</td><td>${value}</td></tr>`).join('')}</tbody></table>`;
+      }
+      q('.cc-ledger').innerHTML = `<details class="cc-full-ledger"><summary>展开完整计算账与所有步骤（打印时完整显示）</summary><div class="table-wrap">${modelLedger}<table><caption>${esc(c.ledgerTitle || '事件、计算与本项贡献')}</caption><thead><tr><th>步骤</th><th>计算 / 观测</th><th>为什么要计入</th></tr></thead><tbody>${c.frames.map((x, i) => `<tr${i === step ? ' class="cc-current-row"' : ''}><td>${esc(x.title)}${x.cycle === undefined ? '' : `<br>${esc(x.cycle)} ${esc(c.clockLabel || 'core cycle')}`}</td><td>${esc(x.equation || Object.entries(x.values || {}).map(([k,v]) => `${k}=${v}`).join('；') || '见右侧解释')}</td><td>${esc(x.text)}</td></tr>`).join('')}</tbody></table></div></details>`;
       const href = sourceUrl({url: c.source || './evidence/cyclesim-casebook-sources.md'});
       q('.cc-source').innerHTML = `${esc(c.provenance)} <a href="${esc(href)}" target="_blank" rel="noreferrer">查看原始行、条件与源码依据 ↗</a>`;
     };
@@ -61,7 +69,7 @@ function initCycleCasebooks() {
 }
 
 function cycleCaseDrawing(c, frame, step) {
-  const specialized = cycleSpecialDrawing(c, step, frame);
+  const specialized = c.lsuModel ? cycleLsuDrawing(c, step) : cycleSpecialDrawing(c, step, frame);
   if (specialized) return `<figure>${specialized}<figcaption>${esc(c.drawingNote)}</figcaption></figure>`;
   const ns = 'xmlns="http://www.w3.org/2000/svg"', width = 880;
   const text = (x,y,s,size=17,extra='') => `<text x="${x}" y="${y}" font-size="${size}" ${extra}>${esc(s)}</text>`;

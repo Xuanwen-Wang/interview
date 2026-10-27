@@ -125,14 +125,14 @@
     },
     "ld": {
       "title": "4 KiB 连续 LD：从32个beat算到68拍",
-      "description": "用同一条原始日志里的时间戳，把每个阶段的贡献逐项加回来。可播放、前后步进或拖动进度。",
+      "description": "模型之后的验证材料：回放已有日志差分，横轴按START归零。相邻事件闭合不等于独立预测。",
       "cases": [
         {
           "id": "ld-4096-recorded",
           "title": "4 KiB · 对齐连续 · 单条命令",
           "shape": "N,H,W,C = 1,1,1,4096；1 byte/元素；地址0；32个128B beat",
           "conditions": "core/DMA400MHz，AXI500MHz；L2固定9 core周期；slave r_lat参数10 aclk，实际AR→首R11 aclk；无其他master竞争。",
-          "boundary": "真实load DMA模块；不是现场默认NoC/MC路径。时间轴中的AXI事件先映射到core时间桶；不是全芯片路径。",
+          "boundary": "真实load DMA模块；不是现场默认NoC/MC路径。时间轴中的AXI事件先映射到core时间桶；不是全芯片路径。 原日志START=16，DONE=84；本图已归零，耗时=68。",
           "stats": [
             {
               "label": "原始RTL区间",
@@ -151,39 +151,39 @@
             }
           ],
           "timeline": {
-            "title": "同一条记录的首尾事件分段",
-            "begin": 16,
-            "end": 84,
+            "title": "已有日志验证：从START算经过时间",
+            "begin": 0,
+            "end": 68,
             "rows": [
               {
                 "label": "发出AR",
-                "start": 16,
-                "end": 18
+                "start": 0,
+                "end": 2
               },
               {
                 "label": "首R返回",
-                "start": 18,
-                "end": 27
+                "start": 2,
+                "end": 11
               },
               {
                 "label": "CDC / 重排",
-                "start": 27,
-                "end": 42
+                "start": 11,
+                "end": 26
               },
               {
                 "label": "持续L2写",
-                "start": 42,
-                "end": 73
+                "start": 26,
+                "end": 57
               },
               {
                 "label": "等末L2响应",
-                "start": 73,
-                "end": 82
+                "start": 57,
+                "end": 66
               },
               {
                 "label": "完成通知",
-                "start": 82,
-                "end": 84
+                "start": 66,
+                "end": 68
               }
             ]
           },
@@ -192,85 +192,94 @@
               "title": "把4096个字节放入128B传输格",
               "text": "先明确数据是byte-oriented元素；这里的4096不是4096个BF16数。",
               "equation": "4096 / 128 = 32; ARLEN = 32 - 1 = 31",
-              "cycle": 16,
+              "cycle": 0,
               "values": {
                 "beats": "32",
                 "bursts": "1",
                 "acceptedL2WriteRequests": "0"
-              }
+              },
+              "rawCycle": 16
             },
             {
               "title": "LD启动后推出读地址",
               "text": "START之后才有AR握手；请求发出不等于数据已经返回。",
               "equation": "18 - 16 = 2",
-              "cycle": 18,
+              "cycle": 2,
               "values": {
                 "arAccepted": "1",
                 "returnedBeats": "0"
-              }
+              },
+              "rawCycle": 18
             },
             {
               "title": "等待固定延迟slave首个返回",
               "text": "台架用固定返回延迟AXI slave替代NoC/GDG/MC。",
               "equation": "34 - 23 = 11 aclk；core 时间桶差 27 - 18 = 9",
-              "cycle": 27,
+              "cycle": 11,
               "values": {
                 "returnedBeatsAtLeast": "1"
-              }
+              },
+              "rawCycle": 27
             },
             {
               "title": "返回数据经过CDC、重排及L2输出通路",
               "text": "首个返回还要穿过CDC和数据整形才能成为首个L2写。后续R返回与此重叠。",
               "equation": "42 - 27 = 15；与后续R数据并行，不能再加整条R流时间",
-              "cycle": 42,
+              "cycle": 26,
               "values": {
                 "acceptedL2WriteRequests": "1"
-              }
+              },
+              "rawCycle": 42
             },
             {
               "title": "L2写流持续输出剩下31个beat",
               "text": "从第1个到第32个事件是31个间隔；这是最容易多算一拍的位置。",
               "equation": "32个写事件之间只有31个间隔；73 - 42 = 31",
-              "cycle": 73,
+              "cycle": 57,
               "values": {
                 "acceptedL2WriteRequests": "32"
-              }
+              },
+              "rawCycle": 73
             },
             {
               "title": "最后一次L2写等待确认",
               "text": "最后一个写请求出去仍未完成，必须等最后响应。",
               "equation": "82 - 73 = 9",
-              "cycle": 82,
+              "cycle": 66,
               "values": {
                 "allL2ResponsesReturned": "True"
-              }
+              },
+              "rawCycle": 82
             },
             {
               "title": "完成脉冲回到指令侧",
               "text": "最终完成脉冲返回指令侧，计时区间在这里结束。",
               "equation": "84 - 82 = 2",
-              "cycle": 84,
+              "cycle": 68,
               "values": {
                 "done": "True"
-              }
+              },
+              "rawCycle": 84
             }
           ],
-          "drawingNote": "各条带对应一段不重叠的事件差分，按同一core时间轴绘制；首尾点来自已有台架日志。未重建日志中未采样的逐拍valid/ready。",
+          "drawingNote": "首尾事件差分的验证图；横轴0至68为经过时间。原日志16→84，未重建未采样握手。",
           "provenance": "已有模块RTL测量；固定延迟邻居。",
-          "source": "./evidence/cyclesim-casebook-sources.md#ld"
+          "source": "./evidence/cyclesim-casebook-sources.md#ld",
+          "rawTimelineOrigin": 16,
+          "clockLabel": "经过的 core cycles"
         }
       ]
     },
     "st": {
       "title": "同样4 KiB，ST为什么是102拍",
-      "description": "用同一条原始日志里的时间戳，把每个阶段的贡献逐项加回来。可播放、前后步进或拖动进度。",
+      "description": "模型之后的验证材料：回放已有日志差分，横轴按START归零。相邻事件闭合不等于独立预测。",
       "cases": [
         {
           "id": "st-4096-recorded",
           "title": "4 KiB · 对齐连续 · 单条命令",
           "shape": "N,H,W,C = 1,1,1,4096；1 byte/元素；地址0；32个128B beat",
           "conditions": "core/DMA400MHz，AXI500MHz；L2固定9 core周期；Wlast→B固定10 aclk；无其他master竞争。",
-          "boundary": "真实完整SDMA模块；无GDG RMW，不是全芯片写延迟。时间轴中的AXI事件先映射到core时间桶；不是全芯片路径。",
+          "boundary": "真实完整SDMA模块；无GDG RMW，不是全芯片写延迟。时间轴中的AXI事件先映射到core时间桶；不是全芯片路径。 原日志START=14，DONE=116；本图已归零，耗时=102。",
           "stats": [
             {
               "label": "原始RTL区间",
@@ -289,34 +298,34 @@
             }
           ],
           "timeline": {
-            "title": "同一条记录的首尾事件分段",
-            "begin": 14,
-            "end": 116,
+            "title": "已有日志验证：从START算经过时间",
+            "begin": 0,
+            "end": 102,
             "rows": [
               {
                 "label": "L2读请求",
-                "start": 14,
-                "end": 17
+                "start": 0,
+                "end": 3
               },
               {
                 "label": "首L2数据",
-                "start": 17,
-                "end": 26
+                "start": 3,
+                "end": 12
               },
               {
                 "label": "攒burst / 发AW",
-                "start": 26,
-                "end": 68
+                "start": 12,
+                "end": 54
               },
               {
                 "label": "发送W / 等B",
-                "start": 68,
-                "end": 108
+                "start": 54,
+                "end": 94
               },
               {
                 "label": "完成通知",
-                "start": 108,
-                "end": 116
+                "start": 94,
+                "end": 102
               }
             ]
           },
@@ -325,64 +334,72 @@
               "title": "32个完整beat，1个AW，1个B",
               "text": "先明确数据是byte-oriented元素；这里的4096不是4096个BF16数。",
               "equation": "4096 / 128 = 32; AWLEN=31",
-              "cycle": 14,
+              "cycle": 0,
               "values": {
                 "beats": "32",
                 "bursts": "1",
                 "partial": "False"
-              }
+              },
+              "rawCycle": 14
             },
             {
               "title": "ST先向L2发读请求",
               "text": "ST必须先从L2取回数据，不能直接向全局端发空的写请求。",
               "equation": "17-14=3",
-              "cycle": 17,
+              "cycle": 3,
               "values": {
                 "l2ReadStarted": "True"
-              }
+              },
+              "rawCycle": 17
             },
             {
               "title": "L2返回第一份数据",
               "text": "固定9个core周期后，第一份L2数据返回。",
               "equation": "26-17=9",
-              "cycle": 26,
+              "cycle": 12,
               "values": {
                 "l2DataAtLeast": "1"
-              }
+              },
+              "rawCycle": 26
             },
             {
               "title": "攒齐一个burst后发布长度与地址",
               "text": "SDMA要知道一个burst的长度并收齐对应数据，长度FIFO可用后才发AW。",
               "equation": "68-26=42；相对1-beat控制(36-26=10)增加32拍，受计数/时钟相位影响，不能硬写成31拍",
-              "cycle": 68,
+              "cycle": 54,
               "values": {
                 "firstBurstBuffered": "True",
                 "awAccepted": "1"
-              }
+              },
+              "rawCycle": 68
             },
             {
               "title": "发32个W并等待最后一个W对应的B",
               "text": "这一段的记录来自500MHz AXI域。先在该域相减，再转到400MHz core。",
               "equation": "(W0-AW)=1 aclk；(Wlast-W0)=39 aclk；(B-Wlast)=10 aclk；(1+39+10)*0.8=40",
-              "cycle": 108,
+              "cycle": 94,
               "values": {
                 "writeBeatsAccepted": "32",
                 "bAccepted": "1"
-              }
+              },
+              "rawCycle": 108
             },
             {
               "title": "B经过回程CDC与完成通路",
               "text": "最终完成脉冲返回指令侧，计时区间在这里结束。",
               "equation": "116-108=8；1-beat控制为9，不能把每种相位都写死为9",
-              "cycle": 116,
+              "cycle": 102,
               "values": {
                 "done": "True"
-              }
+              },
+              "rawCycle": 116
             }
           ],
-          "drawingNote": "各条带对应一段不重叠的事件差分，按同一core时间轴绘制；首尾点来自已有台架日志。未重建日志中未采样的逐拍valid/ready。",
+          "drawingNote": "首尾事件差分的验证图；横轴0至102为经过时间。原日志14→116，未重建未采样握手。",
           "provenance": "已有模块RTL测量；固定延迟邻居。",
-          "source": "./evidence/cyclesim-casebook-sources.md#st"
+          "source": "./evidence/cyclesim-casebook-sources.md#st",
+          "rawTimelineOrigin": 14,
+          "clockLabel": "经过的 core cycles"
         }
       ]
     },
@@ -3924,6 +3941,587 @@
           "drawingNote": "位置是descriptor的macro几何推导；接收率是原始汇总的统计尺，不是逐拍grant。未知的DT1/2/3终点不绘制。",
           "provenance": "历史真实共享L2并发台架；当前默认解析式不包含这项跨master争用。",
           "source": "./evidence/cyclesim-casebook-sources.md#parallel"
+        }
+      ]
+    },
+    "ld-model": {
+      "title": "LD模型计算器：从shape独立预测",
+      "kicker": "模型先行 · 独立算术",
+      "description": "先选输入，逐步生成工作量、延迟贡献与六条命令预约；不读取RTL总周期来反推。",
+      "cases": [
+        {
+          "id": "ld-default-contiguous",
+          "title": "4 KiB连续：32 beat，L139 / O33",
+          "shape": "tile [1, 1, 1, 4096]；源 [1, 1, 1, 4096]；目标 [1, 1, 1, 4096]；8-bit",
+          "conditions": "已有byte-oriented台架的几何；本计算使用当前全局环境；所有长度均为解码后的数量。全局默认：L2=13，path附加=0。",
+          "boundary": "L为LsuEngine解析入口到完成的局部成本，未包含前端/依赖/共享端口等待；下面的6条预约假定全部就绪。",
+          "stats": [],
+          "lsuModel": {
+            "tile": [
+              1,
+              1,
+              1,
+              4096
+            ],
+            "src": [
+              1,
+              1,
+              1,
+              4096
+            ],
+            "dst": [
+              1,
+              1,
+              1,
+              4096
+            ],
+            "bits": 8,
+            "address": 0,
+            "dense": true
+          },
+          "frames": [
+            {
+              "title": "先从descriptor生成全局连续段",
+              "text": "由源/目标allocation和合并条件生成run；不能把逻辑bytes直接当一段连续地址。LD允许padding读取，ST只覆盖有效字节。"
+            },
+            {
+              "title": "计算beat、burst与部分覆盖",
+              "text": "每run按128B扩展，先按最多32beat分块，再在4KiB边界拆burst。P是partial beat数，Q是partial burst数；一条burst两端partial仍可能只计一个Q。"
+            },
+            {
+              "title": "把工作量代入延迟贡献项",
+              "text": "各项来自本节指定profile。图中柱子是解析成本贡献，顺序和宽度不表示真实握手波形；不能从这里反造逐拍MC信号。"
+            },
+            {
+              "title": "单条latency与下一条可用时间分开",
+              "text": "LD取max(数据项+1,L2+3)；ST取max(完整写服务+Q×36,24+L2+B)。外存往返主要影响L，不等于所有请求必须全程串行。"
+            },
+            {
+              "title": "把六条全部就绪的命令放进资源预约",
+              "text": "每条同时等串行资源和最早空槽。ST四个槽保持到完成；LD当前抽象slot保持到occupancy。深色为串行预约，淡色到done；图是模型推导，不是RTL录波。"
+            }
+          ],
+          "drawingNote": "独立源码算术；时间轴以第一条模型start=0归零，单位core cycle。无外部竞争、无依赖等待、无前端发送间隔；LD一槽为预约抽象，不代表硬件实际在途容量。",
+          "provenance": "真实台架几何，当前默认参数预测；不能与固定slave的68拍直接计算误差",
+          "source": "./evidence/cyclesim-model-first-sources.md#ld"
+        },
+        {
+          "id": "ld-half-rows",
+          "title": "同4 KiB：64行×64B，pitch128B",
+          "shape": "tile [1, 1, 64, 32]；源 [1, 1, 64, 64]；目标 [1, 1, 64, 32]；16-bit",
+          "conditions": "教学变体：每行不足一个beat，全局源行间有空洞；所有长度均为解码后的数量。全局默认：L2=13，path附加=0。",
+          "boundary": "L为LsuEngine解析入口到完成的局部成本，未包含前端/依赖/共享端口等待；下面的6条预约假定全部就绪。",
+          "stats": [],
+          "lsuModel": {
+            "tile": [
+              1,
+              1,
+              64,
+              32
+            ],
+            "src": [
+              1,
+              1,
+              64,
+              64
+            ],
+            "dst": [
+              1,
+              1,
+              64,
+              32
+            ],
+            "bits": 16,
+            "address": 0,
+            "dense": true
+          },
+          "frames": [
+            {
+              "title": "先从descriptor生成全局连续段",
+              "text": "由源/目标allocation和合并条件生成run；不能把逻辑bytes直接当一段连续地址。LD允许padding读取，ST只覆盖有效字节。"
+            },
+            {
+              "title": "计算beat、burst与部分覆盖",
+              "text": "每run按128B扩展，先按最多32beat分块，再在4KiB边界拆burst。P是partial beat数，Q是partial burst数；一条burst两端partial仍可能只计一个Q。"
+            },
+            {
+              "title": "把工作量代入延迟贡献项",
+              "text": "各项来自本节指定profile。图中柱子是解析成本贡献，顺序和宽度不表示真实握手波形；不能从这里反造逐拍MC信号。"
+            },
+            {
+              "title": "单条latency与下一条可用时间分开",
+              "text": "LD取max(数据项+1,L2+3)；ST取max(完整写服务+Q×36,24+L2+B)。外存往返主要影响L，不等于所有请求必须全程串行。"
+            },
+            {
+              "title": "把六条全部就绪的命令放进资源预约",
+              "text": "每条同时等串行资源和最早空槽。ST四个槽保持到完成；LD当前抽象slot保持到occupancy。深色为串行预约，淡色到done；图是模型推导，不是RTL录波。"
+            }
+          ],
+          "drawingNote": "独立源码算术；时间轴以第一条模型start=0归零，单位core cycle。无外部竞争、无依赖等待、无前端发送间隔；LD一槽为预约抽象，不代表硬件实际在途容量。",
+          "provenance": "教学受控变体；时间为当前源码公式预测，无对应新RTL测量",
+          "source": "./evidence/cyclesim-model-first-sources.md#ld"
+        },
+        {
+          "id": "ld-priming-rows",
+          "title": "同4 KiB：32行×128B，pitch256B",
+          "shape": "tile [1, 1, 32, 64]；源 [1, 1, 32, 128]；目标 [1, 1, 32, 64]；16-bit",
+          "conditions": "教学变体：beat量相同，但每个长run要priming；所有长度均为解码后的数量。全局默认：L2=13，path附加=0。",
+          "boundary": "L为LsuEngine解析入口到完成的局部成本，未包含前端/依赖/共享端口等待；下面的6条预约假定全部就绪。",
+          "stats": [],
+          "lsuModel": {
+            "tile": [
+              1,
+              1,
+              32,
+              64
+            ],
+            "src": [
+              1,
+              1,
+              32,
+              128
+            ],
+            "dst": [
+              1,
+              1,
+              32,
+              64
+            ],
+            "bits": 16,
+            "address": 0,
+            "dense": true
+          },
+          "frames": [
+            {
+              "title": "先从descriptor生成全局连续段",
+              "text": "由源/目标allocation和合并条件生成run；不能把逻辑bytes直接当一段连续地址。LD允许padding读取，ST只覆盖有效字节。"
+            },
+            {
+              "title": "计算beat、burst与部分覆盖",
+              "text": "每run按128B扩展，先按最多32beat分块，再在4KiB边界拆burst。P是partial beat数，Q是partial burst数；一条burst两端partial仍可能只计一个Q。"
+            },
+            {
+              "title": "把工作量代入延迟贡献项",
+              "text": "各项来自本节指定profile。图中柱子是解析成本贡献，顺序和宽度不表示真实握手波形；不能从这里反造逐拍MC信号。"
+            },
+            {
+              "title": "单条latency与下一条可用时间分开",
+              "text": "LD取max(数据项+1,L2+3)；ST取max(完整写服务+Q×36,24+L2+B)。外存往返主要影响L，不等于所有请求必须全程串行。"
+            },
+            {
+              "title": "把六条全部就绪的命令放进资源预约",
+              "text": "每条同时等串行资源和最早空槽。ST四个槽保持到完成；LD当前抽象slot保持到occupancy。深色为串行预约，淡色到done；图是模型推导，不是RTL录波。"
+            }
+          ],
+          "drawingNote": "独立源码算术；时间轴以第一条模型start=0归零，单位core cycle。无外部竞争、无依赖等待、无前端发送间隔；LD一槽为预约抽象，不代表硬件实际在途容量。",
+          "provenance": "教学受控变体；时间为当前源码公式预测，无对应新RTL测量",
+          "source": "./evidence/cyclesim-model-first-sources.md#ld"
+        },
+        {
+          "id": "ld-offset",
+          "title": "同4 KiB：地址偏64B",
+          "shape": "tile [1, 1, 1, 4096]；源 [1, 1, 1, 4096]；目标 [1, 1, 1, 4096]；8-bit",
+          "conditions": "教学变体：首尾扩展到33beat；所有长度均为解码后的数量。全局默认：L2=13，path附加=0。",
+          "boundary": "L为LsuEngine解析入口到完成的局部成本，未包含前端/依赖/共享端口等待；下面的6条预约假定全部就绪。",
+          "stats": [],
+          "lsuModel": {
+            "tile": [
+              1,
+              1,
+              1,
+              4096
+            ],
+            "src": [
+              1,
+              1,
+              1,
+              4096
+            ],
+            "dst": [
+              1,
+              1,
+              1,
+              4096
+            ],
+            "bits": 8,
+            "address": 64,
+            "dense": true
+          },
+          "frames": [
+            {
+              "title": "先从descriptor生成全局连续段",
+              "text": "由源/目标allocation和合并条件生成run；不能把逻辑bytes直接当一段连续地址。LD允许padding读取，ST只覆盖有效字节。"
+            },
+            {
+              "title": "计算beat、burst与部分覆盖",
+              "text": "每run按128B扩展，先按最多32beat分块，再在4KiB边界拆burst。P是partial beat数，Q是partial burst数；一条burst两端partial仍可能只计一个Q。"
+            },
+            {
+              "title": "把工作量代入延迟贡献项",
+              "text": "各项来自本节指定profile。图中柱子是解析成本贡献，顺序和宽度不表示真实握手波形；不能从这里反造逐拍MC信号。"
+            },
+            {
+              "title": "单条latency与下一条可用时间分开",
+              "text": "LD取max(数据项+1,L2+3)；ST取max(完整写服务+Q×36,24+L2+B)。外存往返主要影响L，不等于所有请求必须全程串行。"
+            },
+            {
+              "title": "把六条全部就绪的命令放进资源预约",
+              "text": "每条同时等串行资源和最早空槽。ST四个槽保持到完成；LD当前抽象slot保持到occupancy。深色为串行预约，淡色到done；图是模型推导，不是RTL录波。"
+            }
+          ],
+          "drawingNote": "独立源码算术；时间轴以第一条模型start=0归零，单位core cycle。无外部竞争、无依赖等待、无前端发送间隔；LD一槽为预约抽象，不代表硬件实际在途容量。",
+          "provenance": "教学受控变体；时间为当前源码公式预测，无对应新RTL测量",
+          "source": "./evidence/cyclesim-model-first-sources.md#ld"
+        },
+        {
+          "id": "ld-local",
+          "title": "同4 KiB：切换本地DRAM参数",
+          "shape": "tile [1, 1, 1, 4096]；源 [1, 1, 1, 4096]；目标 [1, 1, 1, 4096]；8-bit",
+          "conditions": "教学变体：单独改变片外返回路径；所有长度均为解码后的数量。选择本地DRAM：G=128，path附加为0。",
+          "boundary": "L为LsuEngine解析入口到完成的局部成本，未包含前端/依赖/共享端口等待；下面的6条预约假定全部就绪。",
+          "stats": [],
+          "lsuModel": {
+            "tile": [
+              1,
+              1,
+              1,
+              4096
+            ],
+            "src": [
+              1,
+              1,
+              1,
+              4096
+            ],
+            "dst": [
+              1,
+              1,
+              1,
+              4096
+            ],
+            "bits": 8,
+            "address": 0,
+            "dense": true,
+            "local": true
+          },
+          "frames": [
+            {
+              "title": "先从descriptor生成全局连续段",
+              "text": "由源/目标allocation和合并条件生成run；不能把逻辑bytes直接当一段连续地址。LD允许padding读取，ST只覆盖有效字节。"
+            },
+            {
+              "title": "计算beat、burst与部分覆盖",
+              "text": "每run按128B扩展，先按最多32beat分块，再在4KiB边界拆burst。P是partial beat数，Q是partial burst数；一条burst两端partial仍可能只计一个Q。"
+            },
+            {
+              "title": "把工作量代入延迟贡献项",
+              "text": "各项来自本节指定profile。图中柱子是解析成本贡献，顺序和宽度不表示真实握手波形；不能从这里反造逐拍MC信号。"
+            },
+            {
+              "title": "单条latency与下一条可用时间分开",
+              "text": "LD取max(数据项+1,L2+3)；ST取max(完整写服务+Q×36,24+L2+B)。外存往返主要影响L，不等于所有请求必须全程串行。"
+            },
+            {
+              "title": "把六条全部就绪的命令放进资源预约",
+              "text": "每条同时等串行资源和最早空槽。ST四个槽保持到完成；LD当前抽象slot保持到occupancy。深色为串行预约，淡色到done；图是模型推导，不是RTL录波。"
+            }
+          ],
+          "drawingNote": "独立源码算术；时间轴以第一条模型start=0归零，单位core cycle。无外部竞争、无依赖等待、无前端发送间隔；LD一槽为预约抽象，不代表硬件实际在途容量。",
+          "provenance": "教学受控变体；时间为当前源码公式预测，无对应新RTL测量",
+          "source": "./evidence/cyclesim-model-first-sources.md#ld"
+        }
+      ]
+    },
+    "st-model": {
+      "title": "ST模型计算器：几何、RMW与四槽",
+      "kicker": "模型先行 · 独立算术",
+      "description": "先选输入，逐步生成工作量、延迟贡献与六条命令预约；不读取RTL总周期来反推。",
+      "cases": [
+        {
+          "id": "st-default-contiguous",
+          "title": "4 KiB完整写：L183 / O80",
+          "shape": "tile [1, 1, 1, 4096]；源 [1, 1, 1, 4096]；目标 [1, 1, 1, 4096]；8-bit",
+          "conditions": "已有台架几何；指定全局默认时间参数；所有长度均为解码后的数量。全局默认：L2=13，path附加=0。",
+          "boundary": "L为LsuEngine解析入口到完成的局部成本，未包含前端/依赖/共享端口等待；下面的6条预约假定全部就绪。",
+          "stats": [],
+          "lsuModel": {
+            "tile": [
+              1,
+              1,
+              1,
+              4096
+            ],
+            "src": [
+              1,
+              1,
+              1,
+              4096
+            ],
+            "dst": [
+              1,
+              1,
+              1,
+              4096
+            ],
+            "bits": 8,
+            "address": 0,
+            "dense": true,
+            "store": true
+          },
+          "frames": [
+            {
+              "title": "先从descriptor生成全局连续段",
+              "text": "由源/目标allocation和合并条件生成run；不能把逻辑bytes直接当一段连续地址。LD允许padding读取，ST只覆盖有效字节。"
+            },
+            {
+              "title": "计算beat、burst与部分覆盖",
+              "text": "每run按128B扩展，先按最多32beat分块，再在4KiB边界拆burst。P是partial beat数，Q是partial burst数；一条burst两端partial仍可能只计一个Q。"
+            },
+            {
+              "title": "把工作量代入延迟贡献项",
+              "text": "各项来自本节指定profile。图中柱子是解析成本贡献，顺序和宽度不表示真实握手波形；不能从这里反造逐拍MC信号。"
+            },
+            {
+              "title": "单条latency与下一条可用时间分开",
+              "text": "LD取max(数据项+1,L2+3)；ST取max(完整写服务+Q×36,24+L2+B)。外存往返主要影响L，不等于所有请求必须全程串行。"
+            },
+            {
+              "title": "把六条全部就绪的命令放进资源预约",
+              "text": "每条同时等串行资源和最早空槽。ST四个槽保持到完成；LD当前抽象slot保持到occupancy。深色为串行预约，淡色到done；图是模型推导，不是RTL录波。"
+            }
+          ],
+          "drawingNote": "独立源码算术；时间轴以第一条模型start=0归零，单位core cycle。无外部竞争、无依赖等待、无前端发送间隔；LD一槽为预约抽象，不代表硬件实际在途容量。",
+          "provenance": "真实台架几何，当前默认预测；非固定slave的102拍",
+          "source": "./evidence/cyclesim-model-first-sources.md#st"
+        },
+        {
+          "id": "st-real-16",
+          "title": "st_16：两个partial beat，一个partial burst",
+          "shape": "tile [1, 1, 1, 64]；源 [1, 1, 1, 64]；目标 [1, 8, 1, 72]；16-bit",
+          "conditions": "真实descriptor；地址归一到mod4096，只保留几何；所有长度均为解码后的数量。全局默认：L2=13，path附加=0。",
+          "boundary": "L为LsuEngine解析入口到完成的局部成本，未包含前端/依赖/共享端口等待；下面的6条预约假定全部就绪。",
+          "stats": [],
+          "lsuModel": {
+            "tile": [
+              1,
+              1,
+              1,
+              64
+            ],
+            "src": [
+              1,
+              1,
+              1,
+              64
+            ],
+            "dst": [
+              1,
+              8,
+              1,
+              72
+            ],
+            "bits": 16,
+            "address": 576,
+            "dense": true,
+            "store": true
+          },
+          "frames": [
+            {
+              "title": "先从descriptor生成全局连续段",
+              "text": "由源/目标allocation和合并条件生成run；不能把逻辑bytes直接当一段连续地址。LD允许padding读取，ST只覆盖有效字节。"
+            },
+            {
+              "title": "计算beat、burst与部分覆盖",
+              "text": "每run按128B扩展，先按最多32beat分块，再在4KiB边界拆burst。P是partial beat数，Q是partial burst数；一条burst两端partial仍可能只计一个Q。"
+            },
+            {
+              "title": "把工作量代入延迟贡献项",
+              "text": "各项来自本节指定profile。图中柱子是解析成本贡献，顺序和宽度不表示真实握手波形；不能从这里反造逐拍MC信号。"
+            },
+            {
+              "title": "单条latency与下一条可用时间分开",
+              "text": "LD取max(数据项+1,L2+3)；ST取max(完整写服务+Q×36,24+L2+B)。外存往返主要影响L，不等于所有请求必须全程串行。"
+            },
+            {
+              "title": "把六条全部就绪的命令放进资源预约",
+              "text": "每条同时等串行资源和最早空槽。ST四个槽保持到完成；LD当前抽象slot保持到occupancy。深色为串行预约，淡色到done；图是模型推导，不是RTL录波。"
+            }
+          ],
+          "drawingNote": "独立源码算术；时间轴以第一条模型start=0归零，单位core cycle。无外部竞争、无依赖等待、无前端发送间隔；LD一槽为预约抽象，不代表硬件实际在途容量。",
+          "provenance": "真实descriptor几何 + 当前全局默认预测；原fixture没有完整业务RTL时长",
+          "source": "./evidence/cyclesim-model-first-sources.md#st"
+        },
+        {
+          "id": "st-real-15",
+          "title": "st_15：72行，198写beat，58个partial burst",
+          "shape": "tile [1, 1, 72, 64]；源 [1, 1, 72, 64]；目标 [1, 8, 72, 72]；32-bit",
+          "conditions": "真实descriptor，256B/行，288B行距；地址按mod4096归一；所有长度均为解码后的数量。全局默认：L2=13，path附加=0。",
+          "boundary": "L为LsuEngine解析入口到完成的局部成本，未包含前端/依赖/共享端口等待；下面的6条预约假定全部就绪。",
+          "stats": [],
+          "lsuModel": {
+            "tile": [
+              1,
+              1,
+              72,
+              64
+            ],
+            "src": [
+              1,
+              1,
+              72,
+              64
+            ],
+            "dst": [
+              1,
+              8,
+              72,
+              72
+            ],
+            "bits": 32,
+            "address": 3840,
+            "dense": true,
+            "store": true
+          },
+          "frames": [
+            {
+              "title": "先从descriptor生成全局连续段",
+              "text": "由源/目标allocation和合并条件生成run；不能把逻辑bytes直接当一段连续地址。LD允许padding读取，ST只覆盖有效字节。"
+            },
+            {
+              "title": "计算beat、burst与部分覆盖",
+              "text": "每run按128B扩展，先按最多32beat分块，再在4KiB边界拆burst。P是partial beat数，Q是partial burst数；一条burst两端partial仍可能只计一个Q。"
+            },
+            {
+              "title": "把工作量代入延迟贡献项",
+              "text": "各项来自本节指定profile。图中柱子是解析成本贡献，顺序和宽度不表示真实握手波形；不能从这里反造逐拍MC信号。"
+            },
+            {
+              "title": "单条latency与下一条可用时间分开",
+              "text": "LD取max(数据项+1,L2+3)；ST取max(完整写服务+Q×36,24+L2+B)。外存往返主要影响L，不等于所有请求必须全程串行。"
+            },
+            {
+              "title": "把六条全部就绪的命令放进资源预约",
+              "text": "每条同时等串行资源和最早空槽。ST四个槽保持到完成；LD当前抽象slot保持到occupancy。深色为串行预约，淡色到done；图是模型推导，不是RTL录波。"
+            }
+          ],
+          "drawingNote": "独立源码算术；时间轴以第一条模型start=0归零，单位core cycle。无外部竞争、无依赖等待、无前端发送间隔；LD一槽为预约抽象，不代表硬件实际在途容量。",
+          "provenance": "真实descriptor几何 + 当前全局默认预测；原fixture没有完整业务RTL时长",
+          "source": "./evidence/cyclesim-model-first-sources.md#st"
+        },
+        {
+          "id": "st-half-rows",
+          "title": "同4 KiB：64行半写，观察RMW成本",
+          "shape": "tile [1, 1, 64, 32]；源 [1, 1, 64, 32]；目标 [1, 1, 64, 64]；16-bit",
+          "conditions": "教学变体：每行64B且隔128B，保留另半行旧字节；所有长度均为解码后的数量。全局默认：L2=13，path附加=0。",
+          "boundary": "L为LsuEngine解析入口到完成的局部成本，未包含前端/依赖/共享端口等待；下面的6条预约假定全部就绪。",
+          "stats": [],
+          "lsuModel": {
+            "tile": [
+              1,
+              1,
+              64,
+              32
+            ],
+            "src": [
+              1,
+              1,
+              64,
+              32
+            ],
+            "dst": [
+              1,
+              1,
+              64,
+              64
+            ],
+            "bits": 16,
+            "address": 0,
+            "dense": true,
+            "store": true
+          },
+          "frames": [
+            {
+              "title": "先从descriptor生成全局连续段",
+              "text": "由源/目标allocation和合并条件生成run；不能把逻辑bytes直接当一段连续地址。LD允许padding读取，ST只覆盖有效字节。"
+            },
+            {
+              "title": "计算beat、burst与部分覆盖",
+              "text": "每run按128B扩展，先按最多32beat分块，再在4KiB边界拆burst。P是partial beat数，Q是partial burst数；一条burst两端partial仍可能只计一个Q。"
+            },
+            {
+              "title": "把工作量代入延迟贡献项",
+              "text": "各项来自本节指定profile。图中柱子是解析成本贡献，顺序和宽度不表示真实握手波形；不能从这里反造逐拍MC信号。"
+            },
+            {
+              "title": "单条latency与下一条可用时间分开",
+              "text": "LD取max(数据项+1,L2+3)；ST取max(完整写服务+Q×36,24+L2+B)。外存往返主要影响L，不等于所有请求必须全程串行。"
+            },
+            {
+              "title": "把六条全部就绪的命令放进资源预约",
+              "text": "每条同时等串行资源和最早空槽。ST四个槽保持到完成；LD当前抽象slot保持到occupancy。深色为串行预约，淡色到done；图是模型推导，不是RTL录波。"
+            }
+          ],
+          "drawingNote": "独立源码算术；时间轴以第一条模型start=0归零，单位core cycle。无外部竞争、无依赖等待、无前端发送间隔；LD一槽为预约抽象，不代表硬件实际在途容量。",
+          "provenance": "教学受控变体；时间为当前源码公式预测，无对应新RTL测量",
+          "source": "./evidence/cyclesim-model-first-sources.md#st"
+        },
+        {
+          "id": "st-slots",
+          "title": "1 beat + 路径56拍：观察第五条等空槽",
+          "shape": "tile [1, 1, 1, 128]；源 [1, 1, 1, 128]；目标 [1, 1, 1, 128]；8-bit",
+          "conditions": "教学变体：只改变路径附加；不宣称此归一地址映射到具体芯片路线；所有长度均为解码后的数量。全局默认：L2=13，path附加=56。",
+          "boundary": "L为LsuEngine解析入口到完成的局部成本，未包含前端/依赖/共享端口等待；下面的6条预约假定全部就绪。",
+          "stats": [],
+          "lsuModel": {
+            "tile": [
+              1,
+              1,
+              1,
+              128
+            ],
+            "src": [
+              1,
+              1,
+              1,
+              128
+            ],
+            "dst": [
+              1,
+              1,
+              1,
+              128
+            ],
+            "bits": 8,
+            "address": 0,
+            "dense": true,
+            "store": true,
+            "pathExtra": 56
+          },
+          "frames": [
+            {
+              "title": "先从descriptor生成全局连续段",
+              "text": "由源/目标allocation和合并条件生成run；不能把逻辑bytes直接当一段连续地址。LD允许padding读取，ST只覆盖有效字节。"
+            },
+            {
+              "title": "计算beat、burst与部分覆盖",
+              "text": "每run按128B扩展，先按最多32beat分块，再在4KiB边界拆burst。P是partial beat数，Q是partial burst数；一条burst两端partial仍可能只计一个Q。"
+            },
+            {
+              "title": "把工作量代入延迟贡献项",
+              "text": "各项来自本节指定profile。图中柱子是解析成本贡献，顺序和宽度不表示真实握手波形；不能从这里反造逐拍MC信号。"
+            },
+            {
+              "title": "单条latency与下一条可用时间分开",
+              "text": "LD取max(数据项+1,L2+3)；ST取max(完整写服务+Q×36,24+L2+B)。外存往返主要影响L，不等于所有请求必须全程串行。"
+            },
+            {
+              "title": "把六条全部就绪的命令放进资源预约",
+              "text": "每条同时等串行资源和最早空槽。ST四个槽保持到完成；LD当前抽象slot保持到occupancy。深色为串行预约，淡色到done；图是模型推导，不是RTL录波。"
+            }
+          ],
+          "drawingNote": "独立源码算术；时间轴以第一条模型start=0归零，单位core cycle。无外部竞争、无依赖等待、无前端发送间隔；LD一槽为预约抽象，不代表硬件实际在途容量。",
+          "provenance": "教学受控变体；时间为当前源码公式预测，无对应新RTL测量",
+          "source": "./evidence/cyclesim-model-first-sources.md#st"
         }
       ]
     }

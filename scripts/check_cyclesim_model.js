@@ -155,3 +155,64 @@ assert.throws(() => model.difference(-1, 1), RangeError);
 assert.throws(() => model.difference(Number.MAX_VALUE, Number.MIN_VALUE), RangeError);
 
 console.log('PASS: CycleSim casebook arithmetic; BF16 six-case ledger, DT four controls and partial-block counterexample, interval union, 4KiB/RMW geometry, finite-input and profile boundaries. No CycleSim/RTL was run.');
+
+// Descriptor-level LSU checks. Oracle enumerates byte addresses, independently
+// of the model's axis-collapse/run decomposition. Use dense byte geometry here.
+const lsu = (tile,src=tile,dst=tile,extra={}) => model.lsu({tile,src,dst,...extra});
+const ld4k=lsu([1,1,1,4096]);
+assert.deepEqual([ld4k.beats,ld4k.bursts,ld4k.duration,ld4k.occupancy],[32,1,139,33]);
+assert.deepEqual(ld4k.commands.map(c=>c.start),[0,33,66,99,132,165]);
+const half=lsu([1,1,64,32],[1,1,64,64],[1,1,64,32],{bits:16});
+assert.deepEqual([half.useful,half.beats,half.primingRuns,half.duration,half.occupancy],[4096,64,0,171,65]);
+const prime=lsu([1,1,32,64],[1,1,32,128],[1,1,32,64],{bits:16});
+assert.deepEqual([prime.beats,prime.primingRuns,prime.duration,prime.occupancy],[32,32,170,64]);
+const s16=lsu([1,1,1,64],[1,1,1,64],[1,8,1,72],{store:true,bits:16,address:576});
+assert.deepEqual([s16.beats,s16.bursts,s16.partialBeats,s16.partialBursts,s16.duration,s16.occupancy],[2,1,2,1,130,41]);
+const s15=lsu([1,1,72,64],[1,1,72,64],[1,8,72,72],{store:true,bits:32,address:3840});
+assert.deepEqual([s15.beats,s15.bursts,s15.partialBeats,s15.partialBursts,s15.duration,s15.occupancy],[198,76,108,58,2669,2580]);
+assert.equal(s15.transferBytes+s15.readOldBytes,39168);
+// Absolute address translations by whole pages must preserve geometry/timing.
+for(const shift of [4096,8192,2**32]) {
+ const shifted=lsu([1,1,72,64],[1,1,72,64],[1,8,72,72],{store:true,bits:32,address:3840+shift});
+ assert.deepEqual([shifted.beats,shifted.bursts,shifted.partialBursts,shifted.duration],[198,76,58,2669]);
+}
+// Equal flat byte counts are not equal costs; merge rules differ by direction.
+const paddedLoad=lsu([1,1,2,4],[1,1,2,16],[1,1,2,4],{dense:false});
+const paddedStore=lsu([1,1,2,4],[1,1,2,4],[1,1,2,16],{store:true,dense:false});
+assert.equal(paddedLoad.runs.length,1);assert.equal(paddedLoad.runs[0].bytes,32);
+assert.equal(paddedStore.runs.length,2);assert.deepEqual(paddedStore.runs.map(r=>r.bytes),[4,4]);
+const dstStrided=lsu([1,1,4,32],[1,1,4,32],[1,1,4,64]);
+assert.equal(dstStrided.runs.length,1); // L2 destination cannot split LD global source.
+for(const tile of [[2,2,3,8],[1,3,2,16],[2,1,2,32]]) {
+ const src=[tile[0]+1,tile[1]+1,tile[2]+1,tile[3]+8],base=4000;
+ const r=lsu(tile,src,tile,{address:base});const expected=new Set(),actual=new Set();
+ for(let n=0;n<tile[0];n++)for(let h=0;h<tile[1];h++)for(let w=0;w<tile[2];w++)for(let c=0;c<tile[3];c++)expected.add(base+((n*src[1]+h)*src[2]+w)*src[3]+c);
+ for(const run of r.runs)for(let a=run.address;a<run.address+run.bytes;a++) {assert.ok(!actual.has(a));actual.add(a);}
+ assert.deepEqual(actual,expected);
+ // Enumerate covered 128B cells per run; padding/overfetch must not lose data.
+ for(const run of r.runs) {
+  const wanted=new Set(Array.from({length:run.bytes},(_,i)=>Math.floor((run.address+i)/128)));
+  const delivered=new Set();
+  for(const burst of run.bursts) {
+   assert.ok(burst.beats<=32);assert.equal(Math.floor(burst.address/4096),Math.floor((burst.address+burst.beats*128-1)/4096));
+   for(let i=0;i<burst.beats;i++)delivered.add(burst.address/128+i);
+  }
+  assert.deepEqual(delivered,wanted);
+ }
+}
+// Resource schedule: capacity holds, exclusivity holds, and an earlier start
+// is impossible under the specified free-resource/slot constraints.
+const longHead=lsu([1,1,1,128],undefined,undefined,{store:true,pathExtra:56});
+assert.deepEqual(longHead.commands.map(c=>c.start),[0,38,76,114,162,200]);
+for(const r of [ld4k,s16,s15,longHead])for(let t=0;t<r.commands.at(-1).end;t++) {
+ assert.ok(r.commands.filter(c=>t>=c.start&&t<c.start+r.hold).length<=r.depth);
+ assert.ok(r.commands.filter(c=>t>=c.start&&t<c.release).length<=1);
+}
+// Match every calculator case to the independent fixed inputs and ensure
+// live browser computation does not require recorded RTL timing fields.
+const lsCases=require('../config/cyclesim-cases.json').groups;
+for(const name of ['ld-model','st-model'])for(const c of lsCases[name].cases) {
+ const r=model.lsu(c.lsuModel);assert.ok(r.duration>0);assert.equal(r.terms.reduce((s,t)=>s+t[1],0),r.duration);
+}
+for(const bad of [{tile:[1,1,1,4],src:[1,1,1,2],dst:[1,1,1,4]}, {tile:[1,1,1,4],src:[1,1,1,4],dst:[1,1,1,4],bits:4}, {tile:[1,1,1,4],src:[1,1,1,4],dst:[1,1,1,4],store:true,local:true}])assert.throws(()=>model.lsu(bad),RangeError);
+console.log('LSU descriptor byte oracle, partial-burst controls and finite-slot schedule: passed');

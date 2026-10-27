@@ -204,3 +204,48 @@ function cycleSpecialDrawing(c, step, frame) {
   if (c.concurrency) return CycleSpecialDiagrams.concurrency(c, step, frame);
   return null;
 }
+
+// These diagrams are recomputed from descriptor geometry, never RTL duration.
+function cycleLsuDrawing(c, step) {
+  const m=CycleCaseModel.lsu(c.lsuModel), tx=(x,y,s,size=17,more='')=>`<text x="${x}" y="${y}" font-size="${size}" ${more}>${esc(s)}</text>`;
+  let b='',height=450;
+  const palette=['#326b8c','#43816c','#b36b3d','#8d709f','#b29842','#6f8f96','#7f836b','#976666'];
+  if(step<2) {
+    b+=tx(24,32,'从descriptor生成的全局地址段',21);
+    b+=tx(24,61,`collapse mode ${m.mode} · ${m.runs.length} run · 有效 ${m.useful} B · 传输拍容量 ${m.transferBytes} B`,16);
+    m.runs.slice(0,4).forEach((r,i)=>{
+      const y=100+i*62;
+      b+=tx(24,y,`run ${i}: a=${r.address}`,16)+tx(24,y+24,`${r.bytes} B / ${r.beats} beat`,14);
+      const end=r.address+r.bytes,first=Math.floor(r.address/128)*128;
+      for(let j=0;j<Math.min(3,r.beats);j++) {
+        const a=first+j*128,lo=Math.max(0,r.address-a),hi=Math.min(128,end-a),xx=270+j*178;
+        b+=`<rect x="${xx}" y="${y-15}" width="166" height="29" fill="#dfe5dd" stroke="#becbc1"/><rect x="${xx+lo/128*166}" y="${y-15}" width="${(hi-lo)/128*166}" height="29" fill="#3b7c64"/>`;
+        b+=tx(xx+83,y+33,`${hi-lo}/128 B覆盖`,13,'text-anchor="middle"');
+      }
+      if(r.beats>3)b+=tx(821,y+4,'…',22);
+    });
+    b+=tx(24,381,`总计 B=${m.beats}，J=${m.bursts}；P=${m.partialBeats}，Q=${m.partialBursts}；R=${m.primingRuns}`,18);
+    b+=tx(24,412,'只展开前4段、每段前3拍；绿色覆盖，灰色是padding或需保留旧字节。',15);
+  } else if(step===2) {
+    const terms=m.terms.filter(x=>x[1]);height=116+terms.length*53;
+    b+=tx(24,32,`单条解析延迟 L = ${m.duration} core cycles`,21);
+    b+=tx(24,59,'条长按贡献拍数同比例；这些项不是按实际发生顺序排列的录波。',15);
+    const max=Math.max(...terms.map(x=>x[1]));
+    terms.forEach(([name,n],i)=>{
+      const y=82+i*53,w=n/max*520;
+      b+=tx(24,y+19,name,17)+`<rect x="200" y="${y}" width="${Math.max(2,w)}" height="27" rx="4" fill="${palette[i%palette.length]}"/>`+tx(735,y+20,`${n} cycles`,16);
+    });
+  } else {
+    height=490; const end=m.commands.at(-1).end,xx=t=>180+t/end*640;
+    b+=tx(24,32,`六条全部就绪：L=${m.duration}，O=${m.occupancy}，D=${m.depth}`,21);
+    b+=tx(24,60,`模型预约：深色至资源释放；淡色至done。槽hold=${m.hold}；非真实针脚。`,15);
+    m.commands.forEach((cmd,i)=>{
+      const y=89+i*53;
+      b+=tx(24,y+21,`命令${i} / 槽${cmd.slot}`,16)+`<rect x="${xx(cmd.start)}" y="${y}" width="${xx(cmd.end)-xx(cmd.start)}" height="28" fill="#dce8df"/><rect x="${xx(cmd.start)}" y="${y+7}" width="${xx(cmd.release)-xx(cmd.start)}" height="14" fill="#34775f"/>`;
+      b+=tx(xx(cmd.start),y-5,`${cmd.start} → ${cmd.end}`,13);
+    });
+    for(let i=0;i<=4;i++)b+=tx(xx(end*i/4),435,Math.round(end*i/4),14,'text-anchor="middle"');
+    b+=tx(24,470,'横轴：从第一条模型start开始经过的core cycles；未计外部竞争或依赖。',15);
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 ${height}" role="img" aria-label="${esc(c.title)}：模型计算第${step+1}步"><rect width="880" height="${height}" rx="10" fill="#f8faf5"/><g font-family="sans-serif" fill="#243d36">${b}</g></svg>`;
+}
