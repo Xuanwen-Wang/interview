@@ -53,6 +53,33 @@ for(const n of [4096,12288]) {
   }
 }
 
+// Sweep endpoints and invariants use independently known GEMM counts.
+const bwStart=model.rooflineSweep({axis:'bandwidthTbps',progress:0});
+const bwEnd=model.rooflineSweep({axis:'bandwidthTbps',progress:1});
+assert.equal(bwStart.input.bandwidthTbps,0.5);
+assert.equal(bwEnd.input.bandwidthTbps,5);
+close(bwStart.ceilingTflops,(2147483648/34603008)*0.5);
+assert.equal(bwEnd.ceilingTflops,200);
+assert.equal(model.rooflineSweep({axis:'peakTflops',progress:0}).ceilingTflops,50);
+close(model.rooflineSweep({axis:'peakTflops',progress:1}).ceilingTflops,(2147483648/34603008)*2);
+assert.equal(model.rooflineSweep({axis:'m',progress:0}).input.m,1);
+assert.equal(model.rooflineSweep({axis:'m',progress:0.5}).input.m,64);
+assert.equal(model.rooflineSweep({axis:'m',progress:1}).input.m,4096);
+for(const axis of ['bandwidthTbps','peakTflops','m']) {
+  const fixed={m:64,n:12288,k:4096,peakTflops:200,bandwidthTbps:2,overheadUs:5};
+  let lastCeiling=0;
+  for(let i=0;i<=100;i++) {
+    const r=model.rooflineSweep({axis,progress:i/100,...fixed});
+    for(const key of Object.keys(fixed)) if(key!==axis) assert.equal(r.input[key],fixed[key]);
+    assert.ok(r.ceilingTflops>=lastCeiling);
+    assert.ok(r.budgetTflops<=r.ceilingTflops);
+    assert.ok(Number.isInteger(r.input.m));
+    lastCeiling=r.ceilingTflops;
+  }
+}
+for(const progress of [-0.1,1.1,NaN,Infinity,'0.5',null]) assert.throws(()=>model.rooflineSweep({progress}),RangeError);
+assert.throws(()=>model.rooflineSweep({axis:'time'}),RangeError);
+
 const overlap = model.overlap();
 assert.equal(overlap.overlapMs,3);
 assert.equal(overlap.totalMs,11);

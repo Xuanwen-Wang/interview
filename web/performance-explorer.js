@@ -12,6 +12,14 @@ var PerformanceModel = Object.freeze({
       budgetTflops:flops/(conditionalUs*1e6),
       dominant:computeUs>=transferUs?'compute':'transfer'};
   },
+  rooflineSweep({axis='bandwidthTbps',progress=0,...fixed}={}) {
+    if(!['bandwidthTbps','peakTflops','m'].includes(axis)) throw new RangeError('Unknown Roofline sweep axis');
+    if(typeof progress!=='number'||!Number.isFinite(progress)||progress<0||progress>1)
+      throw new RangeError('Roofline sweep progress must be within [0, 1]');
+    const input={m:64,n:4096,k:4096,peakTflops:200,bandwidthTbps:2,overheadUs:5,...fixed};
+    input[axis]=axis==='m'?Math.round(2**(12*progress)):axis==='peakTflops'?50+450*progress:0.5+4.5*progress;
+    return {input,...PerformanceModel.roofline(input)};
+  },
   overlap({computeMs=8,communicationMs=6,fraction=0.5,penaltyMs=0}={}) {
     const serialMs=computeMs+communicationMs, idealMs=Math.max(computeMs,communicationMs);
     const overlapMs=Math.min(computeMs,communicationMs)*fraction;
@@ -109,42 +117,184 @@ function performanceBind(root,update) {
   chart.after(zoom);
 }
 
+const RooflineMotionRuntime = (() => {
+  const active = new Set();
+  let installed = false;
+  const stopAll = () => active.forEach(item => item.pause());
+  return {register(item) {
+    active.add(item);
+    if (installed) return;
+    installed = true;
+    window.addEventListener('hashchange', stopAll);
+    window.addEventListener('pagehide', stopAll);
+    window.addEventListener('beforeprint', stopAll);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) stopAll(); });
+    new MutationObserver(() => active.forEach(controller => {
+      if (!controller.root.isConnected) { controller.dispose(); active.delete(controller); }
+    })).observe(document.documentElement, {childList:true, subtree:true});
+  }};
+})();
+
 function renderPerformanceRoofline(root) {
-  root.classList.add('performance-explorer');
-  root.innerHTML=`<header class="performance-widget-head"><span class="eyebrow">ROOFLINE LAB</span><h3>同一个 GEMM，为什么小 M 难以跑满算力？</h3><p>虚构教学机器；可切换方阵与 Qwen3-8B Gate 的真实维度。A/W/C 均为 BF16，β=0；输入冷读一次、输出写一次，图中是条件预算。</p></header>
-    <div class="performance-controls">
-      <label>线性层 shape<select data-control="n"><option value="4096">教学方阵：K=4096，N=4096</option><option value="12288">Qwen3-8B Gate：K=4096，N=12288</option></select></label>
-      <label>M：一次参与计算的行数<select data-control="m"><option value="1">1</option><option value="8">8</option><option value="64" selected>64</option><option value="256">256</option><option value="1024">1024</option><option value="2048">2048</option><option value="4096">4096</option></select></label>
-      <label>算术峰值 P <output data-value="peakTflops"></output><input data-control="peakTflops" type="range" min="50" max="500" step="10" value="200" aria-label="假设算术峰值，TFLOP每秒"></label>
-      <label>带宽 BW <output data-value="bandwidthTbps"></output><input data-control="bandwidthTbps" type="range" min="0.5" max="5" step="0.1" value="2" aria-label="假设内存带宽，TB每秒"></label>
-      <label>额外固定开销 L <output data-value="overheadUs"></output><input data-control="overheadUs" type="range" min="0" max="30" step="1" value="5" aria-label="额外固定开销，微秒"></label>
-    </div><div class="performance-stats" data-view="stats" aria-live="polite"></div>
-    <div class="performance-chart" data-view="chart"></div>
-    <div class="performance-legend"><span class="performance-roof">理论 Roofline</span><span class="performance-budget">含 L 的预算点（非实测）</span><span class="performance-ridge">转折点 P/BW</span><span class="performance-reference">同 shape 的 M=1 / 2048 上界</span></div>
-    <div class="performance-verdict" data-view="verdict" aria-live="polite"></div>
-    <div class="performance-formula" data-view="formula"></div>
-    <p class="performance-model-note">Q 是在上述冷读条件下的最低字节数估计，不是实际 DRAM 计数器。重复搬运、缓存命中、布局转换、写分配、融合与设备执行效率都会改变实测位置。P 与 BW 必须匹配运算精度、访存层级和同一设备条件。固定开销在本模型中单独串行相加。</p>`;
+  if (root.dataset.rooflineReady) return;
+  root.dataset.rooflineReady = 'true';
+  root.classList.add('performance-explorer', 'roofline-motion');
+  const defaults={m:64,n:4096,k:4096,peakTflops:200,bandwidthTbps:2,overheadUs:5};
+  let input={...defaults}, baseline={...defaults}, axis='bandwidthTbps', timer=null;
+  const modes={
+    bandwidthTbps:{label:'增加带宽',axis:'带宽 BW · TB/s',ticks:[0.5,1,2,3,4,5],progress:v=>(v-0.5)/4.5},
+    peakTflops:{label:'增加算力',axis:'算力 P · TFLOP/s',ticks:[50,100,200,300,400,500],progress:v=>(v-50)/450},
+    m:{label:'增加 token 行数',axis:'token 行数 M · 对数刻度',ticks:[1,8,64,512,4096],progress:v=>Math.log2(v)/12}
+  };
+  root.innerHTML=`
+    <header class="roofline-header"><div><span class="eyebrow">ROOFLINE / LIVE LAB</span><h3>拖动一个参数，看吞吐上限如何改变</h3></div><span class="roofline-model-tag">教学模型 · 非实测</span></header>
+    <p class="roofline-intro">橙色斜线由带宽决定，绿色平台由算力决定。固定另一个条件，看看绿色上限点何时上升、何时停住。</p>
+    <div class="roofline-knobs">
+      <label>算力上限 P <output data-value="peakTflops"></output><input data-control="peakTflops" type="range" min="50" max="500" step="0.1" value="200" aria-label="算力上限，TFLOP每秒"><span>50 <span>500 TFLOP/s</span></span></label>
+      <label>内存带宽 BW <output data-value="bandwidthTbps"></output><input data-control="bandwidthTbps" type="range" min="0.5" max="5" step="0.01" value="2" aria-label="内存带宽，TB每秒"><span>0.5 <span>5 TB/s</span></span></label>
+    </div>
+    <details class="roofline-workload"><summary>算子 shape 与固定开销 <span data-view="shape-summary"></span></summary><div class="roofline-workload-fields">
+      <label>线性层 shape<select data-control="n"><option value="4096">方阵 · K=N=4096</option><option value="12288">Qwen3-8B Gate · K=4096，N=12288</option></select></label>
+      <label>M：token 行数<input data-control="m" type="number" min="1" max="4096" step="1" value="64" aria-label="token 行数 M，1到4096"></label>
+      <label>串行附加开销 L <output data-value="overheadUs"></output><input data-control="overheadUs" type="range" min="0" max="30" step="1" value="5" aria-label="串行附加开销，微秒"></label>
+    </div><p data-view="input-error" class="roofline-input-error" role="alert" hidden></p><div class="roofline-presets" aria-label="算子示例"><button type="button" data-preset="decode">单路 decode</button><button type="button" data-preset="batch">64 行 GEMM</button><button type="button" data-preset="prefill">2048 行 prefill</button></div></details>
+    <div class="roofline-stats" data-view="stats"></div>
+    <div class="roofline-chart" data-view="chart"></div>
+    <div class="roofline-legend"><span class="rl-memory">带宽段</span><span class="rl-compute">算力段 / 吞吐上限</span><span class="rl-budget">含 L 的预算点</span><span class="rl-baseline">固定对照屋顶</span></div>
+    <div class="roofline-transport"><div class="roofline-mode-buttons" role="group" aria-label="扫描哪个参数"><button type="button" data-axis="bandwidthTbps" aria-pressed="true">增加带宽</button><button type="button" data-axis="peakTflops" aria-pressed="false">增加算力</button><button type="button" data-axis="m" aria-pressed="false">增加行数</button></div><div class="roofline-player"><button type="button" data-action="previous" aria-label="向前一步">←</button><button type="button" data-action="play" aria-pressed="false">▶ 播放</button><button type="button" data-action="next" aria-label="向后一步">→</button><button type="button" data-action="reset">重置</button></div></div>
+    <label class="roofline-progress">扫描进度 <output data-view="progress-label"></output><input type="range" data-progress min="0" max="100" step="1" value="33" aria-label="参数扫描进度，百分比"></label>
+    <div class="roofline-trend-heading"><h4 data-view="trend-title"></h4><span>其余参数固定 · 完整扫描曲线</span></div>
+    <div class="roofline-trend" data-view="trend"></div>
+    <p class="roofline-insight" data-view="insight"></p>
+    <p class="roofline-status" data-view="status" role="status" aria-live="polite">尚未播放。可以直接拖动滑块，或选择一个参数后播放。</p>
+    <div class="roofline-footer-actions"><button type="button" data-action="pin">将当前参数设为对照</button><button type="button" data-action="zoom">放大当前屋顶 ↗</button><button type="button" data-action="zoom-trend">放大吞吐趋势 ↗</button></div>
+    <p class="roofline-comparison" data-view="comparison"></p>
+    <details class="roofline-math"><summary>查看当前 shape、工作量与计算公式</summary><div class="performance-formula" data-view="formula"></div></details>
+    <p class="performance-model-note">BF16 A/W/C，β=0，FMA=2 FLOP。输入冷读一次、输出写一次，Q 是条件最小逻辑流量；P/BW 是虚构设备参数。上限 R=min(P,I×BW)；预算另计串行 L，两者均非实测。增大 M 改变工作量，吞吐提高不等于一次调用变短。动画是参数扫描，横轴不是时间。</p>`;
   const view=key=>root.querySelector(`[data-view="${key}"]`);
-  performanceBind(root,()=>{
-    const input=performanceInputs(root), r=PerformanceModel.roofline(input);
-    for(const [key,unit] of [['peakTflops',' TFLOP/s'],['bandwidthTbps',' TB/s'],['overheadUs',' μs']]) root.querySelector(`[data-value="${key}"]`).textContent=input[key]+unit;
-    view('stats').innerHTML=performanceStat('算术强度 AI',performanceNumber(r.intensity),'FLOP / byte')+
-      performanceStat('转折点 P / BW',performanceNumber(r.ridge),'FLOP / byte')+
-      performanceStat('条件时间：max + L',performanceNumber(r.conditionalUs),'μs / GEMM')+
-      performanceStat('预算点：F / 条件时间',performanceNumber(r.budgetTflops),'TFLOP/s · 非实测');
-    const x=v=>70+(Math.log2(v)+1)/13*540, y=v=>273-(Math.log10(v)+1)/4*231;
-    const ticksX=[1,4,16,64,256,1024,4096], ticksY=[0.1,1,10,100,1000];
-    const grid=ticksX.map(v=>`<line x1="${x(v)}" y1="42" x2="${x(v)}" y2="273" class="performance-gridline"/><text x="${x(v)}" y="294" text-anchor="${v===4096?'end':'middle'}" class="performance-tick">${v}</text>`).join('')+
-      ticksY.map(v=>`<line x1="70" y1="${y(v)}" x2="610" y2="${y(v)}" class="performance-gridline"/><text x="59" y="${y(v)+5}" text-anchor="end" class="performance-tick">${v}</text>`).join('');
-    const roof=`${x(0.5)},${y(0.5*input.bandwidthTbps)} ${x(r.ridge)},${y(input.peakTflops)} ${x(4096)},${y(input.peakTflops)}`;
-    const referencePoints=[1,2048].map(m=>{
-      const point=PerformanceModel.roofline({...input,m,overheadUs:0});
-      return `<circle cx="${x(point.intensity)}" cy="${y(point.ceilingTflops)}" r="5" fill="#fffefa" stroke="#426f93" stroke-width="2"/>`;
-    }).join('');
-    view('chart').innerHTML=`<svg viewBox="0 0 640 330" role="img" aria-label="对数坐标 Roofline。当前算术强度 ${performanceNumber(r.intensity)} FLOP每字节，含固定开销预算吞吐 ${performanceNumber(r.budgetTflops)} TFLOP每秒，点为理论预算而非测量。"><text x="70" y="22" class="performance-svg-title">吞吐 TFLOP/s · 双对数坐标</text><rect x="70" y="42" width="${x(r.ridge)-70}" height="231" fill="#faeee8"/><rect x="${x(r.ridge)}" y="42" width="${610-x(r.ridge)}" height="231" fill="#eaf2e7"/>${grid}<line x1="70" y1="273" x2="610" y2="273" class="performance-axis"/><line x1="70" y1="42" x2="70" y2="273" class="performance-axis"/><line x1="${x(r.ridge)}" y1="${y(input.peakTflops)}" x2="${x(r.ridge)}" y2="273" class="performance-ridge-line"/><polyline points="${roof}" class="performance-roof-line"/>${referencePoints}<line x1="${x(r.intensity)}" y1="${y(r.ceilingTflops)}" x2="${x(r.intensity)}" y2="${y(r.budgetTflops)}" class="performance-budget-gap"/><circle cx="${x(r.intensity)}" cy="${y(r.budgetTflops)}" r="7" class="performance-budget-point"/><text x="340" y="321" text-anchor="middle" class="performance-tick">算术强度 AI · FLOP / byte</text></svg>`;
-    view('verdict').innerHTML=`<strong>Roofline 主导项：${r.dominant==='compute'?'算术':'搬运'}。</strong> 算术下界 ${performanceNumber(r.computeUs)} μs；搬运下界 ${performanceNumber(r.transferUs)} μs。取较大值 ${performanceNumber(r.lowerUs)} μs，再加 L=${input.overheadUs} μs。${input.overheadUs>r.lowerUs?'当前额外固定开销比两项资源下界都大。':''}`;
-    view('formula').innerHTML=`A[${input.m},4096] × W[4096,${input.n}] → C[${input.m},${input.n}]<br>F = 2MNK = <b>${performanceNumber(r.flops,0)}</b> FLOP<br>Q = 2(MK + KN + MN) = <b>${performanceNumber(r.bytes,0)}</b> byte<br>AI = F/Q；T = max(F/P, Q/BW) + L；预算点 = F/T<br><span>按一次乘加 = 2 FLOP；1 TFLOP/s = 10¹² FLOP/s，1 TB/s = 10¹² byte/s。</span>`;
+  const action=key=>root.querySelector(`[data-action="${key}"]`);
+  const controls=Object.fromEntries([...root.querySelectorAll('[data-control]')].map(el=>[el.dataset.control,el]));
+  const progress=()=>Math.max(0,Math.min(1,modes[axis].progress(input[axis])));
+  const number=(v,d=2)=>performanceNumber(v,d);
+  const svgText=(x,y,value,cls='',anchor='start')=>`<text x="${x}" y="${y}" class="${cls}" text-anchor="${anchor}">${value}</text>`;
+  const line=(x1,y1,x2,y2,cls)=>`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="${cls}"/>`;
+  function drawRoof(r) {
+    const x=v=>70+(Math.log2(v)+1)/13*660, y=v=>335-(Math.log10(v)+1)/4*270;
+    const base=PerformanceModel.roofline(baseline);
+    const roof=(i,p,b)=>`${x(0.5)},${y(0.5*b)} ${x(i)},${y(p)} ${x(4096)},${y(p)}`;
+    const grid=[1,4,16,64,256,1024,4096].map(v=>line(x(v),65,x(v),335,'rl-grid')+svgText(x(v),360,v,'rl-tick',v===4096?'end':'middle')).join('')+
+      [0.1,1,10,100,1000].map(v=>line(70,y(v),730,y(v),'rl-grid')+svgText(58,y(v)+5,v,'rl-tick','end')).join('');
+    view('chart').innerHTML=`<svg viewBox="0 0 800 404" role="img" aria-label="Roofline 双对数图：算术强度 ${number(r.intensity)}，吞吐上限 ${number(r.ceilingTflops)} TFLOP每秒，预算 ${number(r.budgetTflops)} TFLOP每秒。">
+      <rect x="70" y="65" width="${x(r.ridge)-70}" height="270" class="rl-memory-zone"/><rect x="${x(r.ridge)}" y="65" width="${730-x(r.ridge)}" height="270" class="rl-compute-zone"/>
+      ${svgText(70,28,'R · TFLOP/s','rl-axis-title')}${svgText(730,28,'双对数坐标','rl-tick','end')}${grid}
+      <polyline points="${roof(base.ridge,baseline.peakTflops,baseline.bandwidthTbps)}" class="rl-baseline-line"/>
+      ${line(x(r.ridge),y(input.peakTflops),x(r.ridge),335,'rl-ridge')}
+      <path d="M ${x(0.5)} ${y(0.5*input.bandwidthTbps)} L ${x(r.ridge)} ${y(input.peakTflops)}" class="rl-memory-line"/>
+      <path d="M ${x(r.ridge)} ${y(input.peakTflops)} H 730" class="rl-compute-line"/>
+      ${svgText(730,y(input.peakTflops)-12,'P = '+number(input.peakTflops,1),'rl-roof-label','end')}
+      ${line(x(r.intensity),y(r.ceilingTflops),x(r.intensity),335,'rl-point-guide')}
+      ${line(x(r.intensity),y(r.ceilingTflops),x(r.intensity),y(r.budgetTflops),'rl-budget-gap')}
+      <circle cx="${x(r.intensity)}" cy="${y(r.ceilingTflops)}" r="15" class="rl-point-halo"/><circle cx="${x(r.intensity)}" cy="${y(r.ceilingTflops)}" r="7" class="rl-ceiling-point"/>
+      <circle cx="${x(r.intensity)}" cy="${y(r.budgetTflops)}" r="4" class="rl-budget-point"/>
+      ${line(70,335,730,335,'rl-axis')}${svgText(400,393,'算术强度 I · FLOP/byte','rl-axis-title','middle')}
+    </svg>`;
+  }
+  function drawTrend(r) {
+    const samples=Array.from({length:81},(_,i)=>PerformanceModel.rooflineSweep({axis,progress:i/80,...input}));
+    const peak=Math.max(...samples.map(s=>s.ceilingTflops));
+    const magnitude=10**Math.floor(Math.log10(peak));
+    const max=Math.ceil(peak/magnitude)*magnitude;
+    const x=p=>70+p*660, y=v=>183-v/max*127;
+    const points=key=>samples.map((s,i)=>`${x(i/80)},${y(s[key])}`).join(' ');
+    const grid=[0,0.5,1].map(f=>line(70,y(max*f),730,y(max*f),'rl-grid')+svgText(58,y(max*f)+5,number(max*f,max<10?1:0),'rl-tick','end')).join('');
+    const ticks=modes[axis].ticks.map((v,i,values)=>svgText(x(modes[axis].progress(v)),207,number(v,axis==='bandwidthTbps'&&v<1?1:0),'rl-tick',i===values.length-1?'end':i===0?'start':'middle')).join('');
+    view('trend-title').textContent=modes[axis].label+'，吞吐上限怎样变化？';
+    view('trend').innerHTML=`<svg viewBox="0 0 800 249" role="img" aria-label="${modes[axis].axis}变化时的吞吐趋势；绿色为理论上限，蓝色为含固定开销预算，竖线是当前参数。">
+      ${svgText(70,26,'R · TFLOP/s','rl-axis-title')}${svgText(730,26,'绿：上限    蓝：含 L 预算','rl-tick','end')}${grid}
+      <polygon points="70,183 ${points('ceilingTflops')} 730,183" class="rl-trend-fill"/>
+      <polyline points="${points('ceilingTflops')}" class="rl-compute-line"/><polyline points="${points('budgetTflops')}" class="rl-budget-line"/>
+      ${line(x(progress()),45,x(progress()),183,'rl-ridge')}
+      <circle cx="${x(progress())}" cy="${y(r.ceilingTflops)}" r="6" class="rl-ceiling-point"/>
+      <circle cx="${x(progress())}" cy="${y(r.budgetTflops)}" r="4" class="rl-budget-point"/>
+      ${line(70,183,730,183,'rl-axis')}${ticks}${svgText(400,239,modes[axis].axis,'rl-axis-title','middle')}
+    </svg>`;
+  }
+  function render() {
+    const r=PerformanceModel.roofline(input), base=PerformanceModel.roofline(baseline);
+    controls.m.removeAttribute('aria-invalid');view('input-error').hidden=true;
+    for(const key of ['peakTflops','bandwidthTbps','m','n','overheadUs']) controls[key].value=String(input[key]);
+    for(const [key,unit] of [['peakTflops',' TFLOP/s'],['bandwidthTbps',' TB/s'],['overheadUs',' μs']]) root.querySelector(`[data-value="${key}"]`).textContent=number(input[key],key==='bandwidthTbps'?2:1)+unit;
+    view('shape-summary').textContent=`M=${input.m} · ${input.n===12288?'Qwen Gate':'方阵'} · L=${input.overheadUs} μs`;
+    view('stats').innerHTML=`<div class="roofline-stat roofline-stat-main"><span>当前吞吐上限</span><strong>${number(r.ceilingTflops)}</strong><small>TFLOP/s · min(P, I×BW)</small></div><div class="roofline-stat"><span>算术强度 I</span><strong>${number(r.intensity)}</strong><small>FLOP/byte · 当前 shape</small></div><div class="roofline-stat"><span>拐点 I* = P/BW</span><strong>${number(r.ridge)}</strong><small>FLOP/byte · 当前机器</small></div><div class="roofline-stat"><span>哪条上界更紧？</span><strong class="roofline-bound">${r.dominant==='compute'?'算力':'带宽'}</strong><small>${r.dominant==='compute'?'I ≥ I*':'I < I*'} · 资源判断</small></div>`;
+    root.querySelector('[data-progress]').value=String(progress()*100);
+    view('progress-label').textContent=`${number(progress()*100,0)}% · ${axis==='m'?'M='+input.m:number(input[axis],axis==='bandwidthTbps'?2:1)+(axis==='bandwidthTbps'?' TB/s':' TFLOP/s')}`;
+    root.querySelectorAll('[data-axis]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.axis===axis)));
+    action('previous').disabled=progress()<=0;
+    action('next').disabled=progress()>=1;
+    drawRoof(r); drawTrend(r);
+    if(axis==='bandwidthTbps') view('insight').innerHTML=`<strong>保持算力和 shape 不变。</strong> 当前 I=${number(r.intensity)}，带宽达到 <b>${number(input.peakTflops/r.intensity)} TB/s</b> 后便碰到算力平台。${r.dominant==='compute'?'继续增加带宽，吞吐上限保持不变。':'在此之前，带宽增长会抬高这条供数上界。'}`;
+    else if(axis==='peakTflops') view('insight').innerHTML=`<strong>保持带宽和 shape 不变。</strong> 供数最多支持 <b>${number(r.intensity*input.bandwidthTbps)} TFLOP/s</b>。${r.dominant==='transfer'?'当前算力已高于这个值，继续堆算力也不能提高此上限。':'提高算力先有收益，直到碰到供数上界。'}`;
+    else view('insight').innerHTML=`<strong>保持机器与 K/N 不变。</strong> 更多 token 行分摊同一份权重，I 从低值向右移动，越过 I*=${number(r.ridge)} 后上限到达 ${number(input.peakTflops)} TFLOP/s。M 增大也增加工作量，要另外比较单次耗时与请求延迟。`;
+    view('comparison').textContent=`固定对照：P=${number(baseline.peakTflops,1)} TFLOP/s，BW=${number(baseline.bandwidthTbps)} TB/s，M=${baseline.m}，N=${baseline.n}，L=${baseline.overheadUs} μs；上限 ${number(base.ceilingTflops)} TFLOP/s。当前/对照上限=${number(r.ceilingTflops/base.ceilingTflops)}×（吞吐比，非延迟加速比）。`;
+    view('formula').innerHTML=`A[${input.m},4096] × W[4096,${input.n}] → C[${input.m},${input.n}]<br>F=2MNK=${number(r.flops,0)} FLOP；Q=2(MK+KN+MN)=${number(r.bytes,0)} byte<br>I=F/Q；R≤min(P,I×BW)=${number(r.ceilingTflops)} TFLOP/s<br>F/P=${number(r.computeUs,3)} μs；Q/BW=${number(r.transferUs,3)} μs<br>T_budget=max(F/P,Q/BW)+L=${number(r.conditionalUs,3)} μs<br>含 L 的预算点 F/T_budget=${number(r.budgetTflops)} TFLOP/s`;
+  }
+  function pause(message) {
+    if(timer!==null&&!message) message='已暂停，保留当前参数。';
+    if(timer!==null) window.clearInterval(timer);
+    timer=null; root.dataset.playing='false';
+    action('play').textContent='▶ 播放'; action('play').setAttribute('aria-pressed','false');
+    if(message) view('status').textContent=message;
+  }
+  function seek(p) {
+    const result=PerformanceModel.rooflineSweep({axis,progress:Math.max(0,Math.min(1,p)),...input});
+    input=result.input; render();
+  }
+  function play() {
+    if(timer!==null) {pause('已暂停，保留当前参数。');return;}
+    if(progress()>=1) seek(0);
+    root.dataset.playing='true';action('play').textContent='Ⅱ 暂停';action('play').setAttribute('aria-pressed','true');
+    view('status').textContent='正在扫描：'+modes[axis].label+'；其他参数固定。';
+    const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Keep continuous sweep progress separate from rounded integer M.
+    let position=progress();
+    timer=window.setInterval(()=>{
+      if(!root.isConnected||document.hidden) {pause('播放已停止。');return;}
+      position=Math.min(1,position+(reduced?0.05:0.01)); seek(position);
+      if(position>=1) pause('扫描完成。可回退、拖动进度条，或换一个参数继续比较。');
+    },reduced?400:80);
+  }
+  root.addEventListener('input',event=>{
+    if(event.target.matches('[data-progress]')) {pause('已手动调整扫描进度。');seek(Number(event.target.value)/100);return;}
+    const key=event.target.dataset.control;
+    if(!key) return;
+    pause('手动调整参数；其余参数保持当前值。');
+    const value=Number(event.target.value);
+    if(!Number.isFinite(value)||event.target.value===''||(key==='m'&&(!Number.isInteger(value)||value<1||value>4096))) {
+      event.target.setAttribute('aria-invalid','true');view('input-error').hidden=false;view('input-error').textContent='M 必须是 1 到 4096 的整数。图中保留上一次有效值。';return;
+    }
+    event.target.removeAttribute('aria-invalid');view('input-error').hidden=true;input[key]=value;render();
   });
+  root.addEventListener('click',event=>{
+    const button=event.target.closest('button');if(!button||!root.contains(button))return;
+    if(button.dataset.axis) {pause('已切换扫描参数。');axis=button.dataset.axis;render();return;}
+    if(button.dataset.preset) {
+      pause('已选择算子示例，设备参数保持不变。');
+      const preset={decode:{m:1,n:12288},batch:{m:64,n:4096},prefill:{m:2048,n:12288}}[button.dataset.preset];
+      Object.assign(input,preset);controls.m.removeAttribute('aria-invalid');view('input-error').hidden=true;render();return;
+    }
+    switch(button.dataset.action) {
+      case 'play':play();break;
+      case 'previous':pause('向前一步。');seek(progress()-0.05);break;
+      case 'next':pause('向后一步。');seek(progress()+0.05);break;
+      case 'reset':pause('已恢复初始参数与对照。');input={...defaults};baseline={...defaults};axis='bandwidthTbps';controls.m.removeAttribute('aria-invalid');view('input-error').hidden=true;render();break;
+      case 'pin':pause('已固定当前参数为对照。');baseline={...input};render();break;
+      case 'zoom':case 'zoom-trend':pause('放大时已暂停，展示当前参数。');openFigureDialog(view(button.dataset.action==='zoom'?'chart':'trend').querySelector('svg'),view('shape-summary').textContent+'；'+view('insight').textContent+' 条件模型，非实测。','roofline-motion');break;
+    }
+  });
+  const observer=typeof IntersectionObserver==='function'?new IntersectionObserver(entries=>{if(entries.some(e=>!e.isIntersecting)&&timer!==null)pause('图表离开视口，已暂停。');}):null;
+  if(observer) observer.observe(root);
+  RooflineMotionRuntime.register({root,pause:()=>pause(),dispose:()=>{pause();if(observer)observer.disconnect();}});
+  root.dataset.playing='false';render();
 }
 
 function renderPerformanceOverlap(root) {
