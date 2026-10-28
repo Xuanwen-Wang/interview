@@ -169,7 +169,7 @@ Attention 的 N 包含本步新 token，按等长请求、每步每请求一个 
 
 ## Attention 逐步动画
 
-正文使用 `<div data-attention-lab="flash"></div>`；支持 `flash`、`decode`、`rope`、`heads`、`mla`、`sparse`、`state`。`web/attention-lab.js`/CSS 在构建时内嵌，由 `initAttentionLabs()` 挂载，不依赖外部资源。页面默认静止，提供前后、重置、播放、键盘与步骤直达；页面切换、隐藏、离屏与打印停播。打印输出完整步骤与最终静态图。通用图示放大忽略 `.attention-lab` 内部SVG，避免替换/包裹破坏动画。
+正文使用 `<div data-attention-lab="flash"></div>`；支持 `flash`、`decode`、`rope`、`heads`、`mla`、`sparse`、`state`、`fa3-pipeline`。`fa3-pipeline` 解释 FA3 异步完成依赖；时间格只表示教学先后与可重叠关系，不代表 GPU 周期或实测加速。`web/attention-lab.js`/CSS 在构建时内嵌，由 `initAttentionLabs()` 挂载，不依赖外部资源。页面默认静止，提供前后、重置、播放、键盘与步骤直达；页面切换、隐藏、离屏与打印停播。打印输出完整步骤与最终静态图。通用图示放大忽略 `.attention-lab` 内部SVG，避免替换/包裹破坏动画。
 
 新增例子须声明玩具维度与真实模型维度的边界，数据变化由可复算数值驱动。数学函数由 `node scripts/check_attention_lab.js` 的独立oracle校验；动画不代表GPU计时或硬件性能。RoPE示例必须区分当前新K与历史K；固定状态必须明确key/value轴、门控顺序与跨步保存语义。
 

@@ -296,3 +296,80 @@ assert.throws(() => model.rope([1, 2, 3], 1, 1));
 assert.throws(() => model.rope([1, Infinity], 1, 1));
 assert.throws(() => model.deltaStep([[0]], [1, 0], [1], 1, [1]));
 console.log('Attention labs: independent softmax oracle; all toy partitions; 100 varied shapes; ±1000 shift stability; masked tiles and short tails; LSE-weighted decode merge; RoPE geometry and relative position; affine-matrix delta oracle, overwrite semantics and gate-before-prediction order; MLA expanded versus compact attention with RoPE, masks, checkpoint scale and output projection; wrong-scale and separate-softmax counterexamples; noncommuting rotation; teaching capacity/FLOP ledger passed. Teaching arithmetic only, not a model execution or hardware performance result.');
+
+// FA3 teaching schedule: check the data-dependency DAG independently of the
+// runtime state machine. Positions represent a partial-order linearization,
+// not latency or an assumption that WGMMA operations run simultaneously.
+const pipeline = model.fa3PipelineEvents();
+const position = (op, tile) => pipeline.findIndex(e => e.op === op && e.tile === tile);
+const edge = (left, right) => assert.ok(position(...left) >= 0 && position(...left) < position(...right), `${left} must precede ${right}`);
+for (let tile = 0; tile < 3; tile++) {
+  for (const [from, to] of [['load', 'ready'], ['ready', 'qk'], ['qk', 'score'], ['score', 'softmax'], ['softmax', 'rescale'], ['rescale', 'pv'], ['pv', 'output'], ['output', 'release']]) edge([from, tile], [to, tile]);
+  if (tile) {
+    edge(['softmax', tile - 1], ['softmax', tile]);
+    edge(['output', tile - 1], ['rescale', tile]);
+    edge(['output', tile - 1], ['pv', tile]);
+  }
+  edge(['output', tile], ['normalize', 2]);
+  edge(['release', tile], ['normalize', 2]);
+}
+edge(['release', 0], ['load', 2]);
+// A useful overlap has current softmax between issue and completion of the
+// preceding PV; m/l may advance, but writing the same u must wait.
+for (const tile of [1, 2]) {
+  edge(['pv', tile - 1], ['softmax', tile]);
+  edge(['softmax', tile], ['output', tile - 1]);
+}
+const inspection = model.inspectFa3Pipeline(pipeline);
+assert.equal(inspection.normalized, true);
+assert.deepEqual(inspection.slots, [null, null]);
+const overlapState = model.inspectFa3Pipeline(pipeline.filter(e => e.phase <= 4), true);
+assert.equal(overlapState.tiles[1].prob, true);
+assert.equal(overlapState.tiles[0].pv, true);
+assert.equal(overlapState.tiles[0].output, undefined);
+assert.equal(overlapState.tiles[1].scaled, undefined);
+assert.deepEqual(overlapState.slots, [0, 1]);
+
+// Deliberately violate one dependency at a time. Renumber phases after moving
+// events, so a rejection cannot merely be a monotonic-phase check.
+function moveBefore(events, moved, target) {
+  const copy = events.map(e => ({...e}));
+  const [event] = copy.splice(copy.findIndex(e => e.op === moved[0] && e.tile === moved[1]), 1);
+  copy.splice(copy.findIndex(e => e.op === target[0] && e.tile === target[1]), 0, event);
+  return copy.map((e, phase) => ({...e, phase}));
+}
+assert.throws(() => model.inspectFa3Pipeline(moveBefore(pipeline, ['qk', 0], ['ready', 0])), /unready/);
+assert.throws(() => model.inspectFa3Pipeline(moveBefore(pipeline, ['softmax', 1], ['score', 1])), /ready scores/);
+assert.throws(() => model.inspectFa3Pipeline(moveBefore(pipeline, ['pv', 0], ['softmax', 0])), /ready P/);
+assert.throws(() => model.inspectFa3Pipeline(moveBefore(pipeline, ['rescale', 1], ['output', 0])), /previous PV/);
+assert.throws(() => model.inspectFa3Pipeline(moveBefore(pipeline, ['release', 0], ['output', 0])), /WGMMA still consumes/);
+assert.throws(() => model.inspectFa3Pipeline(moveBefore(pipeline, ['load', 2], ['release', 0])), /overwrite/);
+assert.throws(() => model.inspectFa3Pipeline(moveBefore(pipeline, ['normalize', 2], ['output', 2])), /every PV/);
+assert.throws(() => model.inspectFa3Pipeline(pipeline.slice(0, -1)), /Incomplete/);
+
+// Numeric replay isolates the crucial delayed-u hazard. Unlike onlineAttention,
+// m/l and the u rescale/PV accumulator are performed at separate schedule events.
+// Compare to the independent pairwise-probability oracle above.
+const pipeScores = Array.from({length: 192}, (_, i) => (i % 13) * 0.07 + Math.floor(i / 64) * 1.3);
+const pipeValues = Array.from({length: 192}, (_, i) => [1 + i / 192, Math.sin(i * 0.2), i % 7]);
+function numericReplay(events) {
+  let m = -Infinity, l = 0, u = [0, 0, 0];
+  const weights = [], alphas = [];
+  for (const {op, tile} of events) {
+    const indices = Array.from({length: 64}, (_, k) => tile * 64 + k);
+    if (op === 'softmax') {
+      const nextMax = Math.max(m, ...indices.map(i => pipeScores[i]));
+      alphas[tile] = Math.exp(m - nextMax);
+      weights[tile] = indices.map(i => Math.exp(pipeScores[i] - nextMax));
+      l = alphas[tile] * l + weights[tile].reduce((a, b) => a + b, 0);
+      m = nextMax;
+    }
+    if (op === 'rescale') u = u.map(x => x * alphas[tile]);
+    if (op === 'output') u = u.map((x, c) => x + indices.reduce((sum, i, k) => sum + weights[tile][k] * pipeValues[i][c], 0));
+  }
+  return u.map(x => x / l);
+}
+vector(numericReplay(pipeline), probabilityOracle(pipeScores, pipeValues));
+const earlyRescale = numericReplay(moveBefore(pipeline, ['rescale', 1], ['output', 0]));
+assert.ok(earlyRescale.some((x, i) => Math.abs(x - numericReplay(pipeline)[i]) > 0.01), 'Moving u rescale ahead of pending PV must corrupt this fixture');
+console.log('FA3 pipeline: independent dependency DAG, pending-PV overlap, TMA readiness, slot ownership/reuse, drain, delayed-u numerical oracle, and seven illegal schedules passed. Teaching schedule only; no device timing or speedup model.');

@@ -67,7 +67,74 @@ const AttentionLabMath = (() => {
     if (!Array.isArray(state) || !state.length || !Array.isArray(state[0]) || !state[0].length || !Array.isArray(alpha) || alpha.length !== state.length || !alpha.every(finite) || state.some(row => !Array.isArray(row) || row.length !== state[0].length || !row.every(finite))) throw new TypeError('Incompatible finite state and row gates');
     return state.map((row, r) => row.map(value => value * alpha[r]));
   }
-  return Object.freeze({onlineAttention, splitAttention, rope, deltaStep, gateState});
+  // A dependency/lifetime model, not a timing or occupancy simulator. Q is
+  // already resident. Each of two teaching SMEM slots holds one bundled K/V
+  // tile and is conservatively retained until PV completes; production kernels
+  // may release K and V separately. One consumer warpgroup owns one Q tile.
+  function fa3PipelineEvents() {
+    return [
+      ['load', 0, 0], ['ready', 0, 1], ['qk', 0, 1], ['load', 1, 1],
+      ['score', 0, 2], ['ready', 1, 2], ['softmax', 0, 2], ['rescale', 0, 2],
+      ['qk', 1, 3], ['pv', 0, 3],
+      ['score', 1, 4], ['softmax', 1, 4],
+      ['output', 0, 5], ['rescale', 1, 5], ['release', 0, 5], ['load', 2, 5],
+      ['ready', 2, 6], ['qk', 2, 6], ['pv', 1, 6],
+      ['score', 2, 7], ['softmax', 2, 7],
+      ['output', 1, 8], ['rescale', 2, 8], ['release', 1, 8],
+      ['pv', 2, 9], ['output', 2, 10], ['release', 2, 10], ['normalize', 2, 11]
+    ].map(([op, tile, phase]) => ({op, tile, phase, slot: tile % 2}));
+  }
+  function inspectFa3Pipeline(events, allowPrefix = false) {
+    if (!Array.isArray(events)) throw new TypeError('Expected pipeline events');
+    const slots = [null, null], tiles = Array.from({length: 3}, () => ({})), trace = [];
+    let previousPhase = -1, normalized = false;
+    const require = (condition, message) => { if (!condition) throw new Error(message); };
+    for (const event of events) {
+      const {op, tile, phase, slot} = event;
+      require(Number.isInteger(tile) && tile >= 0 && tile < 3 && slot === tile % 2, 'Invalid tile or buffer slot');
+      require(Number.isInteger(phase) && phase >= previousPhase && !normalized, 'Invalid event order');
+      previousPhase = phase;
+      const current = tiles[tile], previous = tiles[tile - 1];
+      const ownsSlot = () => slots[slot] === tile;
+      switch (op) {
+        case 'load':
+          require(slots[slot] === null && !current.loading, 'Cannot overwrite a live SMEM slot');
+          slots[slot] = tile; current.loading = true; break;
+        case 'ready':
+          require(ownsSlot() && current.loading && !current.ready, 'TMA completion requires an issued load');
+          current.ready = true; break;
+        case 'qk':
+          require(ownsSlot() && current.ready && !current.qk, 'QK cannot consume an unready or overwritten K');
+          current.qk = true; break;
+        case 'score':
+          require(ownsSlot() && current.qk && !current.score, 'Score readiness requires QK completion');
+          current.score = true; break;
+        case 'softmax':
+          require(current.score && !current.prob && (!previous || previous.prob), 'Softmax needs ready scores and ordered m/l state');
+          current.prob = true; break;
+        case 'rescale':
+          require(current.prob && !current.scaled && (!previous || previous.output), 'Cannot rescale u while the previous PV writes it');
+          current.scaled = true; break;
+        case 'pv':
+          require(ownsSlot() && current.ready && current.prob && current.scaled && !current.pv && (!previous || previous.output), 'PV needs ready P/V and rescaled completed u');
+          current.pv = true; break;
+        case 'output':
+          require(ownsSlot() && current.pv && !current.output, 'Output readiness requires PV completion');
+          current.output = true; break;
+        case 'release':
+          require(ownsSlot() && current.score && current.output && !current.released, 'Cannot release a slot while WGMMA still consumes it');
+          slots[slot] = null; current.released = true; break;
+        case 'normalize':
+          require(tiles.every(t => t.output && t.released), 'Normalize only after every PV completes');
+          normalized = true; break;
+        default: throw new Error('Unknown pipeline event');
+      }
+      trace.push({event: {...event}, slots: slots.slice(), tiles: tiles.map(t => ({...t})), normalized});
+    }
+    require(allowPrefix || normalized, 'Incomplete pipeline');
+    return {trace, slots, tiles, normalized};
+  }
+  return Object.freeze({onlineAttention, splitAttention, rope, deltaStep, gateState, fa3PipelineEvents, inspectFa3Pipeline});
 })();
 if (typeof module === 'object' && module.exports) module.exports = AttentionLabMath;
 
@@ -93,7 +160,7 @@ const AttentionLabRuntime = (() => {
 
 function initAttentionLabs(scope = document) {
   scope.querySelectorAll('[data-attention-lab]').forEach(root => {
-    if (root.dataset.attentionReady || !['flash', 'decode', 'rope', 'heads', 'mla', 'sparse', 'state'].includes(root.dataset.attentionLab)) return;
+    if (root.dataset.attentionReady || !['flash', 'decode', 'rope', 'heads', 'mla', 'sparse', 'state', 'fa3-pipeline'].includes(root.dataset.attentionLab)) return;
     root.dataset.attentionReady = 'true';
     renderAttentionLab(root);
   });
@@ -256,7 +323,63 @@ function renderAttentionLab(root) {
       ]
     };
   }
-  const factories = {flash: flashSpec, decode: decodeSpec, rope: ropeSpec, heads: headsSpec, mla: mlaSpec, sparse: sparseSpec, state: stateSpec};
+  function fa3PipelineSpec() {
+    const events = AttentionLabMath.fa3PipelineEvents();
+    const tensor = (name, shape, axes, tone = '') => `<div class="al-fa-tensor ${tone}"><strong>${name}</strong><div class="al-fa-grid" aria-hidden="true">${Array.from({length: 12}, () => '<i></i>').join('')}</div><code>${shape}</code><small>${axes}</small></div>`;
+    const operation = (inputs, label, output) => `<div class="al-fa-operation"><div class="al-fa-inputs">${inputs.join('<b aria-hidden="true">×</b>')}</div><div class="al-fa-transform"><b aria-hidden="true">→</b><span>${label}</span></div>${output}</div>`;
+    const scoreTensor = () => tensor('Sⱼ：分数块', '[64, 64]', '64 个 query × 64 个 key', 'al-fa-score');
+    const probTensor = () => tensor('P̃ⱼ：指数权重', '[64, 64]', '以每行新最大值为基准', 'al-fa-prob');
+    const dependency = `<div class="al-fa-dependency">${operation([tensor('Q：当前查询块', '[64, 128]', '64 个 query × 128 通道'), tensor('Kⱼ 的转置', '[128, 64]', '128 通道 × 64 个 key')], '① 矩阵乘，缩放 1/√128', scoreTensor())}${operation([scoreTensor()], '② 新 max → exp → 行求和；更新 m / l', probTensor())}${operation([probTensor(), tensor('Vⱼ：值块', '[64, 128]', '64 个位置 × 128 通道')], '③ 先重标定 u，再累加 P̃ⱼVⱼ', tensor('u：未归一化输出', '[64, 128]', '64 个 query × 128 输出通道', 'al-fa-output'))}</div><p class="al-fa-caption">按 ①②③ 向下阅读，每行从左到右。格子只示意元素分组，不按数量绘制；P̃ⱼ = exp(Sⱼ − m)，最终才算 O = u / l。</p>`;
+    const sequential = `<div class="al-fa-serial">${[0, 1, 2].map(j => `<div><strong>KV 块 ${j}</strong><span>加载 K${j} / V${j}</span><b>→</b><span>QK${j}<small>等分数 S${j}</small></span><b>→</b><span>softmax${j}<small>m / l；重标定 u</small></span><b>→</b><span>P̃${j}V${j}<small>等 u 更新完成</small></span></div>`).join('')}</div><p class="al-fa-caption">从上到下处理块 0、1、2；每行从左到右。这个保守顺序满足依赖，但每次都立刻等待，无法展示跨块重叠。</p>`;
+    const tasks = [
+      {lane: 0, begin: 0, end: 1, tile: 0, label: '载入 0', detail: 'K₀ / V₀ → 槽 A'},
+      {lane: 0, begin: 1, end: 2, tile: 1, label: '载入 1', detail: 'K₁ / V₁ → 槽 B'},
+      {lane: 0, begin: 5, end: 6, tile: 2, label: '载入 2', detail: '槽 A 释放后复用'},
+      {lane: 1, begin: 1, end: 2, tile: 0, label: 'QK₀', detail: '完成 → S₀ 可读'},
+      {lane: 1, begin: 3, end: 4, tile: 1, label: 'QK₁', detail: '先等这组 WGMMA'},
+      {lane: 1, begin: 4, end: 5, issue: 3, tile: 0, label: 'P̃₀V₀', detail: '此时 u 尚不可改写'},
+      {lane: 1, begin: 6, end: 7, tile: 2, label: 'QK₂', detail: '完成 → S₂ 可读'},
+      {lane: 1, begin: 7, end: 8, issue: 6, tile: 1, label: 'P̃₁V₁', detail: '此时 u 尚不可改写'},
+      {lane: 1, begin: 9, end: 10, tile: 2, label: 'P̃₂V₂', detail: '等待最后一次累加'},
+      {lane: 2, begin: 2, end: 3, tile: 0, label: 'softmax₀', detail: 'P̃₀、m₀ / l₀'},
+      {lane: 2, begin: 4, end: 5, tile: 1, label: 'softmax₁', detail: 'P̃₁、m₁ / l₁'},
+      {lane: 2, begin: 7, end: 8, tile: 2, label: 'softmax₂', detail: 'P̃₂、m₂ / l₂'},
+      {lane: 3, begin: 5, end: 6, tile: 1, label: '重标定 u', detail: '再释放槽 A'},
+      {lane: 3, begin: 8, end: 9, tile: 2, label: '重标定 u', detail: '再释放槽 B'},
+      {lane: 3, begin: 10, end: 12, tile: 2, label: '排空 → O = u / l', detail: '释放槽 A；写回最终 O'}
+    ];
+    const laneNames = ['TMA 搬运', 'Tensor Core', '标量 / exp', '完成与收尾'];
+    const timeline = phase => {
+      const complete = phase === 11;
+      return `<div class="al-fa-scroll" tabindex="0" role="region" aria-label="FA3 教学调度图；手机可横向滚动"><div class="al-fa-timeline"><div class="al-fa-axis"><strong>执行资源 ↓</strong>${Array.from({length: 12}, (_, i) => `<span class="${i === phase ? 'al-fa-now' : ''}">${i + 1}</span>`).join('')}</div>${laneNames.map((name, lane) => `<div class="al-fa-track"><strong>${name}</strong><div class="al-fa-track-area">${[4, 7].map(i => `<i class="al-fa-overlap" style="grid-column:${i + 1}" aria-hidden="true"></i>`).join('')}${tasks.filter(task => task.lane === lane).map(task => `<span class="al-fa-task al-fa-tile-${task.tile}${(task.issue ?? task.begin) > phase ? ' al-fa-future' : ''}${!complete && task.begin <= phase && phase < task.end ? ' al-fa-current' : ''}" style="grid-column:${task.begin + 1} / ${task.end + 1}" title="${task.detail}"><b>${task.label}</b><small>块 ${task.tile}</small></span>`).join('')}</div></div>`).join('')}<div class="al-fa-axis-note">横轴：调度片段 1 → 12；格宽不是周期，也不是等长耗时。</div></div></div><p class="al-fa-caption"><span class="al-fa-key"></span> 竖向浅色带：不同 KV 块的 PV 与 softmax 可重叠。实线框为已进入的工作，虚线框为后续工作；手机可左右滚动。</p>`;
+    };
+    const state = phase => {
+      const inspected = AttentionLabMath.inspectFa3Pipeline(events.filter(e => e.phase <= phase), true);
+      const slots = inspected.slots.map((tile, slot) => `<div class="al-fa-slot ${tile === null ? 'al-fa-empty' : ''}"><strong>SMEM 槽 ${slot ? 'B' : 'A'}</strong><span>${tile === null ? '空闲，可复用' : `K${tile} / V${tile} · ${inspected.tiles[tile].ready ? '已到达' : 'TMA 搬运中'}`}</span><small>${tile === null ? 'producer 可写入新块' : 'consumer 仍持有此槽'}</small></div>`).join('');
+      const newest = inspected.tiles.map((t, i) => t.prob ? i : -1).reduce((a, b) => Math.max(a, b), -1);
+      const writing = inspected.tiles.findIndex(t => t.pv && !t.output);
+      const finished = inspected.tiles.map((t, i) => t.output ? i : -1).reduce((a, b) => Math.max(a, b), -1);
+      const uText = inspected.normalized ? 'O = u / l 已写回' : writing >= 0 ? `P̃${writing}V${writing} 待完成：禁止改写 u` : finished >= 0 ? `已包含块 0…${finished} 的贡献` : 'u = 0，尚无完成的 PV';
+      return `<div class="al-fa-state">${slots}<div class="al-fa-slot al-fa-register"><strong>寄存器：每个 query 的状态</strong><span>m / l：${newest < 0 ? '初始值' : `已看到块 ${newest}`}</span><span>${uText}</span><small>m / l 各 [64]；u 为 [64,128]。m / l 和 u 的推进可以错开，但缩放基准必须一致。</small></div></div>`;
+    };
+    const scene = phase => timeline(phase) + state(phase);
+    return {
+      title: 'FA3 逐步调度：同一块的依赖不变，不同块的工作怎样重叠？',
+      intro: '教学问题：单 head，Q=[64,128]，K/V 各 [192,128]，不加 mask；K/V 按 64 个位置分成块 0、1、2。只展示一个 consumer warpgroup（4 个 warp，共 128 线程）负责的 Q 块。Q 已在片上，producer 用 TMA 继续搬入 KV。128 线程不等于 128 行 query；这里负责 64 行。这些块大小是示例，不是 FA3 的固定配置。',
+      foot: '依据 FA3 论文 §3.2 的跨迭代依赖绘制，省略真实指令粒度、编译器重排与多个 consumer 的 pingpong，也省略 P̃ 从 FP32 exp/归约结果转换为 PV 矩阵指令支持精度的步骤。本图将 K/V 合放到两个教学槽中，保守地等 PV 完成再一起释放；真实实现可更早分别释放 K 和 V。重叠需要额外寄存器、缓冲和同步，是否更快取决于 shape 与设备；这不是计时模拟，也不能从格数计算加速比。',
+      steps: [
+        step('先固定数据：一个 KV 块必须走完哪条依赖链？', 'j 是 KV 块编号。QK 的结果 Sⱼ 准备好后，才能生成指数权重 P̃ⱼ；P̃ⱼ 与 Vⱼ 都准备好后，才能乘 V。m 是已见最大分数，l 是指数和，u 是尚未除以 l 的加权 V 和。异步不会取消这些依赖。', dependency, 'QKⱼ 完成 → Sⱼ → softmaxⱼ → P̃ⱼ → PVⱼ；最终 O=u/l'),
+        step('保守顺序：每做一件事就立即等到完成', '按块 0 → 1 → 2 逐一完成加载、QK、softmax 和 PV，数学上没有问题。但发射 WGMMA 后立刻等待，会推迟本可提前执行的独立工作。FA3 要调整的是等待的位置，而不是跳过任何 KV 块。', sequential),
+        step('启动：先把块 0 算到 P̃₀，同时预取块 1', 'TMA 完成后，consumer 才能使用对应槽。QK₀ 完成后产生 S₀，随后计算 P̃₀、m₀ 和 l₀。此时 u 仍为零。块 1 已经在另一个槽就绪，为下一轮准备输入。', scene(2), '槽 A：块 0；槽 B：块 1。加载已经发出 ≠ 数据已经可读。'),
+        step('提前发射：QK₁ 与 P̃₀V₀ 都可以进入异步队列', 'P̃₀ 已准备好，因此可以发射块 0 的 PV；Q 和 K₁ 也已经准备好，因此可以提前发射块 1 的 QK。论文两级流水安排先发射 QK₁，再发射 P̃₀V₀，并在需要 S₁ 时等待相应 WGMMA 完成。两次发射不表示两组矩阵运算一定同时执行。', scene(3), '已有 P̃₀ → 可发射 PV₀；已有 Q、K₁ → 可发射 QK₁。'),
+        step('核心重叠：softmax₁ 计算时，PV₀ 还在执行', '等到 QK₁ 完成就可以读 S₁，计算 P̃₁ 及新的 m₁、l₁；这些标量与指数工作可以与 Tensor Core 上仍未结束的 P̃₀V₀ 重叠。但 u 仍由 PV₀ 写入，不能此时就重标定或覆盖它。', scene(4), '可重叠：PV₀ ↔ softmax₁。不可重叠：PV₀ 写 u ↔ 用新最大值缩放同一个 u。'),
+        step('完成与释放：先等 PV₀，再重标定 u，再复用槽', 'PV₀ 完成后，按 α₁=exp(m₀−m₁) 缩放它刚写完的 u，使旧贡献与 P̃₁ 使用相同基准。块 0 的 K/V 已没有读取者，才把槽 A 交还 producer；TMA 随后可把块 2 写入同一个槽。', scene(5), 'wait(PV₀) → u ← α₁u → release 槽 A → load(K₂,V₂)。每个 query 行使用自己的 α。'),
+        step('再前进一块：用同一规则处理块 1 与块 2', '块 2 到达后，提前发射 QK₂ 和 PV₁。等 S₂ 准备好就计算 softmax₂，与 PV₁ 重叠；等 PV₁ 完成再按新的最大值缩放 u，并释放块 1 的槽 B。旧贡献一直保留，不必回读前面的 K/V 来重新求 softmax。', scene(8), 'u ← α₂u；随后才可累加 P̃₂V₂。额外 S/P̃ 暂存会增加寄存器压力。'),
+        step('排空流水：最后一个 PV 完成，才能归一化并写回', '已没有下一块可拿来重叠，仍需等待 PV₂ 完成，释放最后一个槽，再输出 O=u/l。下图保留全部调度，浅色竖带显示两处跨块重叠。所有 192 个 key 仍参与了计算；没有缩减模型 KV cache，也没有降低全量 attention 的计算阶数。', scene(11), '启动与排空都有成本。更多流水级不保证更快；检查额外寄存器是否引起 spill 或降低驻留。')
+      ]
+    };
+  }
+  const factories = {flash: flashSpec, decode: decodeSpec, rope: ropeSpec, heads: headsSpec, mla: mlaSpec, sparse: sparseSpec, state: stateSpec, 'fa3-pipeline': fa3PipelineSpec};
   spec = factories[kind]();
   let current = 0, timer = null;
   root.classList.add('attention-lab');
@@ -279,6 +402,16 @@ function renderAttentionLab(root) {
     select('counter').textContent = `${current + 1} / ${spec.steps.length} · ${item.title}`;
     select('progress').innerHTML = spec.steps.map((s, i) => `<button type="button" data-al-goto="${i}"${i === current ? ' aria-current="step"' : ''} aria-label="第 ${i + 1} 步：${s.title}">${i + 1}</button>`).join('');
     select('scene').innerHTML = `<h5>${item.title}</h5><p>${item.text}</p><div class="al-visual">${item.visual}</div>${item.equation ? `<p class="al-equation"><code>${item.equation}</code></p>` : ''}`;
+    if (kind === 'fa3-pipeline') {
+      const viewport = select('scene').querySelector('.al-fa-scroll');
+      const tick = viewport && viewport.querySelector('.al-fa-now');
+      if (tick && viewport.scrollWidth > viewport.clientWidth) {
+        // Keep the active dependency slice visible on phones. Row names remain
+        // sticky, while the full schedule is still manually scrollable.
+        const left = tick.getBoundingClientRect().left - viewport.getBoundingClientRect().left;
+        viewport.scrollLeft = Math.max(0, left + tick.offsetWidth / 2 - (viewport.clientWidth + 100) / 2);
+      }
+    }
     action('previous').disabled = current === 0;
     action('next').disabled = current === spec.steps.length - 1;
     if (current === spec.steps.length - 1) pause();
