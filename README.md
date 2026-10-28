@@ -10,21 +10,25 @@
 
 ## 内容与导航
 
-当前使用 **8 个知识域 → 18 个专题 → 25 章** 的目录结构。侧边栏只展开当前专题；全站目录支持主题、标题/标签与阅读状态筛选。已有章节链接、笔记和学习记录保留。
+当前使用 **9 个知识域 → 24 个专题 → 28 章** 的目录结构。侧边栏只展开当前专题；全站目录支持主题、标题/标签与阅读状态筛选。已有章节链接、笔记和学习记录保留。
 
 | 知识域 | 内容 |
 | --- | --- |
 | 开始与路线 | 岗位能力、项目叙述、工程证据 |
 | 算法与数据流 | 两篇 decode 入门长文：Attention 的历史状态与长上下文；FFN 的参数、路由与权重复用。真实 shape 图贯穿计算和访存 |
 | GLM-5.3-Flash 部署 | 整网概览 → MoE / Attention → mHC → 其余组件，五篇连续讲解；公开模型与固定 Zeus 快照分别标注 |
+| DeepSeek 模型 | V3 / V4 各一篇完整公开架构解析；真实 shape、MLA、CSA/HCA、mHC、MoE、MTP、训练精度与系统取舍，后续扩展 V4 部署 |
 | Triton · MLIR · LLVM | AST/TTIR/布局、Op/Region/Dialect、PassManager与分析失效、Rewrite/Conversion、LLVM中后端 |
 | 518硬件与后端 | Lowering 架构长文与独立同步篇；从硬件约束解释描述符、边界、布局、控制流、VP 映射和代码生成，PE/VP 硬件长文作为配套 |
 | 性能与推理系统 | Nsight / Profiler、算子画像、Roofline、通信分析、模型负载、并发与容量、服务与运行时 |
 | 岗位与面试题 | 两份完整 HTML：13 份岗位记录；43 个场次或材料组、328 个问题项；保留题源、重复题跳转与缺失题说明 |
 | Coding实作 | 算法、图/数据流、kernel、玩具pass；原创Python/C++参考与测试 |
 
-当前 **465 小节、259 道章节追问（另有 328 个场次题目项）、139 张正文 SVG**。附全文搜索、图示放大、3个通用交互实验、2个PE交互演示、1个MoE拓扑/容量交互、4个性能分析实验区和2个decode shape/字节交互、术语表、阅读进度及本地笔记导入导出。SVG、样式和内容均内嵌；网页不依赖CDN、外部字体或第三方脚本。
+当前 **605 小节、290 道章节追问（另有 328 个场次题目项）、221 张正文 SVG**。附全文搜索、图示放大、3个通用交互实验、2个PE交互演示、1个MoE拓扑/容量交互、4个性能分析实验区和2个decode shape/字节交互、术语表、阅读进度及本地笔记导入导出。SVG、样式和内容均内嵌；网页不依赖CDN、外部字体或第三方脚本。
 
+- [DeepSeek-V3 完整模型解析](https://xuanwen-wang.github.io/interview/deepseek-v3.html)：27 节、11 张原创图，走完主干、MLA 吸收、专家网络、MTP、FP8、DualPipe 与成本账；附交互缓存与计算路径。
+- [DeepSeek-V4 完整模型解析](https://xuanwen-wang.github.io/interview/deepseek-v4.html)：36 节、16 张原创图，展开 CSA/HCA、逐特征池化、mHC、专家网络、Muon、FP4 QAT、OPD 与异构缓存；附条目账和残差混合交互。
+- [DeepSeek 架构来源](evidence/deepseek-model-architecture-sources.md)：官方报告、配置与参考代码的固定版本及教学模型边界。
 - [岗位介绍完整长文](https://xuanwen-wang.github.io/interview/interview-jobs.html)：四份岗位转录与九条已有岗位，按职责、能力差距和项目证据逐一解释。
 - [公司面试题完整长文](https://xuanwen-wang.github.io/interview/interview-questions.html)：按公司与每场面试展开；含新材料 230 项、此前来源 50 项、原创准备 48 项。回答覆盖机制、约束、取舍、验证与追问；原创与缺失题面分别标明，不冒充真实原题。
 - [面试页合并审查](evidence/review-interview-consolidation.md)：覆盖清单、题源边界、旧链接和记录迁移、浏览器验证。

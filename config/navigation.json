@@ -122,6 +122,42 @@
       "collectionLabel": "FIVE DEPLOYMENT TOPICS"
     },
     {
+      "id": "deepseek-models",
+      "title": "DeepSeek 模型",
+      "number": "DS",
+      "description": "两篇公开模型架构解析：从完整数据流理解 V3 的 MLA 与专家网络，再理解 V4 的压缩注意力、四流残差及训练设计。后续扩展 V4 部署。",
+      "groups": [
+        {
+          "id": "deepseek-v3",
+          "title": "V3：公开模型架构",
+          "chapters": [
+            "deepseek-v3-architecture"
+          ]
+        },
+        {
+          "id": "deepseek-v4",
+          "title": "V4：公开模型架构",
+          "chapters": [
+            "deepseek-v4-architecture"
+          ]
+        }
+      ],
+      "readingCollection": true,
+      "collectionLabel": "TWO MODEL ARCHITECTURES",
+      "learningPath": [
+        {
+          "title": "V3：建立完整基线",
+          "description": "整网、MLA、MoE、MTP，以及训练和推理的边界",
+          "chapter": "deepseek-v3-architecture"
+        },
+        {
+          "title": "V4：追踪架构变化",
+          "description": "CSA/HCA、mHC 与专家网络怎样配合",
+          "chapter": "deepseek-v4-architecture"
+        }
+      ]
+    },
+    {
       "id": "compiler",
       "title": "LLVM / MLIR 与后端",
       "number": "04",
