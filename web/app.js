@@ -98,7 +98,6 @@ function renderChapter(id, section) {
  initSyncExplorers();
  initAttentionLabs();
  initCycleCasebooks();
- initDeepSeekMoeLabs();
  enableFigureZoom();
  initInterviewQuestions();
  if(section)scrollChapterAnchor(section);
