@@ -122,6 +122,21 @@
       "collectionLabel": "FIVE DEPLOYMENT TOPICS"
     },
     {
+      "id": "deepseek-models",
+      "title": "DeepSeek 模型解析",
+      "number": "DS",
+      "description": "以公开报告与模型配置为依据，深入 DeepSeek 模型的数据流和工程实现。本轮聚焦 V4 的 MoE。",
+      "groups": [
+        {
+          "id": "deepseek-v4",
+          "title": "V4：专家路由与计算",
+          "chapters": [
+            "deepseek-v4-moe"
+          ]
+        }
+      ]
+    },
+    {
       "id": "compiler",
       "title": "LLVM / MLIR 与后端",
       "number": "04",

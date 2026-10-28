@@ -1,0 +1,175 @@
+[
+  {
+    "id": "deepseek-v4-moe",
+    "title": "DeepSeek V4 MoE：从一个 token 到专家并行",
+    "part": "模型架构",
+    "order": 21.5,
+    "subtitle": "以真实 Flash / Pro 配置讲清 Hash、路由、专家、FP4 与通信",
+    "minutes": 75,
+    "level": "原理与工程",
+    "tags": [
+      "DeepSeek V4",
+      "MoE",
+      "Hash Routing",
+      "FP4",
+      "Expert Parallelism"
+    ],
+    "lead": "以 V4-Flash 和 V4-Pro 的公开配置为对象，沿一个 token 走完专家选择、SwiGLU、加权合并与分布式通信，再和 V3 对照；训练、推理、理论容量和真实性能分别说明。",
+    "readingLabel": "沿一次 token 的 MoE 路径",
+    "readingStageLabel": "连续阅读",
+    "portableReading": {
+      "file": "deepseek-v4-moe.html",
+      "download": "deepseek-v4-moe.html",
+      "label": "保存完整 DeepSeek V4 MoE HTML ↓"
+    },
+    "sections": [
+      {
+        "id": "ds4-overview",
+        "title": "先抓住一句话",
+        "html": "<div class=\"ds4\"><p class=\"lead\"><b>V4 仍是共享专家 + 稀疏路由专家的 DeepSeekMoE。</b>它把 V3 开头的 Dense FFN 换成 Hash-MoE，调整路由打分，并以 FP4 存储路由专家权重；注意力、mHC 和训练策略还在另一层面发生变化。</p><div class=\"grid\"><div class=\"card\"><span class=\"num\">6 + 1</span><p>每个 token 在每个 V4 MoE 层选 6 个 routed experts，另加 1 个对所有 token 执行的 shared expert。</p></div><div class=\"card\"><span class=\"num\">前 3 层</span><p>用 token ID 查表决定专家身份；其余层用当前隐藏向量计算分数并选择 Top-6。</p></div><div class=\"card\"><span class=\"num\">FP4</span><p>公开配置中 routed expert 使用 FP4。权重的理论字节减少不等于推理整体提速比例。</p></div></div><div class=\"callout\">本文的 V4 指报告中的 <b>V4-Flash / V4-Pro</b>，基线为 V3。2026 年另有 <a href=\"https://deepseek.com/en/news/deepseek-v4-1-flash/\">V4.1-Flash</a>：它是后续独立版本，不能把其设计或 552B 数字并入本页 V4 配置。</div></div>"
+      },
+      {
+        "id": "ds4-compare",
+        "title": "V3 和 V4，到底变在哪里？",
+        "html": "<div class=\"ds4\"><div><table><thead><tr><th>维度</th><th>DeepSeek-V3</th><th>V4-Flash / V4-Pro</th><th>理解时要注意</th></tr></thead><tbody><tr><td>整模型参数</td><td>671B / 每 token 激活 37B</td><td>284B / 13B；1.6T / 49B</td><td>激活参数是整个模型口径，不是一个专家参数，也不是显存占用。</td></tr><tr><td>每层专家</td><td>256 routed，选 8；1 shared</td><td>Flash：256 选 6；Pro：384 选 6；均有 1 shared</td><td>8 → 6 是配置变化，不能单凭它推断专家更专业或整体更快。</td></tr><tr><td>起始 FFN</td><td>前 3 层 Dense，之后 MoE</td><td>全部 block 为 MoE；前 3 层 Hash，后续可学习选择</td><td>Hash 决定“选谁”，选中专家仍有依赖输入的权重。</td></tr><tr><td>亲和分数</td><td>sigmoid(logit)</td><td>√softplus(logit)</td><td>分数的函数变化；专家 ID 的选择和输出权重是两步。</td></tr><tr><td>均衡 / 节点约束</td><td>偏置平衡 + 少量序列级损失；限制 token 访问节点数</td><td>继承偏置平衡和小的序列级损失；去掉目标节点数量限制</td><td>去掉限制不等于通信免费，训练并行策略也相应调整。</td></tr><tr><td>路由专家权重</td><td>V3 使用 FP8 混合精度框架</td><td>公开模型配置 routed expert 为 FP4；后训练使用 FP4 QAT</td><td>不能理解为所有模块或训练的所有运算均为 FP4。</td></tr></tbody></table></div><p class=\"caption\">模型数值来自 V3 和 V4 官方报告及公开配置，具体实现和模型版本见页尾；V3.2 的注意力等变化不在此表逐项展开。</p></div>"
+      },
+      {
+        "id": "ds4-flow",
+        "title": "Flash：一个 token 的完整 MoE 路径",
+        "html": "<div class=\"ds4\"><p>取真实 V4-Flash 参数：隐藏宽度 <b>H=4096</b>，每个专家中间宽度 <b>I=2048</b>，路由专家总数 <b>E=256</b>，每 token 选择 <b>K=6</b>。下面 T 表示本次进入一层的 token 数。专家身份不同不改变张量最后一维。</p><div class=\"flow\" aria-label=\"从输入到分发的结构示意\"><div class=\"node\"><b>① MoE 输入</b><span>x：T × 4096<br>每行一个 token 的隐藏向量</span></div><div class=\"node\"><b>② 路由</b><span>输入 x 计算 T × 256 分数；生成 T × 6 专家 ID 和权重</span></div><div class=\"node\"><b>③ 分发</b><span>按专家 ID 分组；同一 token 可送到 6 个专家</span></div><div class=\"node\"><b>④ 执行并合并</b><span>被选专家计算后按权重求和，再加 shared 输出，得到 T × 4096</span></div></div><div class=\"branch\"><div class=\"node\"><b>Routed 路径 · 6 个被选专家</b><span>每个专家接收分配给它的 nₑ 行：nₑ × 4096 → nₑ × 2048 → nₑ × 4096。</span></div><div class=\"node\"><b>Shared 路径 · 每个 token 都执行</b><span>T × 4096 → T × 2048 → T × 4096；这里的 shared 表示所有 token 共享此路径，并非专家权重彼此共享。</span></div></div><p class=\"caption\">结构示意，箭头表示数据流；未按维度比例绘制。真实实现可在不同位置融合权重乘法或通信。mHC 在 block 内包围 MoE，图为 MoE 子模块边界。</p><div class=\"math\">MoE(x) = Shared(x) + Σ [ wᵢ(x) · Expertᵢ(x) ]，i ∈ selected(x)</div><p>输出会返回 Transformer block 与 mHC 残差流继续合并；<b>注意力选择历史 KV 的 top-k 与这里选择专家的 Top-6 是两个不同选择问题。</b></p></div>"
+      },
+      {
+        "id": "ds4-lab",
+        "title": "亲手走一遍：谁被选？权重是多少？",
+        "html": "<div class=\"ds4\"><p>为了把计算展开，下面用 <b>8 个虚构专家、Top-3</b>，不代表真实的 256/384 与 Top-6。条形长度是 <b>用于选择的分数</b>；权重取的是未加 bias 的分数。Hash 表项、logit、bias 均为教学输入。</p><div data-deepseek-moe-lab></div><div class=\"math\">logitᵢ = x · Wᵢ；sᵢ = √softplus(logitᵢ)\n普通层：selected = TopK(sᵢ + biasᵢ)；Hash 层：selected = table[token_id]\n两种层：wᵢ = scale × sᵢ / Σⱼ∈selected sⱼ</div><p>bias 只影响普通层的<b>选择</b>，不直接进入输出权重分子；但 bias 可能改变入选集合，因而也会间接改变归一化结果。Flash 的权重之和为 1.5，Pro 为 2.5，不必等于 1。</p></div>"
+      },
+      {
+        "id": "ds4-hash",
+        "title": "前 3 层：固定选谁，动态决定贡献",
+        "html": "<div class=\"ds4\"><div class=\"timeline\"><p><b>输入 token ID</b>：同一 ID 在同一层查固定的 <code>tid2eid</code> 表，得到 6 个专家编号；不同层的表不应假定相同。</p><p><b>并行计算亲和分数</b>：该层仍用当前 token 的隐藏向量 x 计算专家分数，取已选 ID 对应的原始分数。</p><p><b>归一化与合并</b>：选中分数归一化后乘 scale，进入 6 个专家的加权和，再加 shared 分支。</p></div><div class=\"callout green\"><b>一个关键反例：</b>同一个词在不同上下文出现，token ID 可以相同，因此该 Hash 层选中的专家 ID 相同；但 x 可以不同，故权重及专家输出仍可能不同。Hash 不等于固定输出，也不保证 token 频率倾斜时负载完全均衡。</div><p>报告的设计动机是将起始 Dense 层替换为 Hash 路由 MoE；固定身份可避免这几层的动态 Top-K 选择。报告没有证明它适用于所有模型或在所有负载下均更快；参考代码仍计算分数用于权重。</p></div>"
+      },
+      {
+        "id": "ds4-expert",
+        "title": "一个专家不是一个标签，而是一组 FFN 矩阵",
+        "html": "<div class=\"ds4\"><p>以 Flash 为例，对 nₑ 个派给某专家的 token，输入 X 为 nₑ × 4096。W<sub>gate</sub> 和 W<sub>up</sub> 逻辑形状均为 4096 × 2048，W<sub>down</sub> 为 2048 × 4096。</p><div class=\"math\">gate = X · W_gate             → nₑ × 2048\nup   = X · W_up               → nₑ × 2048\nmid  = SiLU(gate) ⊙ up        → nₑ × 2048\nout  = mid · W_down           → nₑ × 4096</div><p>三张矩阵的纯参数数为 3 × H × I = <b>25,165,824</b>。6 个 routed + 1 个 shared 对单 token 在单层对应约 <b>176.2M</b> 个专家矩阵参数；这不是全模型 13B 激活参数，因为后者还含其他层和非专家模块。</p><p>参考推理代码对 <code>up</code> 截断至 [−10, 10]，对 <code>gate</code> 只设上限 10，再算 SiLU。代码把路由权重乘在 down 投影之前；理想实数线性运算可移到输出端，有限精度与融合实现可能有数值差别。</p></div>"
+      },
+      {
+        "id": "ds4-balance",
+        "title": "负载均衡：选对专家，也别让少数专家排长队",
+        "html": "<div class=\"ds4\"><p>批量中的每个 token 会形成 K 个 token–expert 指派。若热点集中，某设备的专家收到更多行，它决定同步阶段尾部等待；平均 token 数不足以描述最慢设备。常见做法是先统计每个专家的指派数，再据负载调整选择偏置。</p><div class=\"branch\"><div class=\"node\"><b>已有的偏置策略</b><span>过热专家的 bias 下调，冷专家上调，改变后续普通层选择；偏置不直接作为专家输出权重。此策略在 V3 已有，不是 V4 首创。</span></div><div class=\"node\"><b>序列级补充损失</b><span>报告还保留小的 sequence-wise balance loss，以抑制单个序列中的极端不均衡。因此 auxiliary-loss-free 指主负载均衡策略，不能说完全没有辅助损失。</span></div></div><p>报告中的 Flash 序列平衡损失权重为 0.0001、bias 更新速度为 0.001，属于训练配置。Hash 层使用固定表选 ID，不能直接把普通层的 bias Top-K 更新机制套用到查表过程。</p></div>"
+      },
+      {
+        "id": "ds4-fp4",
+        "title": "FP4：先算清楚省的是哪一份字节",
+        "html": "<div class=\"ds4\"><p>公开 Flash 配置标记 <code>expert_dtype: fp4</code>，参考代码将 routed experts 设置为 FP4，shared expert 不走该 FP4 参数分支。报告在后训练引入 MXFP4 QAT：FP32 master weight 量化为 FP4，再反量化到 FP8 参与计算；部署阶段的实际 kernel 路径依硬件与框架而定。</p><div class=\"grid\"><div class=\"card\"><b>单个 Flash 专家</b><span class=\"num\">25.17M</span><p>三个矩阵元素数：3 × 4096 × 2048。</p></div><div class=\"card\"><b>纯矩阵 · FP8</b><span class=\"num\">24 MiB</span><p>假设每元素 1 字节，不含 scale、元数据与对齐。</p></div><div class=\"card\"><b>纯矩阵 · FP4</b><span class=\"num\">12 MiB</span><p>假设每元素 4 bit，理想数据位数为 FP8 的一半。</p></div></div><p>同样口径，一个 Flash 层全部 256 个 routed experts 的矩阵纯权重为 <b>3 GiB FP4</b> 或 <b>6 GiB FP8</b>；这不是整模型显存账，也不是一次 token 必然从 HBM 读到的字节。专家复用、缓存、scale、通信、临时空间和其他模块都会改变实际结果。</p><div class=\"callout warn\">报告对 FP4×FP8 的未来硬件效率有理论讨论，不等于现有设备测得速度提升。没有具体设备、kernel、batch、序列及计时条件，不能从“4 bit”推出 2× 端到端吞吐。</div></div>"
+      },
+      {
+        "id": "ds4-systems",
+        "title": "专家并行：一条 token 路径为什么会经过网络？",
+        "html": "<div class=\"ds4\"><p>专家并行（EP）将不同专家放到不同设备。假设仅用于教学的 EP=4、Flash 的 256 个专家均匀放置：每设备负责 64 个专家。对一个 batch，每个 token 的 6 个专家 ID 可能落在 1～4 个设备，具体取决于路由与放置。</p><div class=\"flow\"><div class=\"node\"><b>Router</b><span>生成每 token 的 6 个目标 ID 与权重。</span></div><div class=\"node\"><b>Dispatch</b><span>按设备 / 专家重排并发送 token 行，可能发生跨设备通信。</span></div><div class=\"node\"><b>Expert GEMM</b><span>每个设备对本地专家执行分组矩阵乘；行数不一定相等。</span></div><div class=\"node\"><b>Combine</b><span>返回、按原 token 顺序加权累加并合入 shared 路径。</span></div></div><p class=\"caption\">这是常见 EP 逻辑路径，不声称官方参考实现采用同一通信原语、固定设备拓扑或具体并行度。</p><p>V3 限制每 token 的路由目标节点数；V4 报告去除这个约束并重新设计并行。潜在收益是更自由的专家选择，代价是目标节点数和通信负载需通过实际路由分布、拓扑和实现测量。<b>K=6 不等于一定发送 6 次网络包</b>：同设备聚合、去重和融合可改变物理传输。</p><p>官方公开参考 <code>inference/model.py</code> 按 rank 分配专家、累加本地结果并 <code>all_reduce</code>，不能将其直接等同于优化生产框架的 all-to-all 实现。</p></div>"
+      },
+      {
+        "id": "ds4-training",
+        "title": "训练稳定性：两个与专家直接相关的措施",
+        "html": "<div class=\"ds4\"><h3>Anticipatory Routing：用较早参数提前算路由索引</h3><p>报告观察到 MoE 异常值与 loss spike 相关。step t 的特征使用当前参数 θ<sub>t</sub>，而路由索引使用较早参数 θ<sub>t−Δt</sub> 预先计算并缓存；这解耦了更新节奏。报告称 spike 时短暂回滚并启用该模式，恢复后切回常规训练。启用模式本身报告约 20% 额外 wall-clock，按需启用后的整体额外开销报告为可忽略；这不是每次推理的开销。</p><h3>SwiGLU clamping：限制异常值</h3><p>对 linear/up 分支截断 [−10,10]，gate 分支上限 10，减少极端值。报告称其在训练中有助稳定，同时承认机制尚未有完整理论解释。数值范围不是随便拿去用于任意模型的通用最优值。</p></div>"
+      },
+      {
+        "id": "ds4-boundaries",
+        "title": "四个容易答错的问题",
+        "html": "<div class=\"ds4\"><details open><summary>“Hash 路由是不是没有 Router 计算？”</summary><p>专家身份来自固定表，不做分数 Top-K；参考实现仍从 x 计算分数，为选中专家生成动态权重。</p></details><details open><summary>“选 6/256，意味着显存只要 6/256？”</summary><p>不成立。模型部署需要放置所有可用专家或借助卸载；单 token 只计算选中部分。总参数、激活参数、权重驻留、实际读写是不同口径。</p></details><details open><summary>“V4 的百万上下文来自 MoE 吗？”</summary><p>不能这样归因。报告强调 CSA/HCA、KV 压缩和稀疏注意力等长上下文设计；MoE 是 FFN 路径。mHC 是连接残差流的机制，也不是专家选择算法。</p></details><details open><summary>“去掉目标节点限制，MoE 通信一定变少吗？”</summary><p>不能确定。更自由的选择可能增加远程目标；实际取决于专家映射、token 分布、通信融合和网络拓扑。须用可复现的模型、工作负载和设备实测。</p></details><p class=\"caption\">本文为报告与公开参考代码解析及教学算例，未执行模型推理、训练、设备性能或精度实验。</p></div>"
+      },
+      {
+        "id": "ds4-sources",
+        "title": "原始依据与版本",
+        "html": "<div class=\"ds4\"><p>核验日期：2026-10-28。链接在线可访问；本文 HTML 的解释与交互无需网络。</p><ol class=\"source-list\"><li><a href=\"https://arxiv.org/html/2606.19348\">DeepSeek-V4 技术报告</a>：§2.1 MoE，§4.2.1 模型配置，§4.2.3 稳定性，§5.2.1 FP4 QAT。报告对 V4 Flash / Pro 描述的事实优先于无版本的二手总结。</li><li><a href=\"https://arxiv.org/abs/2412.19437\">DeepSeek-V3 技术报告</a>：架构、专家、节点限制、均衡和 FP8 混合精度的对照基线。</li><li><a href=\"https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash/blob/60d8d70770c6776ff598c94bb586a859a38244f1/config.json\">V4-Flash 固定版本配置</a>；<a href=\"https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro/blob/b5968e9190ef611bbf34a7229255be88a0e937c1/config.json\">V4-Pro 固定版本配置</a>：模型维度、K、Hash 层数、scaling、expert_dtype。</li><li><a href=\"https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash/blob/60d8d70770c6776ff598c94bb586a859a38244f1/inference/model.py#L546\">Flash 参考推理实现：Gate / Expert / MoE</a>：Hash 表、分数、选择偏置、加权、clamp 和 all_reduce。参考代码并非所有生产推理框架。</li><li><a href=\"https://deepseek.com/en/news/deepseek-v4-1-flash/\">DeepSeek V4.1-Flash 官方发布</a>：用来标识 V4 与后续 V4.1 的范围边界。</li></ol></div>"
+      }
+    ],
+    "readingStages": [
+      {
+        "id": "ds4-stage-compare",
+        "title": "先看 V4 相对 V3 的变化",
+        "summary": "建立版本、模型规模与证据边界。",
+        "sections": [
+          "ds4-overview",
+          "ds4-compare"
+        ]
+      },
+      {
+        "id": "ds4-stage-routing",
+        "title": "沿 token 走完选择与计算",
+        "summary": "真实 shape、可复算路由、Hash 和 SwiGLU。",
+        "sections": [
+          "ds4-flow",
+          "ds4-lab",
+          "ds4-hash",
+          "ds4-expert"
+        ]
+      },
+      {
+        "id": "ds4-stage-systems",
+        "title": "从负载均衡走向设备与训练",
+        "summary": "分别看 FP4 字节、专家并行和稳定性。",
+        "sections": [
+          "ds4-balance",
+          "ds4-fp4",
+          "ds4-systems",
+          "ds4-training"
+        ]
+      },
+      {
+        "id": "ds4-stage-review",
+        "title": "用反例复核与查阅来源",
+        "summary": "区分教学模型和实测。",
+        "sections": [
+          "ds4-boundaries",
+          "ds4-sources"
+        ]
+      }
+    ],
+    "questions": [
+      {
+        "id": "hash-weights",
+        "q": "Hash MoE 是固定专家，为什么还需要路由器？",
+        "a": "token ID 决定选中的专家编号，当前隐藏向量仍参与计算被选专家的合并权重。",
+        "followup": "相同 token ID 在不同上下文中的专家 ID 和权重各有什么变化？"
+      },
+      {
+        "id": "bias-weight",
+        "q": "V4 的平衡 bias 怎样影响选择与输出？",
+        "a": "bias 加到分数上用于选择，输出权重取选中专家的原始分数并归一化。bias 可通过改变选中集合间接改变权重。",
+        "followup": "为什么辅助损失免费不代表训练中完全没有序列级辅助损失？"
+      },
+      {
+        "id": "capacity-bandwidth",
+        "q": "专家权重从 FP8 变 FP4，就一定快两倍吗？",
+        "a": "纯矩阵数据位数减半，但量化 scale、访问复用、kernel、通信、其他模块与硬件都会影响结果。",
+        "followup": "需要怎样的工作负载和计时边界才能支持端到端结论？"
+      }
+    ],
+    "sources": [
+      {
+        "label": "DeepSeek V4 技术报告",
+        "kind": "官方报告",
+        "note": "§2.1、§4.2、§5.2；2026-10-28 核验。",
+        "url": "https://arxiv.org/html/2606.19348"
+      },
+      {
+        "label": "DeepSeek V3 技术报告",
+        "kind": "官方报告",
+        "note": "V3 对照。",
+        "url": "https://arxiv.org/abs/2412.19437"
+      },
+      {
+        "label": "V4 Flash 官方参考代码",
+        "kind": "固定版本源码",
+        "note": "Gate、Expert 和 MoE；不是生产性能实验。",
+        "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash/blob/60d8d70770c6776ff598c94bb586a859a38244f1/inference/model.py#L546"
+      }
+    ],
+    "takeaways": [
+      "Hash 固定专家身份但不固定输出权重。",
+      "专家纯矩阵字节、模型激活参数与实际流量不能互相替代。",
+      "节点约束变化与 FP4 的系统影响需要结合真实工作负载测量。"
+    ]
+  }
+]
