@@ -18,27 +18,27 @@
       {
         "id": "provenance",
         "title": "这些题分别来自哪里",
-        "html": "<table><thead><tr><th>题型</th><th>来源身份</th><th>本站训练变体</th></tr></thead><tbody><tr><td>K个一组反转链表</td><td>S08：沐曦2023年两年经验社招</td><td>原地改链、保留不足K的尾组、检查节点身份</td></tr><tr><td>堆排序</td><td>S14：理想约2025年图编译实习，最后口述</td><td>手写sift-down、边界和复杂度</td></tr><tr><td>nth_element / selection</td><td>S13：美团2025春招实习条目</td><td>零基第k小、三路分区、重复值</td></tr><tr><td>GPU TopK</td><td>S06：摩尔线程2026秋招相邻岗位</td><td>先写确定性的CPU oracle，再讨论GPU方案</td></tr></tbody></table><p>不把CPU heap实现称为完成GPU TopK。它用于明确排序、tie、索引和数值合同，GPU版本还要解决分块、合并、同步与性能。</p>"
+        "html": "<table><thead><tr><th>题型</th><th>来源身份</th><th>本站训练变体</th></tr></thead><tbody><tr><td>K个一组反转链表（<a href=\"https://leetcode.cn/problems/reverse-nodes-in-k-group/\">力扣 25 · K 个一组翻转链表</a>）</td><td>S08：沐曦2023年两年经验社招</td><td>原地改链、保留不足K的尾组、检查节点身份</td></tr><tr><td>堆排序</td><td>S14：理想约2025年图编译实习，最后口述</td><td>手写sift-down、边界和复杂度</td></tr><tr><td>nth_element / selection</td><td>S13：美团2025春招实习条目</td><td>零基第k小、三路分区、重复值</td></tr><tr><td>GPU TopK</td><td>S06：摩尔线程2026秋招相邻岗位</td><td>先写确定性的CPU oracle，再讨论GPU方案</td></tr></tbody></table><p>不把CPU heap实现称为完成GPU TopK。它用于明确排序、tie、索引和数值合同，GPU版本还要解决分块、合并、同步与性能。</p><p>下文的力扣中国站链接用于对照题意与在线练习；标为“相关练习”的条目不代表面经原帖明确使用了该力扣题号，具体差异见各节说明。</p>"
       },
       {
         "id": "linked",
         "title": "K组反转：先找到下一组的边界",
-        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 760 145\" role=\"img\" aria-label=\"一组链表翻转前后的边界\"><rect x=\"127.0\" y=\"30\" width=\"150\" height=\"84\" rx=\"5\" fill=\"#e1e9d8\" stroke=\"#708d69\"/><text x=\"202.0\" y=\"61\" text-anchor=\"middle\" font-size=\"14\" fill=\"#254438\">before</text><text x=\"202.0\" y=\"89\" text-anchor=\"middle\" font-size=\"11\" fill=\"#54704d\">组前哨兵</text><rect x=\"305.0\" y=\"30\" width=\"150\" height=\"84\" rx=\"5\" fill=\"#e1e9d8\" stroke=\"#708d69\"/><text x=\"380.0\" y=\"61\" text-anchor=\"middle\" font-size=\"14\" fill=\"#254438\">head … end</text><text x=\"380.0\" y=\"89\" text-anchor=\"middle\" font-size=\"11\" fill=\"#54704d\">恰好 K 个节点</text><path d=\"M280.0 72h20m-6-5 6 5-6 5\" fill=\"none\" stroke=\"#a87952\"/><rect x=\"483.0\" y=\"30\" width=\"150\" height=\"84\" rx=\"5\" fill=\"#e1e9d8\" stroke=\"#708d69\"/><text x=\"558.0\" y=\"61\" text-anchor=\"middle\" font-size=\"14\" fill=\"#254438\">after</text><text x=\"558.0\" y=\"89\" text-anchor=\"middle\" font-size=\"11\" fill=\"#54704d\">下一组首节点</text><path d=\"M458.0 72h20m-6-5 6 5-6 5\" fill=\"none\" stroke=\"#a87952\"/></svg><figcaption>必须先找到end，确认完整K组；after作为反转终止哨兵，old_head成为新的组尾。</figcaption></figure><p>不变量：before之前的组已完成；before.next是未处理后缀。先前进K步，若不足则直接返回。设置previous=after，逐个翻转边，使原head最终指向after；最后把before.next接到原end。输入链表必须无环且由调用者持有，算法不创建/释放业务节点。</p><pre data-reference=\"reverse_k_group\"><code>def reverse_k_group(head, k):\n    &quot;&quot;&quot;Reverse complete groups in an acyclic list; preserve a short tail.&quot;&quot;&quot;\n    if k &lt; 1:\n        raise ValueError(&#x27;k must be positive&#x27;)\n    dummy = Node(0, head)\n    before = dummy\n    while True:\n        end = before\n        for _ in range(k):\n            end = end.next\n            if end is None:\n                return dummy.next\n        after, current = end.next, before.next\n        old_head, previous = current, after\n        while current is not after:\n            following = current.next\n            current.next = previous\n            previous, current = current, following\n        before.next = end\n        before = old_head</code></pre><p>时间O(n)，额外空间O(1)。测试不只看输出值，还验证原节点身份集合保持不变且结果没有环。<a href=\"https://github.com/Xuanwen-Wang/interview/blob/main/practice/coding.cpp\">C++17版本</a>保留同样合同，避免把数组倒序误当链表题。</p>"
+        "html": "<p><strong>力扣原题：</strong><a href=\"https://leetcode.cn/problems/reverse-nodes-in-k-group/\">力扣 25 · K 个一组翻转链表</a>。题意对应“每K个节点翻转、不足一组保持原序、实际改链而非只交换值”；本站额外覆盖空链表、k&gt;n等边界。</p><figure class=\"diagram\"><svg viewBox=\"0 0 760 145\" role=\"img\" aria-label=\"一组链表翻转前后的边界\"><rect x=\"127.0\" y=\"30\" width=\"150\" height=\"84\" rx=\"5\" fill=\"#e1e9d8\" stroke=\"#708d69\"/><text x=\"202.0\" y=\"61\" text-anchor=\"middle\" font-size=\"14\" fill=\"#254438\">before</text><text x=\"202.0\" y=\"89\" text-anchor=\"middle\" font-size=\"11\" fill=\"#54704d\">组前哨兵</text><rect x=\"305.0\" y=\"30\" width=\"150\" height=\"84\" rx=\"5\" fill=\"#e1e9d8\" stroke=\"#708d69\"/><text x=\"380.0\" y=\"61\" text-anchor=\"middle\" font-size=\"14\" fill=\"#254438\">head … end</text><text x=\"380.0\" y=\"89\" text-anchor=\"middle\" font-size=\"11\" fill=\"#54704d\">恰好 K 个节点</text><path d=\"M280.0 72h20m-6-5 6 5-6 5\" fill=\"none\" stroke=\"#a87952\"/><rect x=\"483.0\" y=\"30\" width=\"150\" height=\"84\" rx=\"5\" fill=\"#e1e9d8\" stroke=\"#708d69\"/><text x=\"558.0\" y=\"61\" text-anchor=\"middle\" font-size=\"14\" fill=\"#254438\">after</text><text x=\"558.0\" y=\"89\" text-anchor=\"middle\" font-size=\"11\" fill=\"#54704d\">下一组首节点</text><path d=\"M458.0 72h20m-6-5 6 5-6 5\" fill=\"none\" stroke=\"#a87952\"/></svg><figcaption>必须先找到end，确认完整K组；after作为反转终止哨兵，old_head成为新的组尾。</figcaption></figure><p>不变量：before之前的组已完成；before.next是未处理后缀。先前进K步，若不足则直接返回。设置previous=after，逐个翻转边，使原head最终指向after；最后把before.next接到原end。输入链表必须无环且由调用者持有，算法不创建/释放业务节点。</p><pre data-reference=\"reverse_k_group\"><code>def reverse_k_group(head, k):\n    &quot;&quot;&quot;Reverse complete groups in an acyclic list; preserve a short tail.&quot;&quot;&quot;\n    if k &lt; 1:\n        raise ValueError(&#x27;k must be positive&#x27;)\n    dummy = Node(0, head)\n    before = dummy\n    while True:\n        end = before\n        for _ in range(k):\n            end = end.next\n            if end is None:\n                return dummy.next\n        after, current = end.next, before.next\n        old_head, previous = current, after\n        while current is not after:\n            following = current.next\n            current.next = previous\n            previous, current = current, following\n        before.next = end\n        before = old_head</code></pre><p>时间O(n)，额外空间O(1)。测试不只看输出值，还验证原节点身份集合保持不变且结果没有环。<a href=\"https://github.com/Xuanwen-Wang/interview/blob/main/practice/coding.cpp\">C++17版本</a>保留同样合同，避免把数组倒序误当链表题。</p>"
       },
       {
         "id": "heap",
         "title": "堆排序：建堆为什么是O(n)",
-        "html": "<p>max heap维持父节点不小于孩子。建堆从最后一个非叶子向前sift-down；排序阶段把最大值换到当前末尾，缩短有效heap并修复根。每轮有序后缀长度加一，而剩余前缀保持heap。</p><pre data-reference=\"heap_sort\"><code>def heap_sort(values):\n    &quot;&quot;&quot;In-place ascending heapsort, O(n log n) time and O(1) extra space.&quot;&quot;&quot;\n    def down(i, end):\n        while 2 * i + 1 &lt; end:\n            child = 2 * i + 1\n            if child + 1 &lt; end and values[child + 1] &gt; values[child]:\n                child += 1\n            if values[i] &gt;= values[child]:\n                break\n            values[i], values[child] = values[child], values[i]\n            i = child\n    n = len(values)\n    for i in range(n // 2 - 1, -1, -1):\n        down(i, n)\n    for end in range(n - 1, 0, -1):\n        values[0], values[end] = values[end], values[0]\n        down(0, end)</code></pre><p>建堆不是每个节点都走log n层。高度h的节点至多约n/2^(h+1)，总成本∑h·n/2^(h+1)=O(n)。之后n次取顶各O(log n)，总O(n log n)，不稳定、原地。C++无符号下标倒数循环应避免i&gt;=0永真和size−1在空数组下溢。</p>"
+        "html": "<p><strong>力扣相关练习：</strong><a href=\"https://leetcode.cn/problems/sort-an-array/\">力扣 912 · 排序数组</a>。该题要求升序排序，可用本节的堆排序练习；题目本身不限定必须使用堆排序。</p><p>max heap维持父节点不小于孩子。建堆从最后一个非叶子向前sift-down；排序阶段把最大值换到当前末尾，缩短有效heap并修复根。每轮有序后缀长度加一，而剩余前缀保持heap。</p><pre data-reference=\"heap_sort\"><code>def heap_sort(values):\n    &quot;&quot;&quot;In-place ascending heapsort, O(n log n) time and O(1) extra space.&quot;&quot;&quot;\n    def down(i, end):\n        while 2 * i + 1 &lt; end:\n            child = 2 * i + 1\n            if child + 1 &lt; end and values[child + 1] &gt; values[child]:\n                child += 1\n            if values[i] &gt;= values[child]:\n                break\n            values[i], values[child] = values[child], values[i]\n            i = child\n    n = len(values)\n    for i in range(n // 2 - 1, -1, -1):\n        down(i, n)\n    for end in range(n - 1, 0, -1):\n        values[0], values[end] = values[end], values[0]\n        down(0, end)</code></pre><p>建堆不是每个节点都走log n层。高度h的节点至多约n/2^(h+1)，总成本∑h·n/2^(h+1)=O(n)。之后n次取顶各O(log n)，总O(n log n)，不稳定、原地。C++无符号下标倒数循环应避免i&gt;=0永真和size−1在空数组下溢。</p>"
       },
       {
         "id": "selection",
         "title": "第k小与TopK并不是同一个输出合同",
-        "html": "<p>nth_element类问题只要求分区位置正确，通常不要求前k个有序。下面参考函数返回第k小的值，k从0开始，为保留调用者输入复制一份列表；三路分区把重复pivot值集中，避免相同值导致无进展。固定pivot策略最坏仍可能O(n²)，不能宣称最坏线性。</p><pre data-reference=\"kth_smallest\"><code>def kth_smallest(values, k):\n    &quot;&quot;&quot;Zero-based order statistic; copied input and three-way partition.&quot;&quot;&quot;\n    if not 0 &lt;= k &lt; len(values):\n        raise ValueError(&#x27;invalid k&#x27;)\n    a = list(values)\n    lo, hi = 0, len(a)\n    while True:\n        pivot = a[(lo + hi) // 2]\n        lower, current, upper = lo, lo, hi\n        while current &lt; upper:\n            if a[current] &lt; pivot:\n                a[lower], a[current] = a[current], a[lower]\n                lower += 1\n                current += 1\n            elif a[current] &gt; pivot:\n                upper -= 1\n                a[current], a[upper] = a[upper], a[current]\n            else:\n                current += 1\n        if k &lt; lower:\n            hi = lower\n        elif k &gt;= upper:\n            lo = upper\n        else:\n            return pivot</code></pre><p>如果面试要求最坏O(n)，需要median-of-medians等算法；如果采用随机pivot，应说明期望而非最坏复杂度。调试重点是半开区间[lo,hi)、upper边界和交换后current是否应增加。</p>"
+        "html": "<p><strong>力扣相关练习：</strong><a href=\"https://leetcode.cn/problems/kth-largest-element-in-an-array/\">力扣 215 · 数组中的第K个最大元素</a>。力扣使用从1开始的“第k大”，本节使用从0开始的“第k小”；长度为n时，前者对应<code>kth_smallest(nums, n - k)</code>。该转换只对齐返回值；本节固定pivot教学实现不保证力扣题面要求的O(n)时间。</p><p>nth_element类问题只要求分区位置正确，通常不要求前k个有序。下面参考函数返回第k小的值，k从0开始，为保留调用者输入复制一份列表；三路分区把重复pivot值集中，避免相同值导致无进展。固定pivot策略最坏仍可能O(n²)，不能宣称最坏线性。</p><pre data-reference=\"kth_smallest\"><code>def kth_smallest(values, k):\n    &quot;&quot;&quot;Zero-based order statistic; copied input and three-way partition.&quot;&quot;&quot;\n    if not 0 &lt;= k &lt; len(values):\n        raise ValueError(&#x27;invalid k&#x27;)\n    a = list(values)\n    lo, hi = 0, len(a)\n    while True:\n        pivot = a[(lo + hi) // 2]\n        lower, current, upper = lo, lo, hi\n        while current &lt; upper:\n            if a[current] &lt; pivot:\n                a[lower], a[current] = a[current], a[lower]\n                lower += 1\n                current += 1\n            elif a[current] &gt; pivot:\n                upper -= 1\n                a[current], a[upper] = a[upper], a[current]\n            else:\n                current += 1\n        if k &lt; lower:\n            hi = lower\n        elif k &gt;= upper:\n            lo = upper\n        else:\n            return pivot</code></pre><p>如果面试要求最坏O(n)，需要median-of-medians等算法；如果采用随机pivot，应说明期望而非最坏复杂度。调试重点是半开区间[lo,hi)、upper边界和交换后current是否应增加。</p>"
       },
       {
         "id": "topk",
         "title": "TopK：排序顺序与tie规则必须固定",
-        "html": "<p>合同：分数降序，分数相同优先较小原下标；k=0返回空，k超界报错；本练习只接受有限分数。维护大小k的最小堆，堆顶为“当前入选中最差项”；键(score,−index)使较大的index在同分时更差。</p><pre data-reference=\"topk_indices\"><code>def topk_indices(values, k):\n    &quot;&quot;&quot;Descending finite scores; ties prefer lower indices. k may be zero.&quot;&quot;&quot;\n    if not 0 &lt;= k &lt;= len(values) or not all(math.isfinite(x) for x in values):\n        raise ValueError(&#x27;invalid k or non-finite score&#x27;)\n    if k == 0:\n        return []\n    heap = []\n    for i, score in enumerate(values):\n        item = (score, -i, i)\n        if len(heap) &lt; k:\n            heapq.heappush(heap, item)\n        elif item &gt; heap[0]:\n            heapq.heapreplace(heap, item)\n    return [i for _, _, i in sorted(heap, key=lambda t: (-t[0], t[2]))]</code></pre><p>复杂度O(n log k+k log k)，空间O(k)。GPU可用warp内选择、bitonic/topK网络、block局部候选再合并等，但必须证明保留的候选覆盖全局TopK。按expert group先裁剪和全局TopK不是无条件等价。把相同分数与NaN政策写成测试，否则不同硬件可能输出不同专家ID。</p>"
+        "html": "<p><strong>力扣相关练习：</strong><a href=\"https://leetcode.cn/problems/kth-largest-element-in-an-array/\">力扣 215 · 数组中的第K个最大元素</a>可用于练习选择阈值；它只返回第k大的值，本节则返回有序TopK下标并规定同分顺序，GPU实现仍需单独验证。</p><p>合同：分数降序，分数相同优先较小原下标；k=0返回空，k超界报错；本练习只接受有限分数。维护大小k的最小堆，堆顶为“当前入选中最差项”；键(score,−index)使较大的index在同分时更差。</p><pre data-reference=\"topk_indices\"><code>def topk_indices(values, k):\n    &quot;&quot;&quot;Descending finite scores; ties prefer lower indices. k may be zero.&quot;&quot;&quot;\n    if not 0 &lt;= k &lt;= len(values) or not all(math.isfinite(x) for x in values):\n        raise ValueError(&#x27;invalid k or non-finite score&#x27;)\n    if k == 0:\n        return []\n    heap = []\n    for i, score in enumerate(values):\n        item = (score, -i, i)\n        if len(heap) &lt; k:\n            heapq.heappush(heap, item)\n        elif item &gt; heap[0]:\n            heapq.heapreplace(heap, item)\n    return [i for _, _, i in sorted(heap, key=lambda t: (-t[0], t[2]))]</code></pre><p>复杂度O(n log k+k log k)，空间O(k)。GPU可用warp内选择、bitonic/topK网络、block局部候选再合并等，但必须证明保留的候选覆盖全局TopK。按expert group先裁剪和全局TopK不是无条件等价。把相同分数与NaN政策写成测试，否则不同硬件可能输出不同专家ID。</p>"
       },
       {
         "id": "tests",
@@ -108,6 +108,27 @@
         "url": "https://github.com/Xuanwen-Wang/interview/tree/main/practice",
         "note": "Python标准库与C++17；不是公司正式作业解答",
         "kind": "原创教学代码"
+      },
+      {
+        "id": "LC25",
+        "label": "力扣 25 · K 个一组翻转链表",
+        "url": "https://leetcode.cn/problems/reverse-nodes-in-k-group/",
+        "note": "对应K组翻转题意；本站另有空链表等边界扩展。",
+        "kind": "力扣官方题面"
+      },
+      {
+        "id": "LC912",
+        "label": "力扣 912 · 排序数组",
+        "url": "https://leetcode.cn/problems/sort-an-array/",
+        "note": "相关排序练习；不限定堆排序。",
+        "kind": "力扣官方题面"
+      },
+      {
+        "id": "LC215",
+        "label": "力扣 215 · 数组中的第K个最大元素",
+        "url": "https://leetcode.cn/problems/kth-largest-element-in-an-array/",
+        "note": "相关选择练习；第k大与本站零基第k小、TopK下标合同不同。",
+        "kind": "力扣官方题面"
       }
     ],
     "takeaways": [
@@ -140,7 +161,7 @@
       {
         "id": "topology",
         "title": "Kahn算法与重复边",
-        "html": "<p>从所有入度0节点出发；移出一个节点就删除其出边。最后若输出节点少于n，存在环。重复输入边必须与入度更新采用一致处理：本实现先去重；若不去重，也必须增减同样次数。</p><pre data-reference=\"topological_order\"><code>def topological_order(n, edges):\n    &quot;&quot;&quot;Kahn&#x27;s algorithm on nodes 0..n-1. Duplicate edges are deduplicated.&quot;&quot;&quot;\n    if n &lt; 0:\n        raise ValueError(&#x27;negative node count&#x27;)\n    successors, degree, seen = [[] for _ in range(n)], [0] * n, set()\n    for u, v in edges:\n        if not (0 &lt;= u &lt; n and 0 &lt;= v &lt; n):\n            raise ValueError(&#x27;unknown node&#x27;)\n        if (u, v) not in seen:\n            seen.add((u, v))\n            successors[u].append(v)\n            degree[v] += 1\n    ready = deque(i for i in range(n) if degree[i] == 0)\n    order = []\n    while ready:\n        u = ready.popleft()\n        order.append(u)\n        for v in successors[u]:\n            degree[v] -= 1\n            if degree[v] == 0:\n                ready.append(v)\n    if len(order) != n:\n        raise ValueError(&#x27;cycle&#x27;)\n    return order</code></pre><p>队列实现O(V+E)，内存O(V+E)。若用heap保证每次选字典序最小ready，复杂度会增加，属于额外合同。CFG中的循环不能用“报cycle”处理掉，而要进入循环分析或固定点求解。</p>"
+        "html": "<p><strong>力扣相关练习：</strong><a href=\"https://leetcode.cn/problems/course-schedule/\">力扣 207 · 课程表</a>练习判断能否完成全部课程，<a href=\"https://leetcode.cn/problems/course-schedule-ii/\">力扣 210 · 课程表 II</a>练习输出拓扑序。先修对<code>[a, b]</code>表示边<code>b → a</code>；本节接口接收<code>(u, v)</code>表示<code>u → v</code>，有环时抛错，提交时需按题意转换输入和返回值。</p><p>从所有入度0节点出发；移出一个节点就删除其出边。最后若输出节点少于n，存在环。重复输入边必须与入度更新采用一致处理：本实现先去重；若不去重，也必须增减同样次数。</p><pre data-reference=\"topological_order\"><code>def topological_order(n, edges):\n    &quot;&quot;&quot;Kahn&#x27;s algorithm on nodes 0..n-1. Duplicate edges are deduplicated.&quot;&quot;&quot;\n    if n &lt; 0:\n        raise ValueError(&#x27;negative node count&#x27;)\n    successors, degree, seen = [[] for _ in range(n)], [0] * n, set()\n    for u, v in edges:\n        if not (0 &lt;= u &lt; n and 0 &lt;= v &lt; n):\n            raise ValueError(&#x27;unknown node&#x27;)\n        if (u, v) not in seen:\n            seen.add((u, v))\n            successors[u].append(v)\n            degree[v] += 1\n    ready = deque(i for i in range(n) if degree[i] == 0)\n    order = []\n    while ready:\n        u = ready.popleft()\n        order.append(u)\n        for v in successors[u]:\n            degree[v] -= 1\n            if degree[v] == 0:\n                ready.append(v)\n    if len(order) != n:\n        raise ValueError(&#x27;cycle&#x27;)\n    return order</code></pre><p>队列实现O(V+E)，内存O(V+E)。若用heap保证每次选字典序最小ready，复杂度会增加，属于额外合同。CFG中的循环不能用“报cycle”处理掉，而要进入循环分析或固定点求解。</p>"
       },
       {
         "id": "liveness",
@@ -218,6 +239,20 @@
         "url": "https://github.com/Xuanwen-Wang/interview/tree/main/practice",
         "note": "Python标准库与C++17；不是公司正式作业解答",
         "kind": "原创教学代码"
+      },
+      {
+        "id": "LC207",
+        "label": "力扣 207 · 课程表",
+        "url": "https://leetcode.cn/problems/course-schedule/",
+        "note": "相关拓扑练习；返回能否完成全部课程的布尔值。",
+        "kind": "力扣官方题面"
+      },
+      {
+        "id": "LC210",
+        "label": "力扣 210 · 课程表 II",
+        "url": "https://leetcode.cn/problems/course-schedule-ii/",
+        "note": "相关拓扑练习；返回课程顺序，有环返回空数组。",
+        "kind": "力扣官方题面"
       }
     ],
     "takeaways": [
@@ -255,7 +290,7 @@
       {
         "id": "transpose",
         "title": "CPU cache tile → GPU shared tile：分别说明原题与扩展",
-        "html": "<p><strong>来源边界：</strong>S05原题要求用C++给CPU矩阵转置做tiling以减少cache miss。下面先实现该合同；后面的CUDA版本是本站延伸，不表示原帖考了GPU转置。</p><p>CPU行主序朴素转置：连续读A，但以rows为步长写B。分块让若干输出cache line在被驱逐前接收更多写入。tile大小应由cache容量、关联度、cache line、dtype与向量化共同决定；这个实现验证结果，不给出通用最佳tile或性能承诺。</p><pre><code>std::vector&lt;float&gt; tiled_transpose(const std::vector&lt;float&gt;&amp; input,\n                                   std::size_t rows, std::size_t cols,\n                                   std::size_t tile) {\n  if (!tile || (cols &amp;&amp; rows &gt; std::numeric_limits&lt;std::size_t&gt;::max() / cols)\n      || input.size() != rows * cols)\n    throw std::invalid_argument(&quot;invalid shape or tile&quot;);\n  std::vector&lt;float&gt; output(input.size());\n  if (!rows || !cols) return output;\n  for (std::size_t r = 0; r &lt; rows;) {\n    const auto re = r + std::min(tile, rows - r);\n    for (std::size_t c = 0; c &lt; cols;) {\n      const auto ce = c + std::min(tile, cols - c);\n      for (std::size_t i = r; i &lt; re; ++i)\n        for (std::size_t j = c; j &lt; ce; ++j)\n          output[j * rows + i] = input[i * cols + j];\n      c = ce;\n    }\n    r = re;\n  }\n  return output;\n}</code></pre><p>输入输出不重叠，rows×cols必须匹配容器长度，tile必须大于0；尾块用min截断。测试覆盖空矩阵、非方阵、跨tile边界、tile大于矩阵以及转置两次恢复输入。对应代码见<a href=\"https://github.com/Xuanwen-Wang/interview/blob/main/practice/coding.cpp\">C++参考实现</a>。</p><h3>扩展到CUDA：布局桥与block同步</h3><figure class=\"diagram\"><svg viewBox=\"0 0 760 145\" role=\"img\" aria-label=\"转置的输入连续读取与输出连续写入\"><rect x=\"127.0\" y=\"30\" width=\"150\" height=\"84\" rx=\"5\" fill=\"#e1e9d8\" stroke=\"#708d69\"/><text x=\"202.0\" y=\"61\" text-anchor=\"middle\" font-size=\"14\" fill=\"#254438\">A row-major</text><text x=\"202.0\" y=\"89\" text-anchor=\"middle\" font-size=\"11\" fill=\"#54704d\">load contiguous x</text><rect x=\"305.0\" y=\"30\" width=\"150\" height=\"84\" rx=\"5\" fill=\"#e1e9d8\" stroke=\"#708d69\"/><text x=\"380.0\" y=\"61\" text-anchor=\"middle\" font-size=\"14\" fill=\"#254438\">tile[32][33]</text><text x=\"380.0\" y=\"89\" text-anchor=\"middle\" font-size=\"11\" fill=\"#54704d\">block-wide barrier</text><path d=\"M280.0 72h20m-6-5 6 5-6 5\" fill=\"none\" stroke=\"#a87952\"/><rect x=\"483.0\" y=\"30\" width=\"150\" height=\"84\" rx=\"5\" fill=\"#e1e9d8\" stroke=\"#708d69\"/><text x=\"558.0\" y=\"61\" text-anchor=\"middle\" font-size=\"14\" fill=\"#254438\">B row-major</text><text x=\"558.0\" y=\"89\" text-anchor=\"middle\" font-size=\"11\" fill=\"#54704d\">store transposed tile</text><path d=\"M458.0 72h20m-6-5 6 5-6 5\" fill=\"none\" stroke=\"#a87952\"/></svg><figcaption>固定block=(32,8)，四轮处理32行；padding改变共享内存bank映射。不是所有dtype或访问宽度都能照搬。</figcaption></figure><p>输入偏移<code>(block_y·32+ty+j)·N + block_x·32+tx</code>；输出坐标交换block_x/block_y，再读取共享tile[tx][ty+j]。同一tile里的数据先统一完成加载，再转成另一组thread到element的映射。</p><p>mask分别针对输入x&lt;N,y+j&lt;M和输出ox&lt;M,oy+j&lt;N。<code>__syncthreads()</code>放在边界判断外，让整个block参加。测试应包括1×1、17×35、32×32、33×65和非方阵；输出另分配，原地transpose是另一个算法合同。</p>"
+        "html": "<p><strong>力扣相关练习：</strong><a href=\"https://leetcode.cn/problems/transpose-matrix/\">力扣 867 · 转置矩阵</a>。可先核对矩阵行列交换的结果，再做本节CPU分块与CUDA扩展；力扣题目没有cache tiling或GPU实现要求。</p><p><strong>来源边界：</strong>S05原题要求用C++给CPU矩阵转置做tiling以减少cache miss。下面先实现该合同；后面的CUDA版本是本站延伸，不表示原帖考了GPU转置。</p><p>CPU行主序朴素转置：连续读A，但以rows为步长写B。分块让若干输出cache line在被驱逐前接收更多写入。tile大小应由cache容量、关联度、cache line、dtype与向量化共同决定；这个实现验证结果，不给出通用最佳tile或性能承诺。</p><pre><code>std::vector&lt;float&gt; tiled_transpose(const std::vector&lt;float&gt;&amp; input,\n                                   std::size_t rows, std::size_t cols,\n                                   std::size_t tile) {\n  if (!tile || (cols &amp;&amp; rows &gt; std::numeric_limits&lt;std::size_t&gt;::max() / cols)\n      || input.size() != rows * cols)\n    throw std::invalid_argument(&quot;invalid shape or tile&quot;);\n  std::vector&lt;float&gt; output(input.size());\n  if (!rows || !cols) return output;\n  for (std::size_t r = 0; r &lt; rows;) {\n    const auto re = r + std::min(tile, rows - r);\n    for (std::size_t c = 0; c &lt; cols;) {\n      const auto ce = c + std::min(tile, cols - c);\n      for (std::size_t i = r; i &lt; re; ++i)\n        for (std::size_t j = c; j &lt; ce; ++j)\n          output[j * rows + i] = input[i * cols + j];\n      c = ce;\n    }\n    r = re;\n  }\n  return output;\n}</code></pre><p>输入输出不重叠，rows×cols必须匹配容器长度，tile必须大于0；尾块用min截断。测试覆盖空矩阵、非方阵、跨tile边界、tile大于矩阵以及转置两次恢复输入。对应代码见<a href=\"https://github.com/Xuanwen-Wang/interview/blob/main/practice/coding.cpp\">C++参考实现</a>。</p><h3>扩展到CUDA：布局桥与block同步</h3><figure class=\"diagram\"><svg viewBox=\"0 0 760 145\" role=\"img\" aria-label=\"转置的输入连续读取与输出连续写入\"><rect x=\"127.0\" y=\"30\" width=\"150\" height=\"84\" rx=\"5\" fill=\"#e1e9d8\" stroke=\"#708d69\"/><text x=\"202.0\" y=\"61\" text-anchor=\"middle\" font-size=\"14\" fill=\"#254438\">A row-major</text><text x=\"202.0\" y=\"89\" text-anchor=\"middle\" font-size=\"11\" fill=\"#54704d\">load contiguous x</text><rect x=\"305.0\" y=\"30\" width=\"150\" height=\"84\" rx=\"5\" fill=\"#e1e9d8\" stroke=\"#708d69\"/><text x=\"380.0\" y=\"61\" text-anchor=\"middle\" font-size=\"14\" fill=\"#254438\">tile[32][33]</text><text x=\"380.0\" y=\"89\" text-anchor=\"middle\" font-size=\"11\" fill=\"#54704d\">block-wide barrier</text><path d=\"M280.0 72h20m-6-5 6 5-6 5\" fill=\"none\" stroke=\"#a87952\"/><rect x=\"483.0\" y=\"30\" width=\"150\" height=\"84\" rx=\"5\" fill=\"#e1e9d8\" stroke=\"#708d69\"/><text x=\"558.0\" y=\"61\" text-anchor=\"middle\" font-size=\"14\" fill=\"#254438\">B row-major</text><text x=\"558.0\" y=\"89\" text-anchor=\"middle\" font-size=\"11\" fill=\"#54704d\">store transposed tile</text><path d=\"M458.0 72h20m-6-5 6 5-6 5\" fill=\"none\" stroke=\"#a87952\"/></svg><figcaption>固定block=(32,8)，四轮处理32行；padding改变共享内存bank映射。不是所有dtype或访问宽度都能照搬。</figcaption></figure><p>输入偏移<code>(block_y·32+ty+j)·N + block_x·32+tx</code>；输出坐标交换block_x/block_y，再读取共享tile[tx][ty+j]。同一tile里的数据先统一完成加载，再转成另一组thread到element的映射。</p><p>mask分别针对输入x&lt;N,y+j&lt;M和输出ox&lt;M,oy+j&lt;N。<code>__syncthreads()</code>放在边界判断外，让整个block参加。测试应包括1×1、17×35、32×32、33×65和非方阵；输出另分配，原地transpose是另一个算法合同。</p>"
       },
       {
         "id": "convolution",
@@ -265,12 +300,12 @@
       {
         "id": "filter",
         "title": "均值滤波的边界除数是题目合同",
-        "html": "<p>3×3零padding固定除9，与“只除有效邻居数”是不同算子。2×2全1输入，固定除9时每个输出都是4/9；若只除有效邻居数，输出全1。没有明确边界规则时，两个看似合理的实现会彼此判错。</p><p>朴素GPU每线程一个输出，最多九次输入load和一次store。相邻输出窗口大量重叠，可用shared tile连同halo缓存；B×B输出需要(B+2)²输入，理想输入摊销从9降到(B+2)²/B²。这个比率是逻辑读取模型，不是一定获得同等加速：全局cache已可能复用，还有同步/SMEM和线程资源开销。</p>"
+        "html": "<p><strong>力扣相关练习：</strong><a href=\"https://leetcode.cn/problems/image-smoother/\">力扣 661 · 图片平滑器</a>。力扣按有效邻居数求平均并向下取整；本节采用零padding、固定除9且保留浮点结果，边界和输出数值合同不同，不能直接提交同一实现。</p><p>3×3零padding固定除9，与“只除有效邻居数”是不同算子。2×2全1输入，固定除9时每个输出都是4/9；若只除有效邻居数，输出全1。没有明确边界规则时，两个看似合理的实现会彼此判错。</p><p>朴素GPU每线程一个输出，最多九次输入load和一次store。相邻输出窗口大量重叠，可用shared tile连同halo缓存；B×B输出需要(B+2)²输入，理想输入摊销从9降到(B+2)²/B²。这个比率是逻辑读取模型，不是一定获得同等加速：全局cache已可能复用，还有同步/SMEM和线程资源开销。</p>"
       },
       {
         "id": "scan",
         "title": "Prefix sum：O(n)工作与O(log n)深度",
-        "html": "<p>对[2,1,3,4]，exclusive scan为[0,2,3,6]，inclusive为[2,3,6,10]。Blelloch先up-sweep做树上归约，再把根设为单位元0，down-sweep传播每个子树左边的前缀。非2次幂长度补0后裁回。</p><pre data-reference=\"exclusive_scan\"><code>def exclusive_scan(values):\n    &quot;&quot;&quot;Blelloch tree simulated on CPU; zero padding to a power of two.&quot;&quot;&quot;\n    if not values:\n        return []\n    size = 1 &lt;&lt; (len(values) - 1).bit_length()\n    work = list(values) + [0] * (size - len(values))\n    step = 2\n    while step &lt;= size:\n        for end in range(step - 1, size, step):\n            work[end] += work[end - step // 2]\n        step *= 2\n    work[-1] = 0\n    step = size\n    while step &gt;= 2:\n        for end in range(step - 1, size, step):\n            left = end - step // 2\n            work[left], work[end] = work[end], work[end] + work[left]\n        step //= 2\n    return work[:len(values)]</code></pre><p>GPU上每一树层之间需要正确的同步；跨block不能直接把block barrier当全局barrier。常见分层结构是block局部scan、block总和scan、再加各block偏移。浮点加法不严格结合，换树形顺序可能改变数值；整数模算术和实数证明不能直接代表浮点bitwise等价。</p>"
+        "html": "<p><strong>力扣相关练习：</strong><a href=\"https://leetcode.cn/problems/running-sum-of-1d-array/\">力扣 1480 · 一维数组的动态和</a>。力扣返回包含当前元素的inclusive scan，本节实现exclusive scan；对整数输入可用<code>inclusive[i] = exclusive[i] + nums[i]</code>转换结果。力扣题目不要求并行Blelloch实现。</p><p>对[2,1,3,4]，exclusive scan为[0,2,3,6]，inclusive为[2,3,6,10]。Blelloch先up-sweep做树上归约，再把根设为单位元0，down-sweep传播每个子树左边的前缀。非2次幂长度补0后裁回。</p><pre data-reference=\"exclusive_scan\"><code>def exclusive_scan(values):\n    &quot;&quot;&quot;Blelloch tree simulated on CPU; zero padding to a power of two.&quot;&quot;&quot;\n    if not values:\n        return []\n    size = 1 &lt;&lt; (len(values) - 1).bit_length()\n    work = list(values) + [0] * (size - len(values))\n    step = 2\n    while step &lt;= size:\n        for end in range(step - 1, size, step):\n            work[end] += work[end - step // 2]\n        step *= 2\n    work[-1] = 0\n    step = size\n    while step &gt;= 2:\n        for end in range(step - 1, size, step):\n            left = end - step // 2\n            work[left], work[end] = work[end], work[end] + work[left]\n        step //= 2\n    return work[:len(values)]</code></pre><p>GPU上每一树层之间需要正确的同步；跨block不能直接把block barrier当全局barrier。常见分层结构是block局部scan、block总和scan、再加各block偏移。浮点加法不严格结合，换树形顺序可能改变数值；整数模算术和实数证明不能直接代表浮点bitwise等价。</p>"
       },
       {
         "id": "validation",
@@ -347,6 +382,27 @@
         "url": "https://github.com/Xuanwen-Wang/interview/tree/main/practice",
         "note": "Python标准库与C++17；不是公司正式作业解答",
         "kind": "原创教学代码"
+      },
+      {
+        "id": "LC867",
+        "label": "力扣 867 · 转置矩阵",
+        "url": "https://leetcode.cn/problems/transpose-matrix/",
+        "note": "相关转置练习；不含CPU tiling或CUDA要求。",
+        "kind": "力扣官方题面"
+      },
+      {
+        "id": "LC661",
+        "label": "力扣 661 · 图片平滑器",
+        "url": "https://leetcode.cn/problems/image-smoother/",
+        "note": "相关均值滤波练习；有效邻居平均并向下取整，与本站固定除9不同。",
+        "kind": "力扣官方题面"
+      },
+      {
+        "id": "LC1480",
+        "label": "力扣 1480 · 一维数组的动态和",
+        "url": "https://leetcode.cn/problems/running-sum-of-1d-array/",
+        "note": "相关前缀和练习；inclusive scan，与本站exclusive scan不同。",
+        "kind": "力扣官方题面"
       }
     ],
     "takeaways": [
