@@ -25,6 +25,7 @@ jobs:
       - name: Validate content and links
         run: |
           python3 scripts/check.py
+          python3 scripts/check_glm53_model.py
           node --check web/app.js
           node --check web/catalog.js
           node --check web/jobs.js

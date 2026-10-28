@@ -1,0 +1,196 @@
+[
+  {
+    "id": "glm53-mhc",
+    "order": 16.7,
+    "title": "GLM-5.3-Flash mHC：四流残差、Sinkhorn 与归一化",
+    "subtitle": "从普通 residual 开始，走完 pre → 主计算 → post → final contract",
+    "part": "GLM-5.3-Flash 部署",
+    "minutes": 55,
+    "level": "进阶 · 数据流",
+    "tags": [
+      "mHC",
+      "Sinkhorn",
+      "RMSNorm",
+      "残差",
+      "融合"
+    ],
+    "lead": "mHC 管的是 Attention 和 FFN 外面的残差通路：四条流如何合成一次主计算输入，结果如何回写，以及为什么要约束流之间的混合。先理解用途，再看 shape、一个可手算例子和当前 Zeus API。",
+    "sections": [
+      {
+        "id": "why-four-streams",
+        "title": "它是做什么的：把普通残差升级成可学习的四流连接",
+        "html": "<p>普通 Transformer 子层常写成 <code>x′ = x + F(Norm(x))</code>。残差旁路让旧信息跨过 Attention 或 FFN，便于深层网络训练。mHC（Manifold-Constrained Hyper-Connections，流形约束超连接）把这条旁路扩为多条流，并学习“哪些流进入主计算、结果写回哪些流、原始流之间怎样混合”。</p><p>GLM-5.3-Flash 使用 <code>hc_mult=4</code>。对当前 T 个 token，残差从 <code>[T,4096]</code> 变成 <code>[T,4,4096]</code>，也可物理展平为 <code>[T,16384]</code>。第二个轴是流编号，最后一个轴才是每流 hidden 坐标。</p><p>这四条流位于每个 Attention / FFN 子层的外面。主计算仍只消费一个 <code>[T,4096]</code> 向量，所以不能按四条流把 Attention GEMM 或专家个数直接乘四。增加的成本在系数生成、残差读写与流混合。该机制的训练收益来自模型设计与论文；本站的静态拆解不重新评估模型质量。</p>"
+      },
+      {
+        "id": "mhc-graph",
+        "title": "沿一次调用：pre、主计算、post 之间传什么",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 1000 745\" role=\"img\" aria-label=\"mHC 的两条依赖：生成系数，并保留原始四流\"><defs><marker id=\"glm-arrow-6\" markerWidth=\"8\" markerHeight=\"8\" refX=\"7\" refY=\"4\" orient=\"auto\"><path d=\"M0 0L8 4L0 8\" fill=\"#657b70\"/></marker></defs><text x=\"24\" y=\"32\" font-family=\"sans-serif\" font-size=\"20\" fill=\"#29463c\" text-anchor=\"start\" font-weight=\"600\">mHC 的两条依赖：生成系数，并保留原始四流</text><rect x=\"24\" y=\"65\" width=\"430\" height=\"94\" rx=\"10\" fill=\"#fbf1e6\" stroke=\"#87542c\" stroke-width=\"1.3\"/><text x=\"239.0\" y=\"93\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#87542c\" text-anchor=\"middle\" font-weight=\"600\">输入残差 X [T,4,4096]</text><text x=\"239.0\" y=\"118\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#87542c\" text-anchor=\"middle\" font-weight=\"400\">每个 token 四条流；每流宽 H4096</text><rect x=\"548\" y=\"65\" width=\"428\" height=\"117\" rx=\"10\" fill=\"#f2edf7\" stroke=\"#66507b\" stroke-width=\"1.3\"/><text x=\"762.0\" y=\"93\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#66507b\" text-anchor=\"middle\" font-weight=\"600\">系数生成器</text><text x=\"762.0\" y=\"118\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#66507b\" text-anchor=\"middle\" font-weight=\"400\">flatten → 无权重 RMSNorm → Linear</text><text x=\"762.0\" y=\"141\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#66507b\" text-anchor=\"middle\" font-weight=\"400\">24 个数 → pre(4) / post(4) / comb(16)</text><path d=\"M454 112H548\" fill=\"none\" stroke=\"#657b70\" stroke-width=\"1.8\" marker-end=\"url(#glm-arrow-6)\"/><rect x=\"24\" y=\"230\" width=\"430\" height=\"94\" rx=\"10\" fill=\"#fbf1e6\" stroke=\"#87542c\" stroke-width=\"1.3\"/><text x=\"239.0\" y=\"258\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#87542c\" text-anchor=\"middle\" font-weight=\"600\">pre 加权混合 → 主层 RMSNorm</text><text x=\"239.0\" y=\"283\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#87542c\" text-anchor=\"middle\" font-weight=\"400\">u = Σ pre[m] × X[m]；x [T,4096]</text><path d=\"M239 159V230\" fill=\"none\" stroke=\"#657b70\" stroke-width=\"1.8\" marker-end=\"url(#glm-arrow-6)\"/><path d=\"M548 143H502V277H454\" fill=\"none\" stroke=\"#657b70\" stroke-width=\"1.8\" marker-end=\"url(#glm-arrow-6)\" stroke-dasharray=\"5 5\"/><rect x=\"24\" y=\"389\" width=\"430\" height=\"94\" rx=\"10\" fill=\"#edf2f7\" stroke=\"#365b78\" stroke-width=\"1.3\"/><text x=\"239.0\" y=\"417\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#365b78\" text-anchor=\"middle\" font-weight=\"600\">F(x)：Attention 或 FFN</text><text x=\"239.0\" y=\"442\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#365b78\" text-anchor=\"middle\" font-weight=\"400\">正常计算一次；y [T,4096]</text><path d=\"M239 324V389\" fill=\"none\" stroke=\"#657b70\" stroke-width=\"1.8\" marker-end=\"url(#glm-arrow-6)\"/><rect x=\"548\" y=\"255\" width=\"428\" height=\"117\" rx=\"10\" fill=\"#f2edf7\" stroke=\"#66507b\" stroke-width=\"1.3\"/><text x=\"762.0\" y=\"283\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#66507b\" text-anchor=\"middle\" font-weight=\"600\">comb logits → Sinkhorn</text><text x=\"762.0\" y=\"308\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#66507b\" text-anchor=\"middle\" font-weight=\"400\">每个 token 一个 4×4 混合矩阵 C</text><text x=\"762.0\" y=\"331\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#66507b\" text-anchor=\"middle\" font-weight=\"400\">固定次数行 / 列归一化</text><path d=\"M762 182V255\" fill=\"none\" stroke=\"#657b70\" stroke-width=\"1.8\" marker-end=\"url(#glm-arrow-6)\"/><rect x=\"548\" y=\"428\" width=\"428\" height=\"94\" rx=\"10\" fill=\"#fbf1e6\" stroke=\"#87542c\" stroke-width=\"1.3\"/><text x=\"762.0\" y=\"456\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#87542c\" text-anchor=\"middle\" font-weight=\"600\">残差旁路：Cᵀ X</text><text x=\"762.0\" y=\"481\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#87542c\" text-anchor=\"middle\" font-weight=\"400\">输入流 m → 输出流 n</text><path d=\"M762 372V428\" fill=\"none\" stroke=\"#657b70\" stroke-width=\"1.8\" marker-end=\"url(#glm-arrow-6)\"/><path d=\"M24 112H8V360H520V475H548\" fill=\"none\" stroke=\"#657b70\" stroke-width=\"1.8\" marker-end=\"url(#glm-arrow-6)\"/><rect x=\"230\" y=\"585\" width=\"560\" height=\"105\" rx=\"10\" fill=\"#edf3ec\" stroke=\"#285444\" stroke-width=\"1.3\"/><text x=\"510.0\" y=\"613\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#285444\" text-anchor=\"middle\" font-weight=\"600\">post 合流：X′ = CᵀX + post ⊗ y</text><text x=\"510.0\" y=\"638\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#285444\" text-anchor=\"middle\" font-weight=\"400\">post 不是 softmax 概率，也不要求总和为 1</text><text x=\"510.0\" y=\"661\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#285444\" text-anchor=\"middle\" font-weight=\"400\">输出恢复 [T,4,4096]</text><path d=\"M239 483V553H380V585\" fill=\"none\" stroke=\"#657b70\" stroke-width=\"1.8\" marker-end=\"url(#glm-arrow-6)\"/><path d=\"M762 522V553H640V585\" fill=\"none\" stroke=\"#657b70\" stroke-width=\"1.8\" marker-end=\"url(#glm-arrow-6)\"/><path d=\"M976 124H990V646H790\" fill=\"none\" stroke=\"#657b70\" stroke-width=\"1.8\" marker-end=\"url(#glm-arrow-6)\" stroke-dasharray=\"5 5\"/><text x=\"24\" y=\"725\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#29463c\" text-anchor=\"start\" font-weight=\"400\">实线携带主数据或矩阵；虚线携带 pre / post 系数。图示为逻辑依赖，不按耗时比例。</text></svg><figcaption>C 的行是输入流，列是输出流，因此 column-vector 写法使用 CᵀX。原始 X 必须活到 post；把四流混成主层输入不代表它已经可被覆盖。</figcaption></figure><p>一次 pre 有两类产物：交给主计算的 <code>x[T,4096]</code>，以及留给 post 的 <code>post[T,4]</code>、<code>C[T,4,4]</code>。原始四流 X 也需要保留。Attention 或 FFN 算完 y 后，post 才能生成下一组四流。</p><p>整个 decoder 层重复这套包裹两次：一次围绕 Attention，一次围绕 Dense / MoE。因此 45 层在逻辑上有 90 组 pre/post 包裹；这个数字描述模型子层，不规定实现必须 launch 多少 kernel。</p>"
+      },
+      {
+        "id": "coefficients",
+        "title": "先生成 24 个系数：4 个 pre、4 个 post、16 个 comb",
+        "html": "<p>对一个 token，把四流展平为长度 16384 的向量。系数生成器先在这个宽度上做无权重 RMSNorm，再用 <code>Wfn[24,16384]</code> 投影成 24 个 FP32 logits，分成 4、4、16 三组；每组再应用独立的 learned scale 和 base。这里的 RMSNorm 不等于后面主计算前的 H4096 RMSNorm。</p><table><thead><tr><th>产物</th><th>变换</th><th>用途</th></tr></thead><tbody><tr><td>a = pre[4]</td><td>sigmoid(logits) + ε</td><td>将四条输入流加权合成主计算输入</td></tr><tr><td>b = post[4]</td><td>2 × sigmoid(logits)</td><td>控制主计算结果注入每条输出流的强度</td></tr><tr><td>C = comb[4,4]</td><td>row softmax + ε，然后 Sinkhorn</td><td>约束残差流之间的混合</td></tr></tbody></table><p>Wfn 自身有 <code>24×16384 = 393216</code> 个参数；这是一个 mHC 系数投影的权重数量，不是四个 H4096×H4096 主层矩阵。pre / post 都不是四项和为 1 的 softmax 概率；pre 混合也不等于平均池化。</p>"
+      },
+      {
+        "id": "sinkhorn",
+        "title": "为什么需要 Sinkhorn：防止无约束的残差混合不断放大",
+        "html": "<p>如果每个输出流都能任意叠加所有输入流，连续叠很多层后，残差通路可能放大或压缩信号。mHC 把残差混合矩阵约束到近似双随机矩阵：元素非负，每行和与每列和接近 1。</p><p>本模型的步骤是：先沿每行做 softmax 并加 ε，再做一次列归一化；随后交替行归一化、列归一化。配置 <code>hc_sinkhorn_iters=20</code>，<code>hc_eps=1e-6</code>。实现有 ε 和有限迭代，不能写成数值上严格等于双随机。</p><table><thead><tr><th>约束</th><th>能说明什么</th><th>不能说明什么</th></tr></thead><tbody><tr><td>非负</td><td>残差混合不引入负权组合</td><td>不约束主计算 y 的幅值</td></tr><tr><td>行和约 1</td><td>每条输入流分配到所有输出流的总质量受约束</td><td>仅此一项不能保证输出都是凸组合</td></tr><tr><td>列和约 1</td><td>每条输出残差是输入流的近似凸组合</td><td>不要求四个输出流相同</td></tr><tr><td>二者同时满足</td><td>残差-only 的流总和近似守恒；连续混合具有更可控的传播性质</td><td>不保证全网络收敛、无限精度、无数值误差或无端到端放大</td></tr></tbody></table><p>反例：矩阵 <code>[[1,0],[1,0]]</code> 行和都是 1，但列和为 2 和 0。它会把两条输入流都送到第一条输出流，说明“只看 softmax 每行和为1”不足以建立双随机约束。</p>"
+      },
+      {
+        "id": "mix-math",
+        "title": "把方向写清：输入流 m，输出流 n",
+        "html": "<p>对一个 token，定义 <code>X[m,h]</code>，m 为输入流，h 为 hidden 坐标；<code>C[m,n]</code> 的行表示输入流，列表示输出流。则：</p><pre><code>u[h]       = Σ_m a[m] * X[m,h]\nx[h]       = RMSNorm(u)[h]\ny[h]       = F(x)[h]\nXnext[n,h] = Σ_m C[m,n] * X[m,h] + b[n] * y[h]</code></pre><p>若把 X 写作 <code>[4,H]</code> 矩阵，残差项是 <code>Cᵀ @ X</code>。用 <code>C @ X</code> 会把 stream 方向写反。身份矩阵和对称矩阵发现不了这个 bug，所以数值例子必须包含非对称 C。</p><figure class=\"diagram\"><svg viewBox=\"0 0 1000 415\" role=\"img\" aria-label=\"只看一个 hidden 坐标：四流怎样更新\"><defs><marker id=\"glm-arrow-7\" markerWidth=\"8\" markerHeight=\"8\" refX=\"7\" refY=\"4\" orient=\"auto\"><path d=\"M0 0L8 4L0 8\" fill=\"#657b70\"/></marker></defs><text x=\"24\" y=\"32\" font-family=\"sans-serif\" font-size=\"20\" fill=\"#29463c\" text-anchor=\"start\" font-weight=\"600\">只看一个 hidden 坐标：四流怎样更新</text><rect x=\"24\" y=\"68\" width=\"285\" height=\"120\" rx=\"10\" fill=\"#fbf1e6\" stroke=\"#87542c\" stroke-width=\"1.3\"/><text x=\"166.5\" y=\"96\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#87542c\" text-anchor=\"middle\" font-weight=\"600\">四个输入流</text><text x=\"166.5\" y=\"121\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#87542c\" text-anchor=\"middle\" font-weight=\"400\">X = [1, 2, 4, 8]</text><text x=\"166.5\" y=\"144\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#87542c\" text-anchor=\"middle\" font-weight=\"400\">pre = [¼, ¼, ¼, ¼]</text><text x=\"166.5\" y=\"167\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#87542c\" text-anchor=\"middle\" font-weight=\"400\">混合 u = 3.75</text><rect x=\"356\" y=\"68\" width=\"285\" height=\"120\" rx=\"10\" fill=\"#f2edf7\" stroke=\"#66507b\" stroke-width=\"1.3\"/><text x=\"498.5\" y=\"96\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#66507b\" text-anchor=\"middle\" font-weight=\"600\">残差混合</text><text x=\"498.5\" y=\"121\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#66507b\" text-anchor=\"middle\" font-weight=\"400\">C 是循环置换矩阵</text><text x=\"498.5\" y=\"144\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#66507b\" text-anchor=\"middle\" font-weight=\"400\">CᵀX = [8, 1, 2, 4]</text><text x=\"498.5\" y=\"167\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#66507b\" text-anchor=\"middle\" font-weight=\"400\">仅改变流之间的去向</text><rect x=\"688\" y=\"68\" width=\"288\" height=\"120\" rx=\"10\" fill=\"#edf2f7\" stroke=\"#365b78\" stroke-width=\"1.3\"/><text x=\"832.0\" y=\"96\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#365b78\" text-anchor=\"middle\" font-weight=\"600\">主计算返回</text><text x=\"832.0\" y=\"121\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#365b78\" text-anchor=\"middle\" font-weight=\"400\">教学假设 y = 2</text><text x=\"832.0\" y=\"144\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#365b78\" text-anchor=\"middle\" font-weight=\"400\">post = [0.5, 1, 1.5, 2]</text><text x=\"832.0\" y=\"167\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#365b78\" text-anchor=\"middle\" font-weight=\"400\">注入量 = [1, 2, 3, 4]</text><rect x=\"230\" y=\"264\" width=\"540\" height=\"85\" rx=\"10\" fill=\"#edf3ec\" stroke=\"#285444\" stroke-width=\"1.3\"/><text x=\"500.0\" y=\"292\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#285444\" text-anchor=\"middle\" font-weight=\"600\">四个输出流</text><text x=\"500.0\" y=\"317\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#285444\" text-anchor=\"middle\" font-weight=\"400\">X′ = [9, 3, 5, 8]</text><path d=\"M309 128H356\" fill=\"none\" stroke=\"#657b70\" stroke-width=\"1.8\" marker-end=\"url(#glm-arrow-7)\"/><path d=\"M498 188V264\" fill=\"none\" stroke=\"#657b70\" stroke-width=\"1.8\" marker-end=\"url(#glm-arrow-7)\"/><path d=\"M832 188V225H682V264\" fill=\"none\" stroke=\"#657b70\" stroke-width=\"1.8\" marker-end=\"url(#glm-arrow-7)\"/><text x=\"24\" y=\"393\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#29463c\" text-anchor=\"start\" font-weight=\"400\">这是 1 坐标的混合示例；未模拟 RMSNorm 或真实 Attention / FFN。</text></svg><figcaption>选择非对称的 C，才能检测 C 与 Cᵀ 写反。四流不会因为一次 post 自动变相同；本例输出均值为 6.25，也说明约束 residual mixing 不等于约束整个子层输出。</figcaption></figure>"
+      },
+      {
+        "id": "norms-and-exit",
+        "title": "Norm、残差、expand、contract 各自负责什么",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 1000 330\" role=\"img\" aria-label=\"网络两端：expand 复制，最终 contract 取均值\"><defs><marker id=\"glm-arrow-8\" markerWidth=\"8\" markerHeight=\"8\" refX=\"7\" refY=\"4\" orient=\"auto\"><path d=\"M0 0L8 4L0 8\" fill=\"#657b70\"/></marker></defs><text x=\"24\" y=\"32\" font-family=\"sans-serif\" font-size=\"20\" fill=\"#29463c\" text-anchor=\"start\" font-weight=\"600\">网络两端：expand 复制，最终 contract 取均值</text><rect x=\"24\" y=\"78\" width=\"260\" height=\"95\" rx=\"10\" fill=\"#edf3ec\" stroke=\"#285444\" stroke-width=\"1.3\"/><text x=\"154.0\" y=\"106\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#285444\" text-anchor=\"middle\" font-weight=\"600\">Embedding hidden</text><text x=\"154.0\" y=\"131\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#285444\" text-anchor=\"middle\" font-weight=\"400\">[T,4096]</text><rect x=\"370\" y=\"78\" width=\"260\" height=\"95\" rx=\"10\" fill=\"#fbf1e6\" stroke=\"#87542c\" stroke-width=\"1.3\"/><text x=\"500.0\" y=\"106\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#87542c\" text-anchor=\"middle\" font-weight=\"600\">expand → 四流主干</text><text x=\"500.0\" y=\"131\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#87542c\" text-anchor=\"middle\" font-weight=\"400\">初始四流相同，逐层可分化</text><rect x=\"716\" y=\"78\" width=\"260\" height=\"95\" rx=\"10\" fill=\"#edf3ec\" stroke=\"#285444\" stroke-width=\"1.3\"/><text x=\"846.0\" y=\"106\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#285444\" text-anchor=\"middle\" font-weight=\"600\">contract → final norm</text><text x=\"846.0\" y=\"131\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#285444\" text-anchor=\"middle\" font-weight=\"400\">mean(streams) → [T,4096]</text><path d=\"M284 124H370\" fill=\"none\" stroke=\"#657b70\" stroke-width=\"1.8\" marker-end=\"url(#glm-arrow-8)\"/><path d=\"M630 124H716\" fill=\"none\" stroke=\"#657b70\" stroke-width=\"1.8\" marker-end=\"url(#glm-arrow-8)\"/><text x=\"24\" y=\"237\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#29463c\" text-anchor=\"start\" font-weight=\"400\">45 层中，每层 Attention 与 FFN 各自使用独立的 mHC 参数。</text><text x=\"24\" y=\"274\" font-family=\"sans-serif\" font-size=\"17\" fill=\"#29463c\" text-anchor=\"start\" font-weight=\"400\">最终 contract 是四流均值；不是再做一次四流路由，也不是 TP AllReduce。</text></svg><figcaption>按 GLM-5.3-Flash 的 HyperHead 与本地 mhc_contract_norm 绘制。不同模型的 hyper-head 可以有不同参数化，不应把其他模型的 learned head mix 替换到这里。</figcaption></figure><table><thead><tr><th>位置</th><th>归一化或操作</th><th>实际对象</th></tr></thead><tbody><tr><td>mHC 系数生成前</td><td>无权重 RMSNorm</td><td>展平后的四流宽度 16384</td></tr><tr><td>Attention / FFN 主计算前</td><td>带该子层 norm 权重的 RMSNorm</td><td>pre 混合后的 H4096</td></tr><tr><td>comb 内</td><td>softmax + Sinkhorn</td><td>4×4 系数矩阵；与 hidden 的 RMSNorm 不同</td></tr><tr><td>语言主干末尾</td><td>四流均值，再 final RMSNorm</td><td>从 [T,4,4096] 回到 [T,4096]</td></tr></tbody></table><p>GLM 的最终 contract 按 <code>mean(streams)</code> 定义；本地 <code>mhc_contract_norm</code> 融合了四流平均与 final RMSNorm。公开 Transformers 用均值与后续 norm 两个逻辑步骤。融合改变实现边界，不改变模型应有的结果合同。</p>"
+      },
+      {
+        "id": "implementation",
+        "title": "当前 Zeus 路径：逻辑多步怎样落到真实 API",
+        "html": "<table><thead><tr><th>入口</th><th>源码归属</th><th>合同</th></tr></thead><tbody><tr><td>dev_mhc_dup4_dp4.py</td><td>zeus_dev 固定模型开发库</td><td>DP4 × duplicate4；构造及保留 residual / hres / hpost / li</td></tr><tr><td>mhc_pre_sinkhorn_mix_norm</td><td>glm53_flash/mhc/sgl_mhc_pre_sinkhorn_mix_norm_triton.py</td><td>系数投影、Sinkhorn、四流混合、主层 RMSNorm 的融合入口</td></tr><tr><td>mhc_post</td><td>glm53_flash/mhc/sgl_mhc_post_triton.py</td><td>子层结果 + 原始四流 + post / comb → 新四流</td></tr><tr><td>mhc_contract_norm</td><td>glm53_flash/mhc/sgl_mhc_contract_norm_triton.py</td><td>主干末尾四流均值 + final RMSNorm</td></tr></tbody></table><p>当前接口的主 residual / li / out 为 BF16，hres / hpost 为 FP32。部分小 batch 路径允许紧凑的 <code>[T,4096]</code> 输入，表示四条<strong>相同</strong>流的隐式复制；它只适用于接口显式支持的分支，不能用来表示已经分化的任意四流。</p><p>不同融合 kernel 的分块、FP32 累加与 BF16 舍入顺序属于数值合同。实数公式等价不保证位级相同；不能因一次 Graph 与 eager 一致就断言模型质量或 RTL 已验收。</p>"
+      },
+      {
+        "id": "cost-and-fusion",
+        "title": "这部分为什么也要优化：读写、存活值与融合机会",
+        "html": "<p>H4096、BF16 下，普通单流 residual 每 token 是 8 KiB，显式四流是 32 KiB。pre 的 C 与 post 每 token 共 <code>(16+4)×4=80</code> bytes FP32；大头通常仍是残差与主计算输入输出。这是逻辑 payload，不是实测片外流量。</p><p>四流 residual 通常只为当前 forward 的层间传播存活，不按上下文中每个历史 token 长期保存；也不能简单把 32 KiB 乘 45 当作推理必需的同时驻留量。实际峰值取决于生命周期和复用策略。</p><p>可以考虑融合“上一子层 post → 下一子层 pre/norm”，减少反复搬运 residual；但要证明原始 X、C、b、主计算 y 的消费者都已完成，保持 dtype 与舍入合同，并在正确的通信归约之后执行。主计算只给了 TP partial 时，非线性的 norm / sigmoid 不能提前按 partial 独立计算后求和。</p>"
+      },
+      {
+        "id": "validation",
+        "title": "怎样验证 mHC：用能抓到方向和生命周期错误的例子",
+        "html": "<table><thead><tr><th>检查</th><th>应能抓到的错误</th></tr></thead><tbody><tr><td>非对称置换矩阵 + 不同输入流</td><td>C / Cᵀ 方向写反</td></tr><tr><td>C=I，指定 post 与子层 y</td><td>残差旁路遗漏、主结果重复注入</td></tr><tr><td>随机正 logits；记录行列和误差</td><td>只做 row softmax、ε/迭代数错误、NaN</td></tr><tr><td>显式四流 vs 合法隐式同流</td><td>把任意分化四流误当成复制输入</td></tr><tr><td>极值与 BF16 舍入边界</td><td>融合改变数值顺序却只看平均误差</td></tr><tr><td>不同请求与多步 Graph replay</td><td>地址复用、输出毒化、旧系数或输入未刷新</td></tr></tbody></table><p>本次只运行独立数学与网页验收，不启动设备 kernel、Graph、CycleSim 或 VCS。源码中测试的存在与测试实际通过分开报告；更不从独立子层测试推导完整模型质量。</p>"
+      }
+    ],
+    "sources": [
+      {
+        "id": "mhc-paper",
+        "label": "mHC 原始论文",
+        "url": "https://arxiv.org/abs/2512.24880",
+        "note": "DeepSeek-AI；残差流扩展、双随机约束与设计动机，不是GLM或Zeus性能测量。",
+        "kind": "论文"
+      },
+      {
+        "id": "official-card",
+        "label": "Z.ai 正式模型卡",
+        "url": "https://huggingface.co/zai-org/GLM-5.3-Flash",
+        "note": "正式名称、多模态定位、320B 总参数 / 18B 激活；2026-10-28核对。",
+        "kind": "官方"
+      },
+      {
+        "id": "public-config",
+        "label": "正式发布配置 · 固定 revision",
+        "url": "https://huggingface.co/zai-org/GLM-5.3-Flash/blob/46a050bec13002ad29ee795c16e61cf4fa3c4a9c/config.json",
+        "note": "text_config 与 vision_config；公开配置不代替 Zeus 运行验收。",
+        "kind": "源码"
+      },
+      {
+        "id": "public-modeling",
+        "label": "Transformers GLM5Next 模型实现 · 固定 commit",
+        "url": "https://github.com/huggingface/transformers/blob/a672eb5f474b8b30173e9f96eab66adf292da635/src/transformers/models/glm5_next/modeling_glm5_next.py",
+        "note": "TextModel、DecoderLayer、HyperConnection、HyperHead 与视觉合流。",
+        "kind": "源码"
+      },
+      {
+        "id": "deployment-audit",
+        "label": "本次模型与专题重组依据",
+        "url": "evidence/glm53-flash-architecture.md",
+        "note": "2026-10-28；固定版本、配置对照、只读源码边界。",
+        "kind": "证据"
+      },
+      {
+        "id": "mhc-runner",
+        "label": "模型 mHC runner 与独立参考",
+        "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_mhc_dup4_dp4.py",
+        "note": "固定版本；forward_pre / forward_post 与 DP/Graph 合同。",
+        "kind": "源码"
+      },
+      {
+        "id": "mhc-pre",
+        "label": "当前融合 pre / Sinkhorn / mix / norm",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/68f19fa0a159b8ff861dc9cf736d9c0ae64906ba/sgl-kernel-zeus-triton/python/glm53_flash/mhc/sgl_mhc_pre_sinkhorn_mix_norm_triton.py",
+        "note": "当前实现；BF16 主输入输出，FP32 系数；源码检查。",
+        "kind": "源码"
+      },
+      {
+        "id": "mhc-post",
+        "label": "当前 post 实现",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/68f19fa0a159b8ff861dc9cf736d9c0ae64906ba/sgl-kernel-zeus-triton/python/glm53_flash/mhc/sgl_mhc_post_triton.py",
+        "note": "C 行输入、列输出；不同小 batch 分支。",
+        "kind": "源码"
+      },
+      {
+        "id": "mhc-contract",
+        "label": "最终 contract + norm",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/68f19fa0a159b8ff861dc9cf736d9c0ae64906ba/sgl-kernel-zeus-triton/python/glm53_flash/mhc/sgl_mhc_contract_norm_triton.py",
+        "note": "四流均值；不套用其他模型的 learned hyper-head。",
+        "kind": "源码"
+      }
+    ],
+    "questions": [
+      {
+        "id": "what-mhc-does",
+        "q": "不用公式解释：mHC 到底多做了什么？",
+        "a": "它把一条残差变成四条流，学习哪些流进入主计算、计算结果写入哪些流、原始流如何互相混合。Attention与FFN仍以一个H4096向量执行。残差混合矩阵经过Sinkhorn约束，降低无约束混合带来的传播风险，同时增加系数投影与残差读写。",
+        "followup": "分别指出 pre、post、comb 的 shape 和消费者。"
+      },
+      {
+        "id": "why-sinkhorn",
+        "q": "为什么 softmax 之后还要 Sinkhorn？",
+        "a": "行softmax只保证每行和为1，不能同时保证每列和为1。GLM把comb约束成近似双随机矩阵，交替做行列归一化。该约束作用于残差混合，不等于整个Attention/FFN输出都守恒或全网络绝对稳定。",
+        "followup": "给出行随机但非双随机的反例，再用非对称置换检查矩阵方向。"
+      },
+      {
+        "id": "mhc-cost",
+        "q": "mHC 的四流增加多少残差 payload？",
+        "a": "H4096和BF16下，单流每token为8KiB，显式四流为32KiB；这仅是逻辑payload，峰值内存取决于buffer生命周期和复用，实测流量还取决于实现。主Attention或FFN仍只接收一份H4096输入。",
+        "followup": "为什么不能将32KiB无条件乘45，或把Attention算量乘四？"
+      }
+    ],
+    "takeaways": [
+      "mHC 是四流残差连接，主计算仍只有一份 H4096 输入。",
+      "pre/post 是门，comb 是近似双随机矩阵；三者不能互换解释。",
+      "用非对称矩阵检查 CᵀX，保留原始 residual 直到 post。",
+      "最终 contract 是四流均值，后接 final RMSNorm。"
+    ],
+    "readingLabel": "从用途走到一次完整四流更新",
+    "readingStageLabel": "阅读阶段",
+    "readingStages": [
+      {
+        "id": "purpose",
+        "title": "用途与一张完整数据流图",
+        "summary": "普通残差遇到什么问题；四流如何进入和绕过主计算",
+        "sections": [
+          "why-four-streams",
+          "mhc-graph"
+        ]
+      },
+      {
+        "id": "mechanism",
+        "title": "系数、约束与一个手算例子",
+        "summary": "24个系数、Sinkhorn、矩阵方向、Norm与收尾",
+        "sections": [
+          "coefficients",
+          "sinkhorn",
+          "mix-math",
+          "norms-and-exit"
+        ]
+      },
+      {
+        "id": "engineering",
+        "title": "当前实现、优化与验收",
+        "summary": "API、逻辑payload、生命周期与反例",
+        "sections": [
+          "implementation",
+          "cost-and-fusion",
+          "validation"
+        ]
+      }
+    ],
+    "portableReading": {
+      "file": "glm53-mhc.html",
+      "download": "glm53-mhc.html",
+      "label": "保存完整 mHC HTML ↓"
+    }
+  }
+]

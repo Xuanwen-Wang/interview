@@ -62,7 +62,7 @@ function scrollChapterAnchor(anchor) {
   const target = document.getElementById(anchor);
   if (!target) return;
   if (target.tagName === 'DETAILS') target.open = true;
-  const reference = target.querySelector(':scope > details.cycle-reference');
+  const reference = target.querySelector(':scope > details.cycle-reference, :scope > details.pe-deep-dive');
   if (reference) reference.open = true;
   for (let parent=target.parentElement;parent;parent=parent.parentElement) if (parent.tagName==='DETAILS') parent.open=true;
   highlightReadingSection(target.closest('[data-section]')?.id || target.querySelector('[data-section]')?.id || anchor);

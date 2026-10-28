@@ -1,15 +1,15 @@
 [
   {
     "id": "moe-deployment-walkthrough",
-    "title": "GLM5Next 300B MoE：卡间 EP4、卡内 TP4，从部署到四个 kernel",
-    "part": "GLM5Next 300B 真实部署",
+    "title": "GLM-5.3-Flash MoE：卡间 EP4、卡内 TP4，从部署到四个 kernel",
+    "part": "GLM-5.3-Flash 部署",
     "order": 205,
     "subtitle": "一篇走完卡与 rank、token 所有权、Router / Shared / Routed / Reduce、通信与验证边界",
     "minutes": 110,
     "level": "进阶 · 源码与部署",
     "tags": [
       "MoE",
-      "GLM5Next",
+      "GLM-5.3-Flash",
       "300B",
       "EP4",
       "TP4",
@@ -32,8 +32,8 @@
       },
       {
         "id": "moe-public-identity",
-        "title": "同名不等于同一模型：这篇的“GLM5”具体指谁",
-        "html": "<p>本文始终解释内部 <strong>GLM5Next 300B</strong> 在已确认的四卡部署上的 MoE。公开 GLM-5 只在这里作为身份对照，后面的所有形状、72 专家/卡与 I512/rank 都从内部配置推导。</p><table><thead><tr><th>配置项</th><th>本文内部 GLM5Next 300B</th><th>公开 zai-org/GLM-5</th></tr></thead><tbody><tr><td>hidden / 主层数</td><td>4096 / 45</td><td>6144 / 78</td></tr><tr><td>Routed / Shared / TopK</td><td>288 / 1 / 8</td><td>256 / 1 / 8</td></tr><tr><td>专家 intermediate</td><td>2048</td><td>2048</td></tr><tr><td>前置 Dense 层数</td><td>3，之后 42 层 MoE</td><td>3，之后 75 层 MoE</td></tr><tr><td>本文部署口径</td><td>卡间 EP4，卡内 TP4，world16</td><td>模型配置本身不证明某套机器的实际 TP/EP</td></tr></tbody></table><p>公开侧固定到 <a href=\"https://huggingface.co/zai-org/GLM-5/blob/c183ef8c61faee82855eca1ed9bb3a9a7ce3b0b2/config.json\" target=\"_blank\" rel=\"noreferrer\">官方 config.json，c183ef8c61fa</a>（2026-10-25 核对）。相同的 Top8、I2048 和 sigmoid 不足以证明是同一模型。公开配置中的 <code>ep_size=1</code> 也不能替代运行时启动参数，更不能拿来否定这里由用户确认的 EP4 部署。</p>"
+        "title": "模型身份：正式名称与历史开发快照",
+        "html": "<p>用户已确认：此前项目称作 GLM5Next 300B 的模型正式命名为 <strong>GLM-5.3-Flash</strong>。本站统一使用正式名称；原源码目录、类名与实验记录保留原文。</p><p>公开模型卡标注320B总参数、18B激活参数，并包含视觉分支；这篇MoE保留原固定语言部署快照，不将旧实验直接改称正式公开checkpoint的整模型结果。完整网络与版本差异见<a href=\"#chapter/glm-deployment-overview\">整网概览</a>。正文中的kernel与性能结论仍绑定各自标注的开发快照。</p>"
       },
       {
         "id": "dep-whole-model",
@@ -299,7 +299,7 @@
     "readingStageLabel": "数据路径",
     "portableReading": {
       "file": "moe.html",
-      "download": "glm5next-300b-moe.html",
+      "download": "glm53-flash-moe.html",
       "label": "保存完整 MoE HTML ↓"
     },
     "legacyChapters": {

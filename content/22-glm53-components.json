@@ -1,0 +1,191 @@
+[
+  {
+    "id": "glm53-components",
+    "order": 16.8,
+    "title": "GLM-5.3-Flash：Embedding、Dense、Head 与采样等组件",
+    "subtitle": "补齐网络两端、视觉入口、MTP 与请求状态推进",
+    "part": "GLM-5.3-Flash 部署",
+    "minutes": 50,
+    "level": "进阶 · 部署组件",
+    "tags": [
+      "Embedding",
+      "Dense",
+      "LM Head",
+      "Sampling",
+      "Vision",
+      "MTP"
+    ],
+    "lead": "把其余组件收拢到一篇：从输入查表与前三层 Dense FFN，讲到最终 mHC contract、LM Head、Top-p 采样，再补上正式模型的视觉分支与 MTP 边界。每一部分都放回同一条生成链。",
+    "sections": [
+      {
+        "id": "bookends",
+        "title": "先补齐网络两端：查表和词表投影是不同工作",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 1000 425\" role=\"img\" aria-label=\"网络两端：输入查表，输出投影并采样\"><defs><marker id=\"glm-arrow-6\" markerWidth=\"8\" markerHeight=\"8\" refX=\"7\" refY=\"4\" orient=\"auto\"><path d=\"M0 0L8 4L0 8\" fill=\"#657b70\"/></marker></defs><text x=\"24\" y=\"32\" font-family=\"sans-serif\" font-size=\"20\" fill=\"#29463c\" text-anchor=\"start\" font-weight=\"600\">网络两端：输入查表，输出投影并采样</text><rect x=\"24\" y=\"70\" width=\"288\" height=\"88\" rx=\"10\" fill=\"#edf3ec\" stroke=\"#285444\" stroke-width=\"1.3\"/><text x=\"168.0\" y=\"98\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#285444\" text-anchor=\"middle\" font-weight=\"600\">Token IDs</text><text x=\"168.0\" y=\"123\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#285444\" text-anchor=\"middle\" font-weight=\"400\">[T]，取值在词表范围内</text><rect x=\"356\" y=\"70\" width=\"288\" height=\"88\" rx=\"10\" fill=\"#edf2f7\" stroke=\"#365b78\" stroke-width=\"1.3\"/><text x=\"500.0\" y=\"98\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#365b78\" text-anchor=\"middle\" font-weight=\"600\">Embedding lookup</text><text x=\"500.0\" y=\"123\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#365b78\" text-anchor=\"middle\" font-weight=\"400\">Wemb[V,H] → hidden[T,H]</text><rect x=\"688\" y=\"70\" width=\"288\" height=\"88\" rx=\"10\" fill=\"#fbf1e6\" stroke=\"#87542c\" stroke-width=\"1.3\"/><text x=\"832.0\" y=\"98\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#87542c\" text-anchor=\"middle\" font-weight=\"600\">语言主干</text><text x=\"832.0\" y=\"123\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#87542c\" text-anchor=\"middle\" font-weight=\"400\">四流 mHC + 45 层</text><path d=\"M312 114H356\" fill=\"none\" stroke=\"#657b70\" stroke-width=\"1.8\" marker-end=\"url(#glm-arrow-6)\"/><path d=\"M644 114H688\" fill=\"none\" stroke=\"#657b70\" stroke-width=\"1.8\" marker-end=\"url(#glm-arrow-6)\"/><rect x=\"688\" y=\"245\" width=\"288\" height=\"88\" rx=\"10\" fill=\"#fbf1e6\" stroke=\"#87542c\" stroke-width=\"1.3\"/><text x=\"832.0\" y=\"273\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#87542c\" text-anchor=\"middle\" font-weight=\"600\">四流均值 + final norm</text><text x=\"832.0\" y=\"298\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#87542c\" text-anchor=\"middle\" font-weight=\"400\">[T,4,H] → [T,H]</text><rect x=\"356\" y=\"245\" width=\"288\" height=\"88\" rx=\"10\" fill=\"#edf2f7\" stroke=\"#365b78\" stroke-width=\"1.3\"/><text x=\"500.0\" y=\"273\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#365b78\" text-anchor=\"middle\" font-weight=\"600\">LM Head</text><text x=\"500.0\" y=\"298\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#365b78\" text-anchor=\"middle\" font-weight=\"400\">Wh[V,H] → scores[T,V]</text><rect x=\"24\" y=\"245\" width=\"288\" height=\"88\" rx=\"10\" fill=\"#edf3ec\" stroke=\"#285444\" stroke-width=\"1.3\"/><text x=\"168.0\" y=\"273\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#285444\" text-anchor=\"middle\" font-weight=\"600\">Top-p / sampling</text><text x=\"168.0\" y=\"298\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#285444\" text-anchor=\"middle\" font-weight=\"400\">token[T] → 下次输入</text><path d=\"M832 158V245\" fill=\"none\" stroke=\"#657b70\" stroke-width=\"1.8\" marker-end=\"url(#glm-arrow-6)\"/><path d=\"M688 289H644\" fill=\"none\" stroke=\"#657b70\" stroke-width=\"1.8\" marker-end=\"url(#glm-arrow-6)\"/><path d=\"M356 289H312\" fill=\"none\" stroke=\"#657b70\" stroke-width=\"1.8\" marker-end=\"url(#glm-arrow-6)\"/><text x=\"24\" y=\"389\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#29463c\" text-anchor=\"start\" font-weight=\"400\">V=154880，H=4096。上排从左到右，下排从右到左；Head 的分布式实现可避免完整 logits gather。</text></svg><figcaption>Embedding 是按 ID 查行；LM Head 是 hidden 与全词表权重的投影。二者不是互逆函数，且配置 tie_word_embeddings=false，权重不能自动共享。</figcaption></figure><p>整网只盯 Attention 和 MoE，很容易漏掉 Embedding、final norm、LM Head 与采样。这一篇把这些组件以及前三层 Dense FFN、视觉分支、MTP 和请求状态推进放在一起，作为部署的收尾专题。</p><p>固定语言配置：hidden H=4096，词表 V=154880，前三层 Dense 的中间维 I=12288。这里的 shape 是模型定义；下面会分别标出当前开发代码的选择。</p>"
+      },
+      {
+        "id": "embedding",
+        "title": "Embedding：token ID 查行，再建立四流 residual",
+        "html": "<p><code>Wemb[V,H]</code> 保存每个 token 对应的向量。给定 IDs <code>[T]</code>，结果是 <code>X[t,:]=Wemb[ID[t],:]</code>，输出 <code>[T,4096]</code>。它按行读取权重，不是为整个词表做一次 dense GEMM。</p><p>当前 <code>dev_embed_dup4_dp4.py</code> 走 full-table、DP4×duplicate4 的开发路径；kernel 库同时提供 masked / vocab-parallel lookup 能力。接口支持一种布局，不表示模型 caller 默认就在用它。两颗 core 的列切分又是 rank 内部 pack，不等于四 rank 的词表切分。</p><p>完整 BF16 表的逻辑大小是 <code>154880×4096×2</code> bytes，约 1.18 GiB，未计 pack/padding 与副本。算完查表后由 mHC expand 建立四条初始相同的流；不用额外做四次查表。</p>"
+      },
+      {
+        "id": "dense",
+        "title": "Dense FFN：前三层没有专家路由，仍然有 TP partial",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 1000 430\" role=\"img\" aria-label=\"前 3 层的 Dense FFN：三矩阵，TP 切中间维\"><defs><marker id=\"glm-arrow-7\" markerWidth=\"8\" markerHeight=\"8\" refX=\"7\" refY=\"4\" orient=\"auto\"><path d=\"M0 0L8 4L0 8\" fill=\"#657b70\"/></marker></defs><text x=\"24\" y=\"32\" font-family=\"sans-serif\" font-size=\"20\" fill=\"#29463c\" text-anchor=\"start\" font-weight=\"600\">前 3 层的 Dense FFN：三矩阵，TP 切中间维</text><rect x=\"24\" y=\"75\" width=\"255\" height=\"91\" rx=\"10\" fill=\"#edf3ec\" stroke=\"#285444\" stroke-width=\"1.3\"/><text x=\"151.5\" y=\"103\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#285444\" text-anchor=\"middle\" font-weight=\"600\">输入 x [T,4096]</text><text x=\"151.5\" y=\"128\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#285444\" text-anchor=\"middle\" font-weight=\"400\">每个 TP lane 需要完整 hidden</text><rect x=\"371\" y=\"55\" width=\"285\" height=\"102\" rx=\"10\" fill=\"#edf2f7\" stroke=\"#365b78\" stroke-width=\"1.3\"/><text x=\"513.5\" y=\"83\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#365b78\" text-anchor=\"middle\" font-weight=\"600\">Gate：4096 → 3072</text><text x=\"513.5\" y=\"108\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#365b78\" text-anchor=\"middle\" font-weight=\"400\">TP-local 中间维</text><text x=\"513.5\" y=\"131\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#365b78\" text-anchor=\"middle\" font-weight=\"400\">gate 先做上界 clamp，再 SiLU</text><rect x=\"371\" y=\"207\" width=\"285\" height=\"85\" rx=\"10\" fill=\"#edf2f7\" stroke=\"#365b78\" stroke-width=\"1.3\"/><text x=\"513.5\" y=\"235\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#365b78\" text-anchor=\"middle\" font-weight=\"600\">Up：4096 → 3072</text><text x=\"513.5\" y=\"260\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#365b78\" text-anchor=\"middle\" font-weight=\"400\">up 做双侧 clamp</text><path d=\"M279 117H325V106H371\" fill=\"none\" stroke=\"#657b70\" stroke-width=\"1.8\" marker-end=\"url(#glm-arrow-7)\"/><path d=\"M325 117V249H371\" fill=\"none\" stroke=\"#657b70\" stroke-width=\"1.8\" marker-end=\"url(#glm-arrow-7)\"/><rect x=\"735\" y=\"137\" width=\"241\" height=\"102\" rx=\"10\" fill=\"#fbf1e6\" stroke=\"#87542c\" stroke-width=\"1.3\"/><text x=\"855.5\" y=\"165\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#87542c\" text-anchor=\"middle\" font-weight=\"600\">逐元素相乘</text><text x=\"855.5\" y=\"190\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#87542c\" text-anchor=\"middle\" font-weight=\"400\">SiLU(gate) × up</text><text x=\"855.5\" y=\"213\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#87542c\" text-anchor=\"middle\" font-weight=\"400\">[T,3072]</text><path d=\"M656 106H692V166H735\" fill=\"none\" stroke=\"#657b70\" stroke-width=\"1.8\" marker-end=\"url(#glm-arrow-7)\"/><path d=\"M656 249H692V211H735\" fill=\"none\" stroke=\"#657b70\" stroke-width=\"1.8\" marker-end=\"url(#glm-arrow-7)\"/><rect x=\"371\" y=\"333\" width=\"605\" height=\"72\" rx=\"10\" fill=\"#edf3ec\" stroke=\"#285444\" stroke-width=\"1.3\"/><text x=\"673.5\" y=\"361\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#285444\" text-anchor=\"middle\" font-weight=\"600\">Down：3072 → 4096 → TP 求和</text><text x=\"673.5\" y=\"386\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#285444\" text-anchor=\"middle\" font-weight=\"400\">单 rank partial 不是完整 Dense 输出</text><path d=\"M856 239V333\" fill=\"none\" stroke=\"#657b70\" stroke-width=\"1.8\" marker-end=\"url(#glm-arrow-7)\"/></svg><figcaption>I=12288，TP4 每 rank 持有 I/4=3072。两条并列投影都消费 x；先在各自中间维分片内完成激活与相乘，再做 Down。图为逻辑 shape，双 core 与量化 pack 另由实现决定。</figcaption></figure><p>Dense 使用一个 SwiGLU FFN，所有 token 都走同一组 Gate、Up、Down 权重。公开实现中 <code>swiglu_limit=10</code>：Gate 投影只做上界 clamp 到 10，Up 做 [-10,10] 双侧 clamp，再计算 SiLU(Gate)×Up。把两者都对称截断会改模型语义。</p><p>TP4 沿中间维拆分，<code>12288/4=3072</code>。Gate/Up 的非线性在本 rank 的中间维分片内完成；Down 返回 H4096 partial，调用方再对 TP 求和。它和 MoE 每位专家 I2048/4=512 的分片宽度不同。</p><p>本地 <code>dense_ffn_silu_down_tp4</code> 与 <code>dense_ffn_reduce_core_partial</code> 对应计算和本地 core partial 合并；名字里出现 reduce 不能代替跨 rank 的 TP collective。模型源码、开发参数、权重 pack 的 clamp / scale 一致性仍需独立验收。</p>"
+      },
+      {
+        "id": "head",
+        "title": "LM Head：把最终 hidden 投到 154880 个词表候选",
+        "html": "<p>mHC contract 与 final RMSNorm 后，输入是 <code>Z[T,4096]</code>。LM Head 计算 <code>L=Z×Whᵀ</code>，其中 <code>Wh[V,H]</code>。配置 <code>tie_word_embeddings=false</code>，所以 Head 与输入 Embedding 的参数语义独立。</p><p>当前 TP4 Head 词表分片每 rank 是 <code>154880/4=38720</code> 行权重；每个 rank 得到本地词表分数。最终 token 必须来自完整全局分布：softmax 的最大值、归一化分母、累计概率阈值或候选选择，需要按实现完成跨 TP 协调。</p><p>“返回一个 token”不要求先 gather 完整 <code>[T,V]</code> logits。当前 <code>sample_head_top_p</code> 把投影与分布式搜索组织在同一 Head 模块中，接受 caller 的 collective callback，直接返回 token。这不代表一次调用只 launch 一个 kernel，也不代表不发生通信。</p>"
+      },
+      {
+        "id": "sampling",
+        "title": "采样：全局概率、Top-p、随机数和 Graph 更新",
+        "html": "<p>温度缩放 logits 后，softmax 给出全局概率。Top-p 选择概率降序累积达到阈值的候选集合，重新归一化后用 uniform 随机数抽样。开发链为避免输出完整 logits，使用多阶段统计与搜索；优化仍须符合候选覆盖、全局归一化和 token ID 一致性。</p><table><thead><tr><th>控制项</th><th>为什么是合同的一部分</th></tr></thead><tbody><tr><td>temperature / top_p</td><td>改变输出分布，不能当性能测试无关的元数据</td></tr><tr><td>uniform 随机数</td><td>同一 TP 请求的各 lane 必须一致；回放时需要按目标刷新</td></tr><tr><td>local / global token ID</td><td>词表 shard 索引必须加回本 rank 的词表 offset</td></tr><tr><td>Graph 输入缓冲区</td><td>地址可固定，值要更新；不可回放同一个旧 token / uniform</td></tr><tr><td>停止条件</td><td>EOS、请求结束与最大生成长度控制后续 state 生命周期</td></tr></tbody></table><p>本地 Head 的 fused Graph 范围目前限制 TP4、H4096、V154880、本地 batch 1/2/4/6/8 和 FP32 Top-p .95；其他 shape 的 host-driven 搜索不能直接宣称支持同一个 capture 合同。当前 fused Head 要求 <code>0 &lt; top_p &lt; 1</code>，CPU oracle 能算 top_p=1 也不会扩展设备接口。</p>"
+      },
+      {
+        "id": "vision",
+        "title": "正式模型有视觉分支：补上结构，单独标部署边界",
+        "html": "<figure class=\"diagram\"><svg viewBox=\"0 0 1000 380\" role=\"img\" aria-label=\"可选视觉分支：编码后的 token 和文本共用语言主干\"><defs><marker id=\"glm-arrow-8\" markerWidth=\"8\" markerHeight=\"8\" refX=\"7\" refY=\"4\" orient=\"auto\"><path d=\"M0 0L8 4L0 8\" fill=\"#657b70\"/></marker></defs><text x=\"24\" y=\"32\" font-family=\"sans-serif\" font-size=\"20\" fill=\"#29463c\" text-anchor=\"start\" font-weight=\"600\">可选视觉分支：编码后的 token 和文本共用语言主干</text><rect x=\"24\" y=\"75\" width=\"280\" height=\"110\" rx=\"10\" fill=\"#f2edf7\" stroke=\"#66507b\" stroke-width=\"1.3\"/><text x=\"164.0\" y=\"103\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#66507b\" text-anchor=\"middle\" font-weight=\"600\">图像 / 视频预处理</text><text x=\"164.0\" y=\"128\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#66507b\" text-anchor=\"middle\" font-weight=\"400\">patch_size=14</text><text x=\"164.0\" y=\"151\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#66507b\" text-anchor=\"middle\" font-weight=\"400\">视频 temporal_patch_size=2</text><text x=\"164.0\" y=\"174\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#66507b\" text-anchor=\"middle\" font-weight=\"400\">位置数依实际 grid 决定</text><rect x=\"360\" y=\"75\" width=\"280\" height=\"110\" rx=\"10\" fill=\"#f2edf7\" stroke=\"#66507b\" stroke-width=\"1.3\"/><text x=\"500.0\" y=\"103\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#66507b\" text-anchor=\"middle\" font-weight=\"600\">24 层视觉编码器</text><text x=\"500.0\" y=\"128\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#66507b\" text-anchor=\"middle\" font-weight=\"400\">vision hidden=1024</text><text x=\"500.0\" y=\"151\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#66507b\" text-anchor=\"middle\" font-weight=\"400\">spatial_merge_size=2</text><text x=\"500.0\" y=\"174\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#66507b\" text-anchor=\"middle\" font-weight=\"400\">merge / projection</text><rect x=\"696\" y=\"75\" width=\"280\" height=\"110\" rx=\"10\" fill=\"#edf3ec\" stroke=\"#285444\" stroke-width=\"1.3\"/><text x=\"836.0\" y=\"103\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#285444\" text-anchor=\"middle\" font-weight=\"600\">输出 H4096 视觉特征</text><text x=\"836.0\" y=\"128\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#285444\" text-anchor=\"middle\" font-weight=\"400\">填入 image / video 占位位置</text><text x=\"836.0\" y=\"151\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#285444\" text-anchor=\"middle\" font-weight=\"400\">与文本 Embedding 合流</text><text x=\"836.0\" y=\"174\" font-family=\"sans-serif\" font-size=\"15\" fill=\"#285444\" text-anchor=\"middle\" font-weight=\"400\">进入同一语言 decoder</text><path d=\"M304 130H360\" fill=\"none\" stroke=\"#657b70\" stroke-width=\"1.8\" marker-end=\"url(#glm-arrow-8)\"/><path d=\"M640 130H696\" fill=\"none\" stroke=\"#657b70\" stroke-width=\"1.8\" marker-end=\"url(#glm-arrow-8)\"/><text x=\"24\" y=\"248\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#29463c\" text-anchor=\"start\" font-weight=\"400\">配置 image_size=448 是参考尺度；实际 token 数受处理器、动态分辨率、grid 与帧数影响。</text><text x=\"24\" y=\"284\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#29463c\" text-anchor=\"start\" font-weight=\"400\">视觉编码器与语言 decoder 的层数分别是 24 与 45；两者不相加成语言层数。</text><text x=\"24\" y=\"320\" font-family=\"sans-serif\" font-size=\"16\" fill=\"#29463c\" text-anchor=\"start\" font-weight=\"400\">本站 Zeus 主线目前核验语言开发入口；没有据此声称视觉端已接入该部署。</text></svg><figcaption>公开模型定义的视觉分支；预处理与语言调用图须同时核对。视觉特征填入占位位置，不是作为另一个独立 sampler 的输入。</figcaption></figure><p>公开架构类是 <code>Glm5NextForConditionalGeneration</code>，语言子配置与视觉子配置各自存在。视觉 hidden=1024，经 merger/projection 到语言 H4096。文本 token 和视觉特征在对应占位位置合流，之后共享 45 层语言主干。</p><p>动态输入需要同时核验处理器的 resize / patch / merge 规则、视觉位置数、attention mask、position 和 cache offset；不能仅凭 config 中 image_size=448 写死所有图片的 token 数。本次没有执行多模态 checkpoint 加载或视觉 Zeus kernel 验证。</p>"
+      },
+      {
+        "id": "mtp",
+        "title": "MTP 与多步生成：配置有 nextn，不等于默认多吐一个 token",
+        "html": "<p>MTP（Multi-Token Prediction）为推测生成提供额外的预测路径。配置含 <code>num_nextn_predict_layers=1</code>，它不属于 45 层主 decoder 的普通层计数。是否启用、草稿怎样生成、主模型怎样验证与接纳，属于推理框架配置和执行合同。</p><p>启用推测生成时必须处理：KDA 递推状态如何 checkpoint / 回滚，DSA 哪些缓存位置已经写入但未被接纳，请求长度如何提交，以及分支之间可复用哪些 indexer 结果。丢掉一个未接纳 token 不会自动回滚已原地更新的递推矩阵。</p><p>这里仅说明结构位置与必要状态合同；当前 Zeus 开发入口没有因为公开 nextn 字段存在就被认证为完整 MTP 服务链。</p>"
+      },
+      {
+        "id": "runtime",
+        "title": "部署收尾：一次 decode 完成后还要提交什么",
+        "html": "<p>采样结束之后，调度器仍需提交 token、增长有效长度、维护页表与槽位、处理 EOS，并确定下一轮活跃请求。新请求、结束请求和复用槽位都必须为 KDA 与 DSA 分别重置或释放状态。</p><table><thead><tr><th>验证层</th><th>最小关注点</th></tr></thead><tbody><tr><td>组件数值</td><td>Embedding 精确查行；Dense clamp 与 FP8 pack；Head 全局概率；采样分布</td></tr><tr><td>请求隔离</td><td>不同请求的 cache、conv history、state slot、uniform 不串用</td></tr><tr><td>多步执行</td><td>长度与位置推进；Graph 输入刷新；输出缓冲区不能复用旧值</td></tr><tr><td>整网集成</td><td>tokenizer、视觉处理器、权重 loader、dtype、collective、state 全链一致</td></tr><tr><td>性能</td><td>prefill / decode、batch、上下文、是否含通信与采样、是否启用 MTP 分别报告</td></tr></tbody></table><p>整网 TPOT 不能用某一个 kernel 的延迟代替，也不能把所有独立 kernel 测量无条件相加：真实执行可能有通信、等待、跨请求重叠与调度。当前文章只核验源码与数据流；没有新增整模型、硬件或端到端性能数字。</p>"
+      }
+    ],
+    "sources": [
+      {
+        "id": "official-card",
+        "label": "Z.ai 正式模型卡",
+        "url": "https://huggingface.co/zai-org/GLM-5.3-Flash",
+        "note": "正式名称、多模态定位、320B 总参数 / 18B 激活；2026-10-28核对。",
+        "kind": "官方"
+      },
+      {
+        "id": "public-config",
+        "label": "正式发布配置 · 固定 revision",
+        "url": "https://huggingface.co/zai-org/GLM-5.3-Flash/blob/46a050bec13002ad29ee795c16e61cf4fa3c4a9c/config.json",
+        "note": "text_config 与 vision_config；公开配置不代替 Zeus 运行验收。",
+        "kind": "源码"
+      },
+      {
+        "id": "public-modeling",
+        "label": "Transformers GLM5Next 模型实现 · 固定 commit",
+        "url": "https://github.com/huggingface/transformers/blob/a672eb5f474b8b30173e9f96eab66adf292da635/src/transformers/models/glm5_next/modeling_glm5_next.py",
+        "note": "TextModel、DecoderLayer、HyperConnection、HyperHead 与视觉合流。",
+        "kind": "源码"
+      },
+      {
+        "id": "deployment-audit",
+        "label": "本次模型与专题重组依据",
+        "url": "evidence/glm53-flash-architecture.md",
+        "note": "2026-10-28；固定版本、配置对照、只读源码边界。",
+        "kind": "证据"
+      },
+      {
+        "id": "embedding-runner",
+        "label": "Embedding 开发入口",
+        "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_embed_dup4_dp4.py",
+        "note": "full-table DP4×duplicate4；不是默认 vocab-sharded 的证明。",
+        "kind": "源码"
+      },
+      {
+        "id": "dense-runner",
+        "label": "Dense TP4 开发入口",
+        "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_dense_fused_ffn_tp4_dp4.py",
+        "note": "前三层 Dense；投影、clamp、pack 与 partial 合同。",
+        "kind": "源码"
+      },
+      {
+        "id": "head-runner",
+        "label": "Head / Sampler runner",
+        "url": "https://github.com/bjxx-algo/zeus_dev/blob/05ee10f9cc25d19fca0a144ae095c79b3a888976/model_state_dev/glm5next_modules/dev_lmhead_sampler_tp4_dp4.py",
+        "note": "单一模块，caller-owned TP group；Graph 范围。",
+        "kind": "源码"
+      },
+      {
+        "id": "head-impl",
+        "label": "Head / Top-p 当前实现",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/68f19fa0a159b8ff861dc9cf736d9c0ae64906ba/sgl-kernel-zeus-triton/python/glm53_flash/sampling/head_sampling.py",
+        "note": "返回 token；分布式多kernel执行。",
+        "kind": "源码"
+      },
+      {
+        "id": "embedding-impl",
+        "label": "Embedding 当前实现",
+        "url": "https://github.com/DarronTam/torch_zeus/blob/68f19fa0a159b8ff861dc9cf736d9c0ae64906ba/sgl-kernel-zeus-triton/python/glm53_flash/embedding/embedding.py",
+        "note": "pack、lookup、masked lookup 与 rank 内双 core 列切分。",
+        "kind": "源码"
+      }
+    ],
+    "questions": [
+      {
+        "id": "head-communication",
+        "q": "返回一个 token，为什么 LM Head 仍可能需要通信？",
+        "a": "每个TP rank只计算本地词表分数，但采样依赖全局softmax分母和全局候选集合。可以用分布式统计与搜索避免完整logits gather，却不能跳过跨shard的一致性协调。",
+        "followup": "区分最小返回payload与算法实际读取、计算及通信的总量。"
+      },
+      {
+        "id": "mtp-state",
+        "q": "MTP 草稿 token 未接纳时，为什么不能只丢弃 token ID？",
+        "a": "KDA递推矩阵与短卷积历史可能已经原地更新，DSA缓存也可能已经写入。必须按接纳边界恢复或提交状态、有效长度和槽位；否则下一步状态与已输出文本不一致。",
+        "followup": "设计同一请求在推测开关前后的确定性数值检查。"
+      },
+      {
+        "id": "dense-sharding",
+        "q": "Dense FFN 的 TP 为什么切中间维？",
+        "a": "Gate和Up各自输出中间维的分片，在本地完成clamp、SiLU和相乘；Down对这些分片产生H4096 partial，最后线性求和恢复完整结果。非线性留在完整的本地中间维元素上，避免把非线性错误分配到partial。",
+        "followup": "说明I12288和单专家I2048的区别。"
+      }
+    ],
+    "takeaways": [
+      "Embedding 查表与 LM Head 全词表投影是不同工作，权重也不自动共享。",
+      "Dense 的 I12288 与 MoE 单专家 I2048 不要混用。",
+      "避免完整 logits gather 仍要满足全局采样分布。",
+      "视觉与 MTP 的配置存在不代表当前 Zeus 主线已接入并完成运行验收。"
+    ],
+    "readingLabel": "从网络两端补齐整网执行",
+    "readingStageLabel": "阅读阶段",
+    "readingStages": [
+      {
+        "id": "input-and-dense",
+        "title": "输入与前三层 Dense",
+        "summary": "查表、四流初始化与Dense的中间维分片",
+        "sections": [
+          "bookends",
+          "embedding",
+          "dense"
+        ]
+      },
+      {
+        "id": "output",
+        "title": "Head 与采样",
+        "summary": "全局词表分布、TP协调与Graph控制输入",
+        "sections": [
+          "head",
+          "sampling"
+        ]
+      },
+      {
+        "id": "optional-and-runtime",
+        "title": "视觉、MTP 与运行边界",
+        "summary": "可选分支、请求状态推进和整网验证",
+        "sections": [
+          "vision",
+          "mtp",
+          "runtime"
+        ]
+      }
+    ],
+    "portableReading": {
+      "file": "glm53-components.html",
+      "download": "glm53-components.html",
+      "label": "保存其余组件 HTML ↓"
+    }
+  }
+]

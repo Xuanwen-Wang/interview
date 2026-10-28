@@ -59,7 +59,7 @@ Attention、FFN、PE、VP、MoE 部署与性能分析分别使用一个 chapter�
 
 合并已有章节时，使用 `legacyChapters` 保存原 chapter ID、`title`、入口 `section`、全部旧 `anchors` 和可选 `noteKey`。旧 hash 路由映射到长文；旧笔记单独保留，不能用旧章的完成状态代替整篇长文的完成状态。当前 PE 的原总览笔记使用 `legacy-pe-overview`，避免覆盖同 ID 新长文笔记。问答的 `legacyKeys` 只映射语义相同的原题，改题后不要沿用已有熟练度。
 
-旧章节可能都有名为 `shape` 或 `contract` 的小节。合并时在对应旧章节的元数据内增加 `anchorMap`，例如 `{"anchors":["shape"],"anchorMap":{"shape":"router-shape"}}`；保留 `anchors` 原列表作为历史链接清单，每项映射后的目标必须存在。未改名的旧锚点可省略映射。不要把多个旧章节的通用锚点直接注入新正文，避免重复 HTML ID 或跳到错误内容。模块专题合并使用 `config/navigation.json` 中 module 的 `legacyGroups`，如 `{"moe-kernels":"moe-foundation"}`，保留旧 `#module/moe/moe-kernels` 入口。
+旧章节可能都有名为 `shape` 或 `contract` 的小节。合并时在对应旧章节的元数据内增加 `anchorMap`，例如 `{"anchors":["shape"],"anchorMap":{"shape":"router-shape"}}`；保留 `anchors` 原列表作为历史链接清单，每项映射后的目标必须存在。未改名的旧锚点可省略映射。不要把多个旧章节的通用锚点直接注入新正文，避免重复 HTML ID 或跳到错误内容。需要保留旧专题入口时，可使用 `config/navigation.json` 中 module 的 `legacyGroups`。GLM-5.3-Flash 的旧模块路由已按用户要求取消，不以旧模块结构限制新专题。
 
 首次迁移先备份旧存储原文，再写入 `readingVersion: 2`。旧版备份导入、JSON/Markdown 导出、多标签合并和取消已读都须验证。`scripts/check.py` 检查阶段覆盖、旧锚点与重名 ID；浏览器验证实际跳转及历史笔记定位。
 
@@ -72,7 +72,7 @@ Attention、FFN、PE、VP、MoE 部署与性能分析分别使用一个 chapter�
 | 新需求 | 建议位置 |
 | --- | --- |
 | 中端核心 Pass 逐个拆解 | `compiler` 下新增 `middle-end-passes` 专题；按分析前提、合法性、变换、失效、反例组织章节 |
-| GLM5Next KDA 真实部署 | `moe`（显示名 GLM5Next 300B 真实部署）的 Attention 部署专题；区分模型wrapper与kernel版本，交叉链接算法与硬件 |
+| GLM-5.3-Flash 部署 | `glm53-flash` 下按整网概览、MoE、Attention、mHC、其余组件组织；每专题一篇连续 HTML，模型和 kernel 版本分别固定 |
 | 更多公司面经 | 添加来源记录后，在同一份面试题长文中增加场次与题目锚点，不再增加公司或专题 HTML |
 | LLVM 后端专题 | 扩展 `llvm-backend` 的对应 readingStage；每个模块保留独立 section、源码入口、例子与验证边界 |
 | 新 Coding 题型 | `coding` 下按通用算法、数据流、kernel、pass 分类扩章；代码和题源分开 |
@@ -80,7 +80,7 @@ Attention、FFN、PE、VP、MoE 部署与性能分析分别使用一个 chapter�
 
 ## 算法与部署的内容边界
 
-`algorithms`只保留 Attention 与 FFN 两篇连续教程，各有一个独立 HTML。以真实模型数字 shape 贯穿一次 decode，再解释长上下文、参数增长下的状态、计算和逻辑读写变化；少量公式服务于数据流，不再为每个概念拆章。MHA/MQA 的同维教学对照、真实 Qwen 配置、内部 GLM5Next 和实测必须分开。实际 rank、collectives、kernel ABI 与性能证据放入 `moe` 部署域。保留`moe`路由ID以兼容既有链接。专题可继续增加新模型部署或kernel内部章节。
+`algorithms`只保留 Attention 与 FFN 两篇连续教程，各有一个独立 HTML。以真实模型数字 shape 贯穿一次 decode，再解释长上下文、参数增长下的状态、计算和逻辑读写变化；少量公式服务于数据流，不再为每个概念拆章。MHA/MQA 的同维教学对照、真实 Qwen 配置、内部 GLM5Next 和实测必须分开。实际 rank、collectives、kernel ABI 与性能证据放入 `glm53-flash` 部署域。按用户 2026-10-28 更新，入口统一为 `#module/glm53-flash`，不再保留旧 `module/moe` 路由。Attention 部署合为 `glm53-attention.html`，mHC 单独为 `glm53-mhc.html`，其余组件合为 `glm53-components.html`。
 
 主题可配置`learningPath`，每步包含`title`、`description`、`chapter`，页面自动生成有顺序的阅读入口。所有chapter引用由静态检查验证；它是推荐路线，不改变章节的唯一主目录位置。
 

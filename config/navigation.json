@@ -60,57 +60,66 @@
       }
     },
     {
-      "id": "moe",
-      "title": "GLM5Next 300B 真实部署",
+      "id": "glm53-flash",
+      "title": "GLM-5.3-Flash 部署",
       "number": "03",
-      "description": "以卡间 EP4、卡内 TP4 为部署主线，在一篇连续讲解里贯通 MoE 拓扑、通信、四个 kernel 与验证边界；另保留整模型及 Attention 专题。",
+      "description": "从完整网络结构出发，按整网概览、MoE、Attention、mHC 和其余组件五个专题展开：先看模型怎样生成一个 token，再进入状态、并行、通信与实际 kernel。",
       "groups": [
         {
-          "id": "moe-foundation",
-          "title": "MoE：从部署到四个 kernel 的完整讲解",
-          "chapters": [
-            "moe-deployment-walkthrough"
-          ]
-        },
-        {
-          "id": "deploy-model",
-          "title": "完整模型与部署上下文",
+          "id": "network",
+          "title": "整网结构与部署概览",
           "chapters": [
             "glm-deployment-overview"
           ]
         },
         {
-          "id": "deploy-attention",
-          "title": "Attention 部署：KDA 与 DSA",
+          "id": "moe",
+          "title": "MoE：部署、通信与四个 kernel",
           "chapters": [
-            "kda-dataflow",
-            "kda-kernel-walkthrough",
-            "dsa-dataflow",
-            "dsa-kernel-walkthrough"
+            "moe-deployment-walkthrough"
+          ]
+        },
+        {
+          "id": "attention",
+          "title": "Attention：KDA 与 DSA",
+          "chapters": [
+            "glm53-attention"
+          ]
+        },
+        {
+          "id": "mhc",
+          "title": "mHC：四流残差与归一化",
+          "chapters": [
+            "glm53-mhc"
+          ]
+        },
+        {
+          "id": "components",
+          "title": "其余组件：输入、输出与运行",
+          "chapters": [
+            "glm53-components"
           ]
         }
       ],
       "learningPath": [
         {
-          "title": "先走通 MoE",
-          "description": "卡间 EP4、卡内 TP4，连续读完四个 kernel",
-          "chapter": "moe-deployment-walkthrough"
-        },
-        {
-          "title": "放回完整模型",
-          "description": "对齐层结构、Attention 与状态生命周期",
+          "title": "先建立整网",
+          "description": "输入、45层、四流残差、Head与采样",
           "chapter": "glm-deployment-overview"
         },
         {
-          "title": "继续拆 Attention",
-          "description": "沿 KDA 数据流进入对应 kernel",
-          "chapter": "kda-dataflow"
+          "title": "再选择主计算专题",
+          "description": "MoE 专家计算；Attention 递推与历史读取",
+          "chapter": "glm53-attention"
+        },
+        {
+          "title": "补齐连接与收尾",
+          "description": "mHC、Norm、Embedding、Dense、视觉与MTP",
+          "chapter": "glm53-mhc"
         }
       ],
-      "legacyGroups": {
-        "moe-kernels": "moe-foundation",
-        "moe-systems": "moe-foundation"
-      }
+      "readingCollection": true,
+      "collectionLabel": "FIVE DEPLOYMENT TOPICS"
     },
     {
       "id": "compiler",

@@ -16,7 +16,7 @@
 | --- | --- |
 | 开始与路线 | 岗位能力、项目叙述、工程证据 |
 | 算法与数据流 | 两篇 decode 入门长文：Attention 的历史状态与长上下文；FFN 的参数、路由与权重复用。真实 shape 图贯穿计算和访存 |
-| GLM5Next 300B真实部署 | MoE 单篇：卡间 EP4、卡内 TP4 → token 往返 → Router/Shared/Routed/Reduce → 通信与验证；完整模型与 Attention 另有专题 |
+| GLM-5.3-Flash 部署 | 整网概览 → MoE / Attention → mHC → 其余组件，五篇连续讲解；公开模型与固定 Zeus 快照分别标注 |
 | Triton · MLIR · LLVM | AST/TTIR/布局、Op/Region/Dialect、PassManager与分析失效、Rewrite/Conversion、LLVM中后端 |
 | 518硬件与后端 | Lowering 架构长文与独立同步篇；从硬件约束解释描述符、边界、布局、控制流、VP 映射和代码生成，PE/VP 硬件长文作为配套 |
 | 性能与推理系统 | Nsight / Profiler、算子画像、Roofline、通信分析、模型负载、并发与容量、服务与运行时 |
@@ -50,9 +50,9 @@
 
 ## 模型到部署的阅读顺序
 
-先读算法与数据流的两篇连续教程：[Attention](https://xuanwen-wang.github.io/interview/attention.html) 从 Qwen3-8B 和内部 GLM5Next300B 的完整模型图出发，讲 GQA 全历史读取、在线 softmax、MLA、稀疏检索与递归状态；[FFN](https://xuanwen-wang.github.io/interview/ffn.html) 从三矩阵走向专家选择、归组与合并，分清总参数、激活参数和 batch 权重复用。图与交互计算采用显式模型维度和教学字节口径，不是硬件实测。随后进入 [GLM5Next 300B 真实部署](https://xuanwen-wang.github.io/interview/#module/moe)，沿卡、rank、token 到四个 kernel，继续 KDA/DSA 部署专题。
+先读算法与数据流的两篇连续教程：[Attention](https://xuanwen-wang.github.io/interview/attention.html) 从 Qwen3-8B 和内部 GLM5Next300B 的完整模型图出发，讲 GQA 全历史读取、在线 softmax、MLA、稀疏检索与递归状态；[FFN](https://xuanwen-wang.github.io/interview/ffn.html) 从三矩阵走向专家选择、归组与合并，分清总参数、激活参数和 batch 权重复用。图与交互计算采用显式模型维度和教学字节口径，不是硬件实测。随后进入 [GLM-5.3-Flash 部署](https://xuanwen-wang.github.io/interview/#module/glm53-flash)：[整网概览](https://xuanwen-wang.github.io/interview/glm53-flash.html)、[MoE](https://xuanwen-wang.github.io/interview/moe.html)、[Attention](https://xuanwen-wang.github.io/interview/glm53-attention.html)、[mHC](https://xuanwen-wang.github.io/interview/glm53-mhc.html) 与 [其余组件](https://xuanwen-wang.github.io/interview/glm53-components.html) 各自一篇连续长文。正式名称与历史开发快照、公开多模态模型与 Zeus 语言部署证据分别标注。
 
-2026-10-25复核发现：真实权重300B验收配置绑定较早SGLang/torch的FP8 UScale链，当前开发四核链则使用BF16 Shared与per-tensor FP8 Routed；卡间EP4、卡内TP4一致，不代表两条执行链已经集成。开发caller未传配置中的clamp=10、KDA v3.1/v4接口断点等均在文中保留，没有将两仓各自最新代码包装成已联调通过的部署。
+2026-10-25复核发现：真实权重300B验收配置绑定较早SGLang/torch的FP8 UScale链，当前开发四核链则使用BF16 Shared与per-tensor FP8 Routed；卡间EP4、卡内TP4一致，不代表两条执行链已经集成。MoE 的旧固定快照保留原证据边界。2026-10-28 更新已单独确认当前 KDA 主路径恢复为唯一 v3.1，与固定 caller 的版本名一致；这项源码对齐不等于联跑或性能验收。
 
 ## 本地使用
 
