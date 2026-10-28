@@ -65,7 +65,7 @@ function renderMoeFlow(root) {
     ['Attention 已合并','每卡只观察自己的6行完整 Attention 输出。KDA 已完成 C0；DSA 已完成 D1–D3。','A[6,4096]'],
     ['mHC 转换','Attention post 更新四条残差流；FFN pre+norm 产生 X。post/comb 与 residual 留在原卡。','Xlocal[6,4096]'],
     ['C1 · AllGather','四卡按原顺序拼成24行，每个 rank 得到相同的 X；这一步不做加法。','Xglobal[24,4096]'],
-    ['四 kernel / 本地 Reduce','每个 rank 独立路由并计算本卡命中的专家；本地 Reduce 合 Shared 双core与加权 Routed slot。只读本rank缓冲区，尚未加入其他TP分片。','P[24,4096]'],
+    ['四 kernel / rank 内 Reduce','每个 rank 独立路由并计算本卡命中的专家；rank 内 Reduce 合 Shared 双core与加权 Routed slot。只读本rank缓冲区，尚未加入其他TP分片。','P[24,4096]'],
     ['C2 · TP AllReduce','同卡4 rank 传递 P，对同一[token,特征]逐元素相加，再复制给四者。补齐的是I2048的投影贡献；没有拼接列，不重乘α。','B[24,4096]'],
     ['C3 · EP ReduceScatter','跨卡同lane对同一[token,特征]相加，每卡只取一份。加齐不同专家贡献后按6行一块归还；不重乘α、不取平均。','Ylocal[6,4096]'],
     ['mHC post / 下一层','完整 MoE 输出与原卡 residual、post、comb 按同一请求行配对，更新四流残差。','residual[6,4,4096]']
@@ -92,7 +92,7 @@ function renderMoeFlow(root) {
       if(step===3) {
         const unit=(m.token+1)*(m.lane+1)/8;
         const shared=c.ep===0?`(${unit/2} + ${unit/2})`:'0';
-        return `本地 Reduce：${shared} + 0.3125 × ${(2*c.ep+1)*unit} + 0.3125 × ${(2*c.ep+2)*unit} = ${c.value}。前项是Shared双core之和，后两项来自expert ${expertIds[2*c.ep]}、${expertIds[2*c.ep+1]}；尚缺另外三个TP分片。`;
+        return `rank 内 Reduce：${shared} + 0.3125 × ${(2*c.ep+1)*unit} + 0.3125 × ${(2*c.ep+2)*unit} = ${c.value}。前项是Shared双core之和，后两项来自expert ${expertIds[2*c.ep]}、${expertIds[2*c.ep+1]}；尚缺另外三个TP分片。`;
       }
       if(step===4)return `C2 加 rank${4*c.ep}–${4*c.ep+3} 的 P：${m.partials.slice(4*c.ep,4*c.ep+4).map(row=>row[m.token]).join(' + ')} = ${c.value}。同卡四rank现在都有这份 B，还缺其他卡专家。`;
       if(step===5)return c.ep===m.owner?`C3 加四卡 B：${m.boards.map(b=>b[m.token]).join(' + ')} = ${c.value}。归还本地行${m.row}。`:`本卡仅保留 token ${6*c.ep}–${6*c.ep+5}；选中的 token ${m.token} 已归还卡${m.owner}。`;

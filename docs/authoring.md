@@ -82,6 +82,8 @@ Attention、FFN、PE、VP、MoE 部署与性能分析分别使用一个 chapter�
 
 ## 算法与部署的内容边界
 
+依据用户 2026-10-28 对 MoE kernel 讲解的反馈，部署篇的每个 kernel 先列真实调用的输入与输出 ABI（shape、各轴、dtype、连续 stride、有效范围、生产者和消费者），再沿同一 token 展开实际计算与 rank/core 分工。逻辑权重、pack 后对象和运行时缓冲区分开解释；中间 shape 标明逻辑全量还是实际 tile。统一称第四个 kernel 为“rank 内 Reduce”，明确它消去 Shared core 轴和 Routed slot 轴，TP AllReduce 另合不同 rank；不能把一个 kernel 的 core 分工套用到其他 kernel。图、正文、交互和数值顺序必须一致。
+
 `algorithms`只保留 Attention 与 FFN 两篇连续教程，各有一个独立 HTML。以真实模型数字 shape 贯穿一次 decode，再解释长上下文、参数增长下的状态、计算和逻辑读写变化；少量公式服务于数据流，不再为每个概念拆章。MHA/MQA 的同维教学对照、真实 Qwen 配置、内部 GLM5Next 和实测必须分开。实际 rank、collectives、kernel ABI 与性能证据放入 `glm53-flash` 部署域。按用户 2026-10-28 更新，入口统一为 `#module/glm53-flash`，不再保留旧 `module/moe` 路由。Attention 部署合为 `glm53-attention.html`，mHC 单独为 `glm53-mhc.html`，其余组件合为 `glm53-components.html`。
 
 主题可配置`learningPath`，每步包含`title`、`description`、`chapter`，页面自动生成有顺序的阅读入口。所有chapter引用由静态检查验证；它是推荐路线，不改变章节的唯一主目录位置。
