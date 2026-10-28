@@ -21,3 +21,5 @@
 @media print{.al-fa-axis>strong,.al-fa-track>strong{position:static}}
 [data-attention-lab="fa3-pipeline"]{--sans:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;container-type:inline-size;container-name:fa3lesson}
 @container fa3lesson (max-width:650px){.al-fa-operation{grid-template-columns:minmax(0,1fr);gap:11px;padding-bottom:22px}.al-fa-transform>b{transform:rotate(90deg);font-size:22px}.al-fa-transform{padding:3px 0}.al-fa-serial>div{grid-template-columns:1fr;gap:7px}.al-fa-serial>div>strong{text-align:center}.al-fa-serial>div>b{transform:rotate(90deg);text-align:center;height:16px}}
+
+.al-mla-numbers{display:flex;gap:8px;margin:8px 0;max-width:440px}.al-mla-numbers>i{flex:1;min-width:0;padding:10px 4px;border:1px solid #a9c6b7;border-radius:4px;background:#e6f1ec;text-align:center;font:600 18px/1.4 var(--mono);color:#2f6f62}

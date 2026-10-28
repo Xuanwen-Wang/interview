@@ -178,7 +178,22 @@ const rowTimes = (row, weights) => weights[0].map((_, j) => row.reduce((sum, x, 
 const transpose = weights => weights[0].map((_, j) => weights.map(row => row[j]));
 const differs = (a, b, epsilon = 1e-6) => a.some((x, i) => Math.abs(x - b[i]) > epsilon);
 
-// Exact fixture printed in the MLA section. It deliberately omits RoPE and
+// The introductory examples separate token count from feature width and use
+// unequal latent/key widths so absorption visibly widens the current query.
+const introW = [[1, 0], [0, 1], [1, 1], [-1, 0]];
+vector(rowTimes([1, 2, 3, 1], introW), [3, 5]);
+// A second token uses the same weights without mixing with the first token.
+vector(rowTimes([0, 1, 0, 0], introW), [0, 1]);
+const introC = [[1, 2, 0], [3, 1, 1]];
+const introAK = [[1, 0], [1, 1], [0, 2]], introQ = [2, 1];
+matrix(introC.map(c => rowTimes(c, introAK)), [[3, 2], [4, 3]]);
+vector(rowTimes(introQ, transpose(introAK)), [2, 3, 2]);
+vector(introC.map(c => dot(rowTimes(introQ, transpose(introAK)), c)), [8, 11]);
+vector(introC.map(c => dot(introQ, rowTimes(c, introAK))), [8, 11]);
+close(0.25 * (2 * 1 + 2) + 0.75 * (2 * 3 + 1), 6.25);
+close(2 * (0.25 * 1 + 0.75 * 3) + (0.25 * 2 + 0.75 * 1), 6.25);
+
+// The full two-position fixture deliberately omits RoPE and
 // scaling so the first encounter with absorption has small, inspectable values.
 const mlaToyC = [[1, 2], [3, 1]], mlaToyAK = [[1, 0], [1, 1]], mlaToyAV = [[1, 2], [0, 1]];
 const mlaToyQ = [2, 1];
