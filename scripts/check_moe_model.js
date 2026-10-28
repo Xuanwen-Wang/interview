@@ -37,6 +37,50 @@ assert.equal(t24.fp8RoutedCard,1728*1048576);
 assert.equal(t24.bf16SharedRank,12*1048576);
 for(const input of [{tokens:7},{tokens:0},{tokens:24.5},{tokens:Infinity},{ep:4},{tp:-1},{expert:288},{expert:1.5}])assert.throws(()=>model.inspect(input),RangeError);
 
+// Independent scalar-per-feature oracle with real E288/K8/TP4 and unequal EP loads.
+// Reference evaluates complete experts; implementation combines rank partials.
+for(const tokens of [8,16,24,32]) {
+  const expert=(t,k)=>(t*17+k*29)%288;
+  const alpha=k=>[0.125,0.125,0.25,0.25,0.25,0.375,0.5,0.625][k];
+  const shard=(t,e,tp)=>(t+1)*(e+1)*(tp+1)/1024;
+  const shared=(t,tp)=>(t+1)*(tp+1)/8;
+  const partials=Array.from({length:16},(_,rank)=>Array.from({length:tokens},(_,t)=>{
+    const ep=Math.floor(rank/4),tp=rank%4;
+    let result=ep===0?shared(t,tp):0;
+    for(let k=0;k<8;k++)if(Math.floor(expert(t,k)/72)===ep)result+=alpha(k)*shard(t,expert(t,k),tp);
+    return result;
+  }));
+  const golden=Array.from({length:tokens},(_,t)=>{
+    let result=(t+1)*10/8;
+    for(let k=0;k<8;k++)result+=alpha(k)*(t+1)*(expert(t,k)+1)*10/1024;
+    return result;
+  });
+  const combined=model.combine(partials);
+  assert.deepEqual(combined.owners.flat(),golden);
+  for(let owner=0;owner<4;owner++)for(let local=0;local<tokens/4;local++)assert.equal(combined.owners[owner][local],golden[owner*tokens/4+local]);
+  const wrongWorld=Array.from({length:tokens},(_,t)=>combined.boards.reduce((sum,b)=>sum+4*b[t],0));
+  assert.deepEqual(wrongWorld,golden.map(v=>4*v));
+  assert.notDeepEqual(combined.owners.slice().reverse().flat(),golden,'Reversing ownership must be detected');
+  const duplicatedShared=partials.map((row,r)=>row.map((v,t)=>v+(r>=4?shared(t,r%4):0)));
+  assert.notDeepEqual(model.combine(duplicatedShared).owners.flat(),golden,'Repeated Shared must be detected');
+}
+assert.deepEqual(model.trace({step:4}).boards.map(b=>b[7]),[19.375,21.875,34.375,46.875]);
+assert.equal(model.trace({step:5}).owners[1][1],122.5);
+for(let t=0;t<24;t++)for(let lane=0;lane<4;lane++)for(let step=0;step<7;step++){
+  const trace=model.trace({token:t,lane,step});
+  const copies=trace.cards.filter(c=>c.rows.includes(t));
+  assert.equal(copies.length,step>=2&&step<=4?4:1);
+  assert.equal(trace.owner,Math.floor(t/6));assert.equal(trace.row,t%6);
+  assert.equal(trace.cards[trace.owner].rank,trace.owner*4+lane);
+}
+for(const input of [{token:24},{token:-1},{lane:4},{step:7},{token:1.5}])assert.throws(()=>model.trace(input),RangeError);
+for(const input of [[],Array(16).fill([1,2]),Array(16).fill([1,2,3,NaN])])assert.throws(()=>model.combine(input),RangeError);
+// DSA B6 fixed-capacity wire accounting (including raw-score and LSE padding).
+assert.equal(6*16*512*2+6*8192*4,288*1024);
+assert.equal(6*64*512*2+4096,388*1024);
+assert.equal(16*6*1024*2,4*6*4096*2);
+console.log('MoE communication: asymmetric Top8 ownership, TP/EP sums, one Shared, token return, duplicate-sum and wrong-order counterexamples, all trace steps passed.');
+
 // Old chapters may share generic anchor names; routing must use chapter-local
 // maps without injecting those names as duplicate DOM ids in the new chapter.
 const chapters=[{id:'moe-new',legacyChapters:{oldA:{section:'router',anchors:['shape'],anchorMap:{shape:'router-shape'}},oldB:{section:'routed',anchors:['shape'],anchorMap:{shape:'routed-shape'}}},questions:[{id:'new-routing',q:'Repeated title',legacyKeys:['oldA:old-routing']},{id:'other-routing',q:'Repeated title',legacyKeys:['oldB:old-routing']}]}];

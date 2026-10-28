@@ -28,18 +28,82 @@ const MoeDeploymentModel = (() => {
       bf16OtherCards:tokens*(EP-1)/EP*H*2
     };
   }
-  return Object.freeze({config,inspect});
+  // Real-valued ownership model. It does not model collective rounding or time.
+  function combine(partials) {
+    if (!Array.isArray(partials) || partials.length !== 16) throw new RangeError('Expected sixteen rank partials');
+    const tokens=partials[0]?.length;
+    if (!Number.isInteger(tokens) || tokens<4 || tokens%4 || partials.some(row=>!Array.isArray(row)||row.length!==tokens||row.some(v=>!Number.isFinite(v)))) throw new RangeError('Expected equal finite token vectors divisible by four');
+    const boards=Array.from({length:4},(_,ep)=>Array.from({length:tokens},(_,t)=>partials.slice(ep*4,ep*4+4).reduce((sum,row)=>sum+row[t],0)));
+    const owners=Array.from({length:4},(_,owner)=>Array.from({length:tokens/4},(_,row)=>boards.reduce((sum,board)=>sum+board[owner*tokens/4+row],0)));
+    return {boards,owners};
+  }
+  function trace({token=7,lane=0,step=0}={}) {
+    if (!Number.isInteger(token)||token<0||token>=24||!Number.isInteger(lane)||lane<0||lane>=4||!Number.isInteger(step)||step<0||step>6) throw new RangeError('Invalid trace selection');
+    // Invented values in one output feature; model dimensions remain unchanged.
+    const partials=Array.from({length:16},(_,r)=>Array.from({length:24},(_,t)=>{
+      const ep=Math.floor(r/4),tp=r%4;
+      return (t+1)/8*(tp+1)*(0.3125*((2*ep+1)+(2*ep+2))+(ep===0?1:0));
+    }));
+    const {boards,owners}=combine(partials),owner=Math.floor(token/6),row=token%6;
+    return {token,lane,step,owner,row,partials,boards,owners,
+      cards:Array.from({length:4},(_,ep)=>({ep,rank:4*ep+lane,
+        rows:step>=2&&step<=4?Array.from({length:24},(_,t)=>t):Array.from({length:6},(_,t)=>ep*6+t),
+        value:step===3?partials[ep*4+lane][token]:step===4?boards[ep][token]:step===5&&ep===owner?owners[ep][row]:null
+      }))};
+  }
+  return Object.freeze({config,inspect,combine,trace});
 })();
 if (typeof module === 'object' && module.exports) module.exports = MoeDeploymentModel;
 
 function initMoeExplorers() {
   $$('[data-moe-explorer]').forEach(renderMoeExplorer);
+  $$('[data-moe-flow]').forEach(renderMoeFlow);
+}
+
+function renderMoeFlow(root) {
+  const stages=[
+    ['Attention 已合并','每卡只观察自己的6行完整 Attention 输出。KDA 已完成 C0；DSA 已完成 D1–D3。','A[6,4096]'],
+    ['mHC 转换','Attention post 更新四条残差流；FFN pre+norm 产生 X。post/comb 与 residual 留在原卡。','Xlocal[6,4096]'],
+    ['C1 · AllGather','四卡按原顺序拼成24行，每个 rank 得到相同的 X；这一步不做加法。','Xglobal[24,4096]'],
+    ['四 kernel','Router → Shared → Routed → local Reduce。每个 rank 得到自己的 I512 与本卡专家贡献。','P[24,4096]'],
+    ['C2 · TP AllReduce','同卡4 rank 逐元素 SUM，完整的 I2048 贡献在卡内复制；不同卡仍是不同专家贡献。','B[24,4096]'],
+    ['C3 · EP ReduceScatter','每个跨卡 lane 只取每个 EP 的一份贡献求和，再按6行一块归还 token。','Ylocal[6,4096]'],
+    ['mHC post / 下一层','完整 MoE 输出与原卡 residual、post、comb 按同一请求行配对，更新四流残差。','residual[6,4,4096]']
+  ];
+  root.classList.add('moe-explorer','moe-flow');
+  root.innerHTML=`<header class="moe-widget-head"><span class="eyebrow">FOLLOW ONE TOKEN</span><h4>让一条 token 真正走完这张图</h4><p>固定真实 shape：全局24行、每卡6行、H4096、Top8。彩色格只追踪行身份；数值是一个输出特征的构造例，不是实测或延迟动画。</p></header>
+    <div class="moe-controls"><label>追踪 token<select data-flow-token aria-label="追踪通信token">${Array.from({length:24},(_,t)=>`<option value="${t}" ${t===7?'selected':''}>token ${t}</option>`).join('')}</select></label><label>观察 TP lane<select data-flow-lane aria-label="观察通信TP lane">${Array.from({length:4},(_,i)=>`<option value="${i}">lane ${i}</option>`).join('')}</select></label></div>
+    <div class="moe-flow-nav" role="group" aria-label="MoE通信步骤">${stages.map(([name],i)=>`<button type="button" data-flow-step="${i}" aria-pressed="false">${i+1} · ${name}</button>`).join('')}</div>
+    <div class="moe-owner" data-flow-status aria-live="polite"></div><div class="moe-card-grid" data-flow-cards></div>
+    <div class="moe-flow-actions"><button type="button" data-flow-prev>上一步</button><button type="button" data-flow-next>下一步</button><button type="button" data-flow-reset>重置</button></div>
+    <div class="moe-route-budget" data-flow-math></div>
+    <p class="moe-model-note">数值构造：IDs=[5,20,73,100,151,200,220,287]，各 α=0.3125；slot k 在 TP p 的单通道 partial=(k+1)(p+1)(token+1)/8。EP0 的 Shared partial=(p+1)(token+1)/8。只用于验证一次求和与返回位置，忽略设备舍入。</p>
+    <p class="moe-model-note moe-flow-print">完整静态流程与通信账本见紧邻正文。交互状态只展示当前所选一步；没有播放中的中间帧。</p>`;
+  let step=0;
+  const token=$('[data-flow-token]',root),lane=$('[data-flow-lane]',root);
+  function update() {
+    const m=MoeDeploymentModel.trace({token:Number(token.value),lane:Number(lane.value),step});
+    const [title,explanation,shape]=stages[step];
+    $$('[data-flow-step]',root).forEach(b=>b.setAttribute('aria-pressed',String(Number(b.dataset.flowStep)===step)));
+    $('[data-flow-status]',root).innerHTML=`<h4>${step+1}/7 · ${title}</h4><p>${explanation}</p><p><strong>${shape}</strong>；token ${m.token} 的原 owner 始终是卡${m.owner}、本地行${m.row}（从0编号）。</p>`;
+    $('[data-flow-cards]',root).innerHTML=m.cards.map(c=>`<div class="moe-card ${c.ep===m.owner?'selected':''}"><strong>卡${c.ep} · rank ${c.rank}</strong><small>${shape} · ${step===6?'四流残差':step===3?'rank partial':step===4?'卡级贡献':'本步张量'}</small><div class="moe-token-grid">${c.rows.map(t=>`<span class="${t===m.token?'selected':''}">${t}</span>`).join('')}</div><small>${c.value===null?'':`所选 token 的单通道值：${c.value}`}</small></div>`).join('');
+    const total=m.owners[m.owner][m.row];
+    $('[data-flow-math]',root).innerHTML=`<h4>token ${m.token} 的完整求和账</h4><p>卡内 TP 合并后四卡贡献：${m.boards.map(b=>b[m.token]).join(' + ')} = <strong>${total}</strong>。C3 把该结果送回卡${m.owner}的行${m.row}。</p><p>若把 TP 已复制的结果再对 world16 无差别求和，会得到 ${4*total}，恰好重复4次。请求的原 owner 与当前计算该 token 的卡是两个概念。</p>`;
+    $('[data-flow-prev]',root).disabled=step===0;
+    $('[data-flow-next]',root).disabled=step===6;
+  }
+  $$('[data-flow-step]',root).forEach(b=>b.addEventListener('click',()=>{step=Number(b.dataset.flowStep);update();}));
+  token.addEventListener('change',update);lane.addEventListener('change',update);
+  $('[data-flow-prev]',root).addEventListener('click',()=>{step=Math.max(0,step-1);update();});
+  $('[data-flow-next]',root).addEventListener('click',()=>{step=Math.min(6,step+1);update();});
+  $('[data-flow-reset]',root).addEventListener('click',()=>{step=0;token.value='7';lane.value='0';update();});
+  update();
 }
 
 function renderMoeExplorer(root) {
   root.classList.add('moe-explorer');
   const options=(count,label)=>Array.from({length:count},(_,i)=>`<option value="${i}">${label} ${i}</option>`).join('');
-  root.innerHTML=`<header class="moe-widget-head"><span class="eyebrow">FOLLOW A RANK</span><h4>卡间 EP4、卡内 TP4：数据与权重落在哪里？</h4><p>固定当前 GLM5Next 300B 的 H=4096、E=288、I=2048、K=8。T 表示本次 MoE 的全局 token 数；本交互按四张卡均分 token，展示形状与纯矩阵容量推导。容量与 Shared 驻留按当前开发四 kernel 链；旧真实权重入口见正文版本对照。</p></header>
+  root.innerHTML=`<header class="moe-widget-head"><span class="eyebrow">FOLLOW A RANK</span><h4>卡间 EP4、卡内 TP4：数据与权重落在哪里？</h4><p>固定 GLM-5.3-Flash 的 H=4096、E=288、I=2048、K=8。T 表示本次 MoE 的全局 token 数；本交互按四张卡均分 token，展示形状与纯矩阵容量推导。容量按优化后的 FP8 Routed / BF16 Shared；Shared 非零贡献由 EP0 注入。</p></header>
     <div class="moe-controls"><label>全局 token 数 T<select data-moe-control="tokens" aria-label="MoE全局token数"><option value="8">T8 · 每卡 2</option><option value="16">T16 · 每卡 4</option><option value="24" selected>T24 · 每卡 6</option><option value="32">T32 · 每卡 8</option></select></label><label>观察哪张卡<select data-moe-control="ep" aria-label="选择EP卡">${options(4,'卡 / EP')}</select></label><label>卡内 TP rank<select data-moe-control="tp" aria-label="选择卡内TP rank">${options(4,'TP')}</select></label><label>追踪 expert id<input data-moe-control="expert" aria-label="追踪专家id" type="number" min="0" max="287" step="1" value="0"></label></div>
     <p class="moe-selection" data-moe-view="selection" aria-live="polite"></p>
     <div class="moe-card-grid" data-moe-view="cards"></div>
