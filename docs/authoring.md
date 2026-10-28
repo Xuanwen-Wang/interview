@@ -162,7 +162,7 @@ TMPDIR=/data/wangxw/tmp g++ -std=c++17 -Wall -Wextra -Werror \
 
 修改公式时运行 `scripts/check_moe_model.js`，核对全部 1,152 个专家分片与总容量守恒。浏览器检查 T8/16/24/32、EP0/EP3、TP0/TP3、专家 0/71/72/287、非法编号处理、手机与打印；打印保留当前选择和计算结果，隐藏不能操作的控制器。
 
-依据用户2026-10-28的反馈，MoE部署正文优先沿torch_zeus已优化的实现讲一条完整数据路径；历史验收版本放证据或折叠补充。每个collective必须说明参与组、传递对象、前后shape/dtype、拼接或求和语义、输出归属和下游消费者；从Attention的输出合并，经两侧mHC，到MoE返回原请求都要闭合。KDA与DSA各按真实接线说明，不能套用同一个SUM。图中shape取正式GLM-5.3-Flash配置，构造batch/route须另外标记。`data-moe-flow`交互追踪T24的token所有权，数值只作实数求和模型；用不均匀路由、重复Shared和重复SUM反例验证，不把交互作为设备运行证据。
+依据用户2026-10-28的反馈，MoE部署正文优先沿torch_zeus已优化的实现讲一条完整数据路径；历史验收版本放证据或折叠补充。每个collective必须说明参与组、传递对象、前后shape/dtype、拼接或求和语义、输出归属和下游消费者；从Attention的输出合并，经两侧mHC，到MoE返回原请求都要闭合。KDA与DSA各按真实接线说明，不能套用同一个SUM。图中shape取正式GLM-5.3-Flash配置，构造batch/route须另外标记。依据同日对Reduce讲解的反馈，总流程入口必须用同一token、同一输出特征的数值，明确本地专家加权、TP分片求和、EP专家求和三个轴；相同shape须标注完成程度，说明I分片的计算范围不等于通信张量宽度。`data-moe-flow`交互追踪T24的token所有权，数值只作实数求和模型；用不均匀路由、重复Shared和重复SUM反例验证，不把交互作为设备运行证据。
 
 ## Decode 教程的交互账本
 

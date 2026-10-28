@@ -65,9 +65,9 @@ function renderMoeFlow(root) {
     ['Attention 已合并','每卡只观察自己的6行完整 Attention 输出。KDA 已完成 C0；DSA 已完成 D1–D3。','A[6,4096]'],
     ['mHC 转换','Attention post 更新四条残差流；FFN pre+norm 产生 X。post/comb 与 residual 留在原卡。','Xlocal[6,4096]'],
     ['C1 · AllGather','四卡按原顺序拼成24行，每个 rank 得到相同的 X；这一步不做加法。','Xglobal[24,4096]'],
-    ['四 kernel','Router → Shared → Routed → local Reduce。每个 rank 得到自己的 I512 与本卡专家贡献。','P[24,4096]'],
-    ['C2 · TP AllReduce','同卡4 rank 逐元素 SUM，完整的 I2048 贡献在卡内复制；不同卡仍是不同专家贡献。','B[24,4096]'],
-    ['C3 · EP ReduceScatter','每个跨卡 lane 只取每个 EP 的一份贡献求和，再按6行一块归还 token。','Ylocal[6,4096]'],
+    ['四 kernel / 本地 Reduce','每个 rank 独立路由并计算本卡命中的专家；本地 Reduce 合 Shared 双core与加权 Routed slot。只读本rank缓冲区，尚未加入其他TP分片。','P[24,4096]'],
+    ['C2 · TP AllReduce','同卡4 rank 传递 P，对同一[token,特征]逐元素相加，再复制给四者。补齐的是I2048的投影贡献；没有拼接列，不重乘α。','B[24,4096]'],
+    ['C3 · EP ReduceScatter','跨卡同lane对同一[token,特征]相加，每卡只取一份。加齐不同专家贡献后按6行一块归还；不重乘α、不取平均。','Ylocal[6,4096]'],
     ['mHC post / 下一层','完整 MoE 输出与原卡 residual、post、comb 按同一请求行配对，更新四流残差。','residual[6,4,4096]']
   ];
   root.classList.add('moe-explorer','moe-flow');
@@ -77,7 +77,7 @@ function renderMoeFlow(root) {
     <div class="moe-owner" data-flow-status aria-live="polite"></div><div class="moe-card-grid" data-flow-cards></div>
     <div class="moe-flow-actions"><button type="button" data-flow-prev>上一步</button><button type="button" data-flow-next>下一步</button><button type="button" data-flow-reset>重置</button></div>
     <div class="moe-route-budget" data-flow-math></div>
-    <p class="moe-model-note">数值构造：IDs=[5,20,73,100,151,200,220,287]，各 α=0.3125；slot k 在 TP p 的单通道 partial=(k+1)(p+1)(token+1)/8。EP0 的 Shared partial=(p+1)(token+1)/8。只用于验证一次求和与返回位置，忽略设备舍入。</p>
+    <p class="moe-model-note">数值构造：IDs=[5,20,73,100,151,200,220,287]，各 α=0.3125；slot k 在 TP p 的单通道 partial=(k+1)(p+1)(token+1)/8。EP0 的 Shared partial=(p+1)(token+1)/8，演示把它均分给两个 Shared core。只用于验证一次求和与返回位置，忽略设备舍入。</p>
     <p class="moe-model-note moe-flow-print">完整静态流程与通信账本见紧邻正文。交互状态只展示当前所选一步；没有播放中的中间帧。</p>`;
   let step=0;
   const token=$('[data-flow-token]',root),lane=$('[data-flow-lane]',root);
@@ -86,9 +86,30 @@ function renderMoeFlow(root) {
     const [title,explanation,shape]=stages[step];
     $$('[data-flow-step]',root).forEach(b=>b.setAttribute('aria-pressed',String(Number(b.dataset.flowStep)===step)));
     $('[data-flow-status]',root).innerHTML=`<h4>${step+1}/7 · ${title}</h4><p>${explanation}</p><p><strong>${shape}</strong>；token ${m.token} 的原 owner 始终是卡${m.owner}、本地行${m.row}（从0编号）。</p>`;
-    $('[data-flow-cards]',root).innerHTML=m.cards.map(c=>`<div class="moe-card ${c.ep===m.owner?'selected':''}"><strong>卡${c.ep} · rank ${c.rank}</strong><small>${shape} · ${step===6?'四流残差':step===3?'rank partial':step===4?'卡级贡献':'本步张量'}</small><div class="moe-token-grid">${c.rows.map(t=>`<span class="${t===m.token?'selected':''}">${t}</span>`).join('')}</div><small>${c.value===null?'':`所选 token 的单通道值：${c.value}`}</small></div>`).join('');
+    const expertIds=[5,20,73,100,151,200,220,287];
+    function equation(c) {
+      if(step===2)return 'C1 只拼行：本卡6行 + 其他三卡18行 = 全部24行；没有对 hidden 数值求和。';
+      if(step===3) {
+        const unit=(m.token+1)*(m.lane+1)/8;
+        const shared=c.ep===0?`(${unit/2} + ${unit/2})`:'0';
+        return `本地 Reduce：${shared} + 0.3125 × ${(2*c.ep+1)*unit} + 0.3125 × ${(2*c.ep+2)*unit} = ${c.value}。前项是Shared双core之和，后两项来自expert ${expertIds[2*c.ep]}、${expertIds[2*c.ep+1]}；尚缺另外三个TP分片。`;
+      }
+      if(step===4)return `C2 加 rank${4*c.ep}–${4*c.ep+3} 的 P：${m.partials.slice(4*c.ep,4*c.ep+4).map(row=>row[m.token]).join(' + ')} = ${c.value}。同卡四rank现在都有这份 B，还缺其他卡专家。`;
+      if(step===5)return c.ep===m.owner?`C3 加四卡 B：${m.boards.map(b=>b[m.token]).join(' + ')} = ${c.value}。归还本地行${m.row}。`:`本卡仅保留 token ${6*c.ep}–${6*c.ep+5}；选中的 token ${m.token} 已归还卡${m.owner}。`;
+      return '';
+    }
+    $('[data-flow-cards]',root).innerHTML=m.cards.map(c=>`<div class="moe-card ${c.ep===m.owner?'selected':''}"><strong>卡${c.ep} · rank ${c.rank}</strong><small>${shape} · ${step===6?'四流残差':step===3?'rank partial':step===4?'卡级贡献':'本步张量'}</small><div class="moe-token-grid">${c.rows.map(t=>`<span class="${t===m.token?'selected':''}">${t}</span>`).join('')}</div><small>${c.value===null?'':`所选 token 的单通道值：${c.value}`}</small><small data-flow-equation>${equation(c)}</small></div>`).join('');
     const total=m.owners[m.owner][m.row];
-    $('[data-flow-math]',root).innerHTML=`<h4>token ${m.token} 的完整求和账</h4><p>卡内 TP 合并后四卡贡献：${m.boards.map(b=>b[m.token]).join(' + ')} = <strong>${total}</strong>。C3 把该结果送回卡${m.owner}的行${m.row}。</p><p>若把 TP 已复制的结果再对 world16 无差别求和，会得到 ${4*total}，恰好重复4次。请求的原 owner 与当前计算该 token 的卡是两个概念。</p>`;
+    const operation=[
+      '本步是完整 Attention 输出；C0 合的是 O-proj partial，不是下面的专家输出。',
+      '本步在原卡做残差混合和归一化，生成 MoE 输入；没有跨卡汇集专家结果。',
+      '本步搬输入 X，不算专家，不搬专家权重。每rank都已有全部24行，因此Router后无需额外跨卡dispatch。',
+      '本步加本rank的有效专家slot及Shared双core，得到P。卡内四rank的Router结果相同，但专家FFN各算不同I512，所以四份P通常不同。',
+      '本步加同卡四个TP分片的P，得到B。通信payload是[24,4096]；I512是计算范围，不是正在搬运的列宽。',
+      `本步加不同卡的B，再按原token归属分行。token ${m.token} 的完整结果是 ${total}，只留在卡${m.owner}的本地行${m.row}，卡内四rank各有一份。`,
+      '本步将完整MoE输出接回原卡残差流；mHC post不是再做一次TP或EP求和。'
+    ][step];
+    $('[data-flow-math]',root).innerHTML=`<h4>当前步骤：搬什么、加什么？</h4><p>${operation}</p>${step===4||step===5?`<p>注意：C2后同卡四份B是副本。如果再对world16无差别SUM，最终 ${total} 会被重复成 ${4*total}。</p>`:''}`;
     $('[data-flow-prev]',root).disabled=step===0;
     $('[data-flow-next]',root).disabled=step===6;
   }
