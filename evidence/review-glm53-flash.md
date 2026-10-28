@@ -64,3 +64,11 @@
 - git diff --check
 
 本次未执行checkpoint加载、多模态模型推理、设备kernel、Graph、CycleSim、VCS或硅上端到端实验。本文记录本地验收；提交、CI、部署和线上文件比对以本次对应的发布记录为准。
+
+## FFN 层数复核与说明补强
+
+2026-10-28 按用户追问重新下载同一固定 revision 的正式 config：num_hidden_layers=45，first_k_dense_replace=3，mlp_layer_types 的0–2为dense、3–44为sparse。固定 Transformers 的 Glm5NextTextDecoderLayer 将 sparse 实例化为 Glm5NextTextMoE、其余实例化为 Glm5NextTextMLP；本地开发 config 同样为45层、first_k_dense_replace=3。
+
+确认后在整网概览页首、总图、45层展开小节与通用FFN专题页首明确说明：45个decoder层各有一个FFN，前3层Dense、后42层MoE；阅读层号1–3/4–45与源码索引0–2/3–44分别标出。没有新增模型或硬件运行结论。
+
+本次补充已重新通过构建、静态链接检查、GLM层数/数学检查与公开产物检查；查看了修改后的总图与两处提示框，390px手机页面无水平溢出。
