@@ -427,8 +427,43 @@ assert.throws(()=>model.pagedRows(pagePool,[5],-1,4),RangeError);
 pagePool[3]=[{owner:'B0'},{owner:'B1'},{owner:'B2'},null];
 assert.deepEqual(model.pagedRows(pagePool,[3],3,4).map(r=>r.data.owner),['B0','B1','B2']);
 assert.deepEqual(model.pagedRows(pagePool,[5,1],6,4).map(r=>r.data.value),pageValues);
-// Independent byte accounting for the declared Qwen3-8B two-request example.
-assert.equal((4097+2050)*2*8*128*2/1024,24588);
-assert.equal((Math.ceil(4097/16)+Math.ceil(2050/16))*16*2*8*128*2/1024,24704);
-assert.equal(4*32*128*(4097+2050),100712448);
+// Verify real-length page transitions independently of the displayed cards.
+for (const [length, pages, validKiB, allocatedKiB, tailKiB] of [
+  [4095,256,16380,16384,4], [4096,256,16384,16384,0],
+  [4097,257,16388,16448,60], [0,0,0,0,0], [2048,128,8192,8192,0]
+]) {
+  const state = model.pagedExample(length, length === 2048 ? 'C' : 'A');
+  assert.equal(state.table.length, pages);
+  assert.equal(new Set(state.table).size, pages);
+  assert.equal(state.validBytes / 1024, validKiB);
+  assert.equal(state.allocatedBytes / 1024, allocatedKiB);
+  assert.equal(state.tailBytes / 1024, tailKiB);
+  assert.equal(state.pool.flat().filter(t => t !== null).length, length);
+  // Dense logical order is an independent oracle for all 257 noncontiguous pages.
+  assert.deepEqual(model.pagedRows(state.pool, state.table, length, 16).map(r => r.data), Array.from({length}, (_, t) => t));
+}
+const beforeFull = model.pagedExample(4095), fullPage = model.pagedExample(4096), crossedPage = model.pagedExample(4097);
+assert.equal(beforeFull.pool[1][15], null);
+assert.equal(fullPage.pool[1][15], 4095);
+assert.deepEqual(fullPage.table, beforeFull.table);
+assert.equal(crossedPage.table[256], 6);
+assert.equal(crossedPage.pool[6][0], 4096);
+assert.deepEqual(crossedPage.table.slice(0,256), fullPage.table);
+for (const page of fullPage.table) assert.deepEqual(crossedPage.pool[page], fullPage.pool[page]);
+assert.equal(model.pagedRows(fullPage.pool, fullPage.table, 4096,16).at(-1).slot,31);
+assert.equal(model.pagedRows(crossedPage.pool, crossedPage.table,4097,16).at(-1).slot,96);
+// Poison the 15 unused final slots: they must never appear in the visible row set.
+crossedPage.pool[6].fill(NaN,1);
+assert(model.pagedRows(crossedPage.pool,crossedPage.table,4097,16).every(row => Number.isFinite(row.data)));
+const reused = model.pagedExample(2048,'C');
+assert.deepEqual(reused.table,fullPage.table.slice(0,128));
+assert.equal(reused.table.at(-1),134);
+assert.equal(reused.poolPages - reused.table.length,384);
+assert.throws(()=>model.pagedExample(4098),RangeError);
+assert.throws(()=>model.pagedExample(-1),RangeError);
+assert.throws(()=>model.pagedExample(1,'invalid'),RangeError);
+assert.equal(4*32*128*4096,67108864);
+assert.equal(4*32*128*4097,67125248);
+assert.equal(16*36,576);
+assert.equal((4096+2048)*2*8*128*2/1024/1024,24);
 console.log('Paged KV: physical permutations, arbitrary page sizes, exact boundaries, poisoned tails, request isolation, global normalization counterexample, invalid tables and capacity/FLOP accounting passed. Teaching model only.');
