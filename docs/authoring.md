@@ -152,6 +152,14 @@ TMPDIR=/data/wangxw/tmp g++ -std=c++17 -Wall -Wextra -Werror \
 
 以上是检查入口索引，按修改范围选择对应模型与界面检查；[CI](../.github/workflows/pages.yml) 执行完整清单。仅文档调整且构建结果逐字节不变时，验证文档链接与命令即可，不必重录所有页面交互。公开产物检查在每次发布前必跑，构建成功并不表示整个 `dist/` 都可以公开。
 
+## CUDA 与 GPU 通信教程
+
+`cuda` 知识域固定两篇连续入口：`cuda.html`（Hopper 与算子开发）和 `cuda-communication.html`（通信库与多卡部署）。正文分别在 `content/24-cuda-hopper.json`、`content/25-cuda-communication.json`；保留稳定章节与小节 ID。
+
+`web/cuda-guide.js` 提供 `data-cuda-lab="occupancy"`、`"ring"`、`"communication"` 三种交互；构建时与 CSS 内嵌，不依赖外部网络。修改模型运行 `node scripts/check_cuda_model.js`：资源上界用可行 CTA 枚举检查，Ring 用贡献守恒与直接求和检查，softmax 用完整向量 oracle 检查。教学上界不包含分配粒度、动态寄存器和集群调度；通信模型不预测 NCCL 自动算法或实测带宽。
+
+新增图分别注明数据输入、归约轴、参与组、结果归属、字节方向与比较条件。NCCL、DeepEP 的接口和后端绑定版本；H200 标称规格、FA3 论文结果与现场实测分开。检查桌面、移动横向滚动/放大、Ring 前后步与重置、参数变化、打印当前假设/末态、独立 HTML 离线交互。
+
 ## PE 交互演示
 
 正文用 `<div data-pe-explorer="mapping"></div>` 或 `<div data-pe-explorer="budget"></div>` 声明挂载点。纯数学模型在 `web/pe-model.js`，展示与事件在 `web/pe-explorer.js`，样式在 `web/pe-explorer.css`，构建时一起内嵌。不要在章节 JSON 中加入脚本。

@@ -60,6 +60,42 @@
       }
     },
     {
+      "id": "cuda",
+      "title": "CUDA 与 GPU 通信",
+      "number": "CU",
+      "description": "两篇完整长文：用 H200 建立 CUDA 算子开发的硬件与软件地图，再从 NCCL 的数据语义走到多卡模型部署、通信优化和分布式编译。",
+      "readingCollection": true,
+      "collectionLabel": "CUDA · COMPUTE & COMMUNICATION",
+      "groups": [
+        {
+          "id": "hardware-kernels",
+          "title": "H200 硬件与 CUDA 算子开发",
+          "chapters": [
+            "cuda-hopper-guide"
+          ]
+        },
+        {
+          "id": "gpu-communication",
+          "title": "通信库与多卡部署",
+          "chapters": [
+            "cuda-communication-guide"
+          ]
+        }
+      ],
+      "learningPath": [
+        {
+          "title": "先理解一张 GPU",
+          "description": "CTA、存储、布局、同步与 FA3 的异步流水",
+          "chapter": "cuda-hopper-guide"
+        },
+        {
+          "title": "再连接多张 GPU",
+          "description": "通信语义、NCCL、RDMA 与 TP / EP 数据流",
+          "chapter": "cuda-communication-guide"
+        }
+      ]
+    },
+    {
       "id": "glm53-flash",
       "title": "GLM-5.3-Flash 部署",
       "number": "03",

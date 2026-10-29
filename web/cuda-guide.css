@@ -1,0 +1,44 @@
+/* Scoped to the CUDA articles and their self-contained teaching models. */
+.article .cuda-source{font-size:11px;color:#63766f;border-top:1px dotted #c5d2cc;padding-top:10px;margin-top:24px}
+.cuda-note{padding:20px 23px;margin:25px 0;border:1px solid #ccdad3;border-left:4px solid #247e69;border-radius:0 12px 12px 0;background:#edf4f0}
+.cuda-note>strong{font-size:14px}.article .cuda-note p{font-size:13px;margin-bottom:0}
+.cuda-diagram{padding:0;background:#f3f6f5;border-color:#cedad7;border-radius:14px;box-shadow:0 4px 16px #173d2e08}
+.cuda-diagram svg{min-width:600px}.cuda-diagram figcaption{padding:16px 20px;font-size:11px;line-height:1.85;border-top:1px solid #dce4e1;background:#fbfcf8}
+.cuda-lab{border:1px solid #bacfc7;border-radius:14px;background:#fafcf8;margin:28px 0;overflow:hidden;color:#183846}
+.cuda-lab-heading{padding:24px 25px 18px;background:#e6f0eb;border-bottom:1px solid #c5d7ce}
+.cuda-lab-heading>span{font:10px var(--mono);letter-spacing:1.4px;color:#3c6e60}
+.article .cuda-lab-heading h4{font-size:21px;margin:10px 0 8px;line-height:1.5}
+.article .cuda-lab-heading p{font-size:12px;margin:0;color:#526977}
+.cuda-controls{display:flex;flex-wrap:wrap;gap:13px;padding:20px 25px;border-bottom:1px solid #dbe5df;align-items:end;background:#f2f6f1}
+.cuda-controls label{display:flex;flex:1 1 140px;flex-direction:column;gap:8px;font-size:11px;color:#38584b;min-width:0}
+.cuda-controls select{padding:10px 9px;border:1px solid #b8ccc1;border-radius:6px;background:#fffefa;font:12px var(--sans);color:#183846;min-width:0;width:100%}
+.cuda-controls button{border:1px solid #aac3b5;border-radius:6px;background:#fffefa;color:#285b49;padding:10px 12px;font-size:12px;cursor:pointer}
+.cuda-controls button:disabled{opacity:.4;cursor:default}
+.cuda-controls :is(button,select,input):focus-visible{outline:3px solid #d08d43;outline-offset:3px}
+.cuda-controls input[type=range]{accent-color:#157865;width:100%;margin:8px 0}
+.cuda-lab-output{padding:20px 25px}.article .cuda-lab-output p{font-size:12px;line-height:1.85}
+.cuda-current{color:#536b60;background:#eef3eb;padding:11px 13px;border-radius:6px;font-size:11px!important}
+.cuda-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:18px 0}
+.cuda-stat{border:1px solid #d1ddd4;border-radius:9px;padding:18px 13px;background:#fffefa;min-width:0}
+.cuda-stat strong{display:block;font:500 clamp(18px,1.5vw,25px)/1.5 var(--mono);color:#166c58;overflow-wrap:anywhere}
+.cuda-stat span{display:block;font-size:10px;color:#5e766b;margin-top:6px;line-height:1.7}
+.cuda-warp-grid{display:grid;grid-template-columns:repeat(16,minmax(0,1fr));gap:4px;margin:20px 0}
+.cuda-warp-grid span{border:1px solid #cfdbd3;border-radius:4px;min-height:25px;text-align:center;font:9px/25px var(--mono);color:#70867a;background:white}
+.cuda-warp-grid .filled{background:#1c7d65;color:white;border-color:#1c7d65}
+.cuda-equation{font:12px/2 var(--mono);padding:15px;background:#eaf0e8;border-radius:6px;overflow-wrap:anywhere;margin:15px 0;color:#264e40}
+.cuda-matrix-wrap{width:100%;overflow-x:auto}.article .cuda-matrix{font-size:11px;min-width:490px;margin:12px 0}
+.cuda-matrix caption{text-align:left;font-size:11px;line-height:1.9;color:#536b60;padding-bottom:10px}
+.article .cuda-matrix :is(th,td){padding:11px 8px;text-align:center;min-width:0}
+.cuda-matrix td strong{font:500 22px/1.6 var(--mono);display:block;color:#294a3e}
+.cuda-matrix small{display:block;font:9px/1.8 var(--mono);color:#5c766a;white-space:nowrap}
+.cuda-matrix .complete{background:#dceee3}.cuda-step-label{font-size:15px!important;font-weight:600;color:#156c55}
+.cuda-transfers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:20px 0}
+.cuda-transfers>div{padding:13px;border:1px solid #d8ded5;border-radius:8px;background:#f3eddf}
+.cuda-transfers :is(b,span,small){display:block;font-size:11px;line-height:1.8}.cuda-transfers b{color:#75542f}
+.cuda-budget-bar{display:flex;height:24px;border-radius:6px;overflow:hidden;background:#d6e8db;margin:22px 0 10px}
+.cuda-budget-bar .latency{background:#c18345}.cuda-budget-bar .transfer{background:#237d68}
+.cuda-budget-legend{display:flex;gap:18px;flex-wrap:wrap;font-size:11px}.cuda-budget-legend span:first-child{color:#8d582b}.cuda-budget-legend span:last-child{color:#176b56}
+.cuda-print-only{display:none}
+@media print{.cuda-lab-heading,.cuda-print-only{break-inside:avoid}}
+@media(max-width:700px){.cuda-lab-heading,.cuda-lab-output{padding:19px 14px}.cuda-controls{padding:16px 14px;gap:12px}.cuda-controls label{flex-basis:125px}.cuda-stats{gap:6px}.cuda-stat{padding:12px 8px}.cuda-stat strong{font-size:17px}.cuda-stat span{font-size:9px}.cuda-warp-grid{grid-template-columns:repeat(8,minmax(0,1fr))}.cuda-diagram figcaption{padding:13px 14px}.cuda-note{padding:16px}.cuda-step-controls label{flex-basis:100%}}
+@media print{.cuda-controls{display:none}.cuda-print-only{display:block}.cuda-lab{overflow:visible;break-inside:auto;box-shadow:none;border-color:#aabeb3}.cuda-lab-heading{break-after:avoid}.cuda-lab-output{padding:14px}.cuda-lab :is(.cuda-stats,.cuda-matrix-wrap,.cuda-transfers,.cuda-equation){break-inside:avoid}.cuda-diagram{break-inside:avoid}.cuda-diagram svg{min-width:0}.cuda-diagram figcaption{font-size:8pt}.cuda-budget-bar,.cuda-warp-grid,.cuda-matrix .complete{print-color-adjust:exact;-webkit-print-color-adjust:exact}.cuda-matrix-wrap{overflow:visible}.article .cuda-matrix{min-width:0}.cuda-note{break-inside:avoid}.cuda-source{font-size:8pt!important}}
