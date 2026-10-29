@@ -188,8 +188,16 @@
       "id": "hardware",
       "title": "518 硬件与后端",
       "number": "05",
-      "description": "先从硬件约束理解整体 lowering，再单独深入资源依赖与同步；PE、VP 的硬件细节作为配套长文。",
+      "description": "先建立单 rank 双 ZeusCore 的整体硬件视角，读懂存储、执行模型、ISA、算力与带宽，再深入 PE、VP、Lowering 和同步。",
       "groups": [
+        {
+          "id": "zeuscore",
+          "title": "ZeusCore 整体架构：双核、存储、执行与 ISA",
+          "chapters": [
+            "hw-zeuscore-architecture"
+          ],
+          "continuousReading": true
+        },
         {
           "id": "backend",
           "title": "整体 Lowering：一条完整的编译路线",
@@ -219,6 +227,23 @@
           "chapters": [
             "hw-vp-architecture"
           ]
+        }
+      ],
+      "learningPath": [
+        {
+          "title": "先看整个 ZeusCore",
+          "description": "从单 rank 双核到数据流、ISA 与性能边界",
+          "chapter": "hw-zeuscore-architecture"
+        },
+        {
+          "title": "深入 PE 与 VP",
+          "description": "把整体图中的矩阵与向量路径逐层放大",
+          "chapter": "hw-memory-hierarchy"
+        },
+        {
+          "title": "接到编译与同步",
+          "description": "理解 tensor 程序如何落成有正确依赖的命令",
+          "chapter": "compiler-lowering"
         }
       ]
     },

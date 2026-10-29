@@ -1,0 +1,411 @@
+{
+  "collected": "2026-10-29/30",
+  "scope": "read-only source audit; no fresh hardware measurement",
+  "files": [
+    {
+      "group": "core-top",
+      "repository": "design",
+      "path": "rtl/Zeus518_top/top/zeus518_top.v",
+      "location": "3502, 5827, 7119：PCIe 与两个 NDDG wrapper",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "24d4214837dfa23547a1843f87ca7b95ef95a7bcaf759570a391f0c89fbf988c"
+    },
+    {
+      "group": "core-top",
+      "repository": "design",
+      "path": "rtl/nddg/rtl/nddg_subsys_wrapper.v",
+      "location": "1296, 1367, 1777–1818, 2309：GDG / Hermes / core / NoC",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "a5fa199cf69c1d317e41f8ef276e112f37843120f264d3f1592fd5d843ac44bc"
+    },
+    {
+      "group": "core-top",
+      "repository": "design",
+      "path": "rtl/nddg/rtl/m_nddg_subsys_wrapper.v",
+      "location": "1777–1818：mirror wrapper 内 core",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "02eb35ceb364b9aeda7c47dfd8b657fa93633286eebc0464b811d1cbc951e2e8"
+    },
+    {
+      "group": "core-top",
+      "repository": "design",
+      "path": "rtl/zeus518/zeus_top/zeus_core_top_pwr.v",
+      "location": "5809, 6321, 7009, 7558, 7729–7862, 8527：核内执行器",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "73f8f2a6f7a0f6bb6a2612db10875a160894b4bcd7550d7df8267643172fca40"
+    },
+    {
+      "group": "core-external",
+      "repository": "design",
+      "path": "rtl/gdg/gdg_unit/gdg_unit.v",
+      "location": "563–572：MC_SHORT_MODE=2，row13 / col7 / data256",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "0cee453aa3e3b989674456081ff74840b28754715a7c0e3d0f98a5af2e50a240"
+    },
+    {
+      "group": "core-external",
+      "repository": "design",
+      "path": "rtl/gdg/gdg_unit/mc_ctrl_phy_wrap.v",
+      "location": "303：行为模型缩小行地址",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "12c06003cfdbcebbe6104770cf9e34a2b5f6863b4911b617ec9b71826ff5f1df"
+    },
+    {
+      "group": "core-external",
+      "repository": "architecture-manual",
+      "path": "Zeus_v3技术架构手册v1.0.docx",
+      "location": "word/document.xml 的 w:p 顺序索引（从0计）83–156、691、1944–1967：旧概览、旧容量与任务流程",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "6fd0df2beed5bb1834f47d4aa00bc5b1366c485fada391409741223c03dbf344"
+    },
+    {
+      "group": "core-l2",
+      "repository": "design",
+      "path": "rtl/zeus518/l2buffer_ctrl/rtl/z518_l2_l2buffer_ctrl.v",
+      "location": "265–272：128 SRAM，256行，128数据+9 ECC；各 master 到 bank 的仲裁",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "44a2022879adef52e1b1d7dfdd03983ff836fb7825c981a492e6874d624bd05e"
+    },
+    {
+      "group": "core-l2",
+      "repository": "design",
+      "path": "rtl/zeus518/l2buffer_ctrl/rtl/z518_l2_l2buffer_ctrl_sram_sp_256x128_wrapper.v",
+      "location": "1–18, 90–105：单口宏接口",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "a858f517236d3586c98c70dc9f4c313b548ae7ce5ad8dc6e711f6b957a94a60c"
+    },
+    {
+      "group": "core-l2",
+      "repository": "triton_shared",
+      "path": "include/triton-shared/Target/ZeusV3/L2BankGeometry.h",
+      "location": "7–12：2048 B交织 / 128 B访问",
+      "status": "tracked; clean relative to HEAD",
+      "revision": "82613bc2eb30feb9ef7f57aef20584df0ef9e28a",
+      "sha256": "7f04cedd4bde06730c4b51c7d4ee77b92923ed443910ce286db5cb671ebd17ca"
+    },
+    {
+      "group": "core-local-storage",
+      "repository": "design",
+      "path": "rtl/zeus518/pegroup/pe518_al1_wrctrl.v",
+      "location": "39–50, 295–303：双面64×128bit地址与单口选择",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "9b89503aaa9593d2342a5c780e688670620a243b8f4e5dfa2be69c996901cdeb"
+    },
+    {
+      "group": "core-local-storage",
+      "repository": "design",
+      "path": "rtl/zeus518/pegroup/pe518_ol1_buffer.v",
+      "location": "20–68：每ALU双面16×32bit",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "815416955a9474dd9ede4355073aff58554255f7c6cb88d2ac56fe960b1f535f"
+    },
+    {
+      "group": "core-local-storage",
+      "repository": "design",
+      "path": "rtl/zeus518/wl1/wl1_518_weight_data_format.v",
+      "location": "118–126, 1130–1152：FIFO与MTW消费后pop",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "d7f88009ed2e45cd098c1ba231f1292ef29aee5db1b16bf22f31d893189d2dac"
+    },
+    {
+      "group": "core-target",
+      "repository": "triton_shared",
+      "path": "include/triton-shared/Target/ZeusV3/TargetInfo.h",
+      "location": "23–32、80–115；VR spill / runtime args / external page / weight address ABI：硬件总量与保留规则分开",
+      "status": "tracked; clean relative to HEAD",
+      "revision": "82613bc2eb30feb9ef7f57aef20584df0ef9e28a",
+      "sha256": "c987d2ed6357164768faf250994db99847be49d326250974f427eed5718b79bc"
+    },
+    {
+      "group": "core-pe-array",
+      "repository": "design",
+      "path": "rtl/zeus518/zeus_top/pe518_array.v",
+      "location": "1710–1730：阵列实例",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "7d3c4d1e98583d3a469df92b413949b948c9cd695b273fa96f3cfb9d54755ff7"
+    },
+    {
+      "group": "core-pe-array",
+      "repository": "design",
+      "path": "rtl/zeus518/pegroup/pegroup518_x8_top.v",
+      "location": "990–2340：八个group含mirror",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "9e15ae8a4a7cc43ed007106faa338ad4d135dd4abab5f5a7ec6d1bfefbb11b00"
+    },
+    {
+      "group": "core-pe-array",
+      "repository": "design",
+      "path": "rtl/zeus518/pegroup/pegroup518_top.v",
+      "location": "365–495：每group八个PE；684–770：归约与DFO",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "93a6e2d2c8da227da004dd0478516cc91ff96a362541878ffe7e48d3d0385d23"
+    },
+    {
+      "group": "core-pe-array",
+      "repository": "design",
+      "path": "rtl/zeus518/pegroup/m_pegroup518_top.v",
+      "location": "372–495：mirror同样八个PE",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "17e6c5858a7fee9aa0ce8c47efd9c7c696ae6291d78605e9fb2b7e345754773a"
+    },
+    {
+      "group": "core-pe-array",
+      "repository": "design",
+      "path": "rtl/zeus518/pegroup/pe518_top.v",
+      "location": "198–220：16 ALU",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "85c37c00a76a086a44d8f1921cb62f5e50cc614f5f910c2ab3756283c86c3ab8"
+    },
+    {
+      "group": "core-pe-array",
+      "repository": "design",
+      "path": "rtl/zeus518/pegroup/pe518_alu.v",
+      "location": "78–100：8 MAC cell",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "47c7d1ef6b9864ebe4093260dcd21a9685107057994dd0baf43e33dc15489f37"
+    },
+    {
+      "group": "core-pe-array",
+      "repository": "design",
+      "path": "rtl/zeus518/pegroup/pe518_mac.v",
+      "location": "600–800：不同格式的有效乘积路径",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "22a161b4a274541cd79b925c4f1fbe9ea62b7fd018d9d789f9dfa09fb3038a87"
+    },
+    {
+      "group": "core-pe-array",
+      "repository": "design",
+      "path": "rtl/zeus518/pegroup/pe518_alu_ctrl.v",
+      "location": "87–91：输入pair选择，其他组合fallback不能视为支持",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "67efd29a15325f3266f43cd2365a8a2f1db148927870bb3b0327c169cd49dc4b"
+    },
+    {
+      "group": "core-pe-array",
+      "repository": "design",
+      "path": "rtl/zeus518/pegroup/pe518_al1_mt_coord_cal.v",
+      "location": "190–210, 290–298：dtype与坐标单位",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "e892c578ddae91c3c31b85b75db16c9e7465b748b75efb9b006b5b18f5fafd13"
+    },
+    {
+      "group": "core-pe-array",
+      "repository": "design",
+      "path": "rtl/zeus518/inst_ctrl/inst518_pe_inst_predecode.v",
+      "location": "123–125：MTW/MTK/MTC位宽；375–454：BR锁存",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "552f4271331a937a123b48a52c42aa4cdfd9e72ba89f92ac2818749f3c419d58"
+    },
+    {
+      "group": "core-vp-dt",
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/top_wrapper/vp_518_zeus_top_wrapper.v",
+      "location": "286, 351, 416, 481：四个VP实例",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "935caed412d2bb186ad43d90e9214144a6a792edc00875fcc8f543bdcf9ea3d5"
+    },
+    {
+      "group": "core-vp-dt",
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/top_wrapper/vp_518_top.v",
+      "location": "18–34：128 B读写+ECC",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "079dfa45a99cd6fe111cd396830a540df10d38d4ef638e8eed06309819f8f06b"
+    },
+    {
+      "group": "core-vp-dt",
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/vp_518_cal_group_top.v",
+      "location": "874–943：wide / pipe；947–1123：归约和输出",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "2b00edceb4b2be634022cae5ef951f5309cae2e4b61fa6891303c0d651a9e823"
+    },
+    {
+      "group": "core-vp-dt",
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/prl/vp_518_param_gen_self.v",
+      "location": "58–67, 84–105：PRG表，不乘lane数",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "149cccadc78e208cb92ad01e88749252b6d8137adf5f9023943c9070f8a0f25d"
+    },
+    {
+      "group": "core-vp-dt",
+      "repository": "design",
+      "path": "rtl/zeus518/dt/dt_top.v",
+      "location": "45–65：32 B读写接口",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "46725aa8df39feb7363a0575f47ceaf725bfcc15eaf6bf4fc41e06474427287d"
+    },
+    {
+      "group": "core-isa",
+      "repository": "triton_shared",
+      "path": "docs/ZeusV3_ISA_v1.4.json",
+      "location": "PE_CONV、CT_*、VP_*、DT_*、LD/ST/LW/SI/SO 各条目；PE字段bit63…0",
+      "status": "untracked snapshot",
+      "revision": null,
+      "sha256": "22c42995f0bd83db264015e76607ed09c0128361b3b27e8f9c172435b220cbc8"
+    },
+    {
+      "group": "core-isa",
+      "repository": "triton_shared",
+      "path": "lib/Target/ZeusV3/ISA/Encoding.cpp",
+      "location": "70–111：uint64编码与位宽mask",
+      "status": "tracked; clean relative to HEAD",
+      "revision": "82613bc2eb30feb9ef7f57aef20584df0ef9e28a",
+      "sha256": "430755631e8bf450d229ebd0744999ba4d8d47d6947ee826805f70f5535753e3"
+    },
+    {
+      "group": "core-sync",
+      "repository": "triton_shared",
+      "path": "docs/vcs_debug/rtl-instruction-dependency-model.md",
+      "location": "25–115：顺序前端和异步队列；828–884：ST/LW完成；1237–1300：SI/SO；其余章节核验特殊边界",
+      "status": "tracked; clean relative to HEAD",
+      "revision": "82613bc2eb30feb9ef7f57aef20584df0ef9e28a",
+      "sha256": "1658b2cc611ec12fc93131ce0cc269fb7312e404bed48855a046189a3e2e7517"
+    },
+    {
+      "group": "core-front",
+      "repository": "design",
+      "path": "rtl/zeus518/inst_ctrl/zeus518_inst_ctrl.v",
+      "location": "24–65：默认command credit、实际mail bit顺序、MW=6",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "c5c0ea1b6ef8efd188338e7da3891fe6cf6a84ff8c63463bf50db656e9a0a4a4"
+    },
+    {
+      "group": "core-front",
+      "repository": "design",
+      "path": "rtl/zeus518/inst_ctrl/inst518_ct_unit.v",
+      "location": "22–34、1200–1300：寄存器宽度与实例数",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "d1232dd174c166acbabbe57c3e162432ec3a4a39735641dc265436c255ad60e8"
+    },
+    {
+      "group": "core-front",
+      "repository": "design",
+      "path": "rtl/zeus518/inst_ctrl/inst518_queue_inbox.v",
+      "location": "20–100及计数更新：按发送类别的token，默认映射受顶层覆盖",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "3cdea836a2ade09863782a75bcf5f8b0e227a772171ad0e7447bb29160047cce"
+    },
+    {
+      "group": "core-front",
+      "repository": "design",
+      "path": "rtl/zeus518/inst_ctrl/inst518_credit_ctrl.v",
+      "location": "20–50：发命令扣减、ack归还",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "a43c27d27018b8f52fb7e17dc892c198e5cf350b41d6d65915f0c42070fe1a8a"
+    },
+    {
+      "group": "core-clocks",
+      "repository": "design",
+      "path": "rtl/zeus518/zeus_top/zeus_crm.v",
+      "location": "510–685：可配置分频、选择、门控",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "15902a31ce1be5e8b968c74aa43d3c7a58ef7f25cf6dbadc8919230a6bae19a2"
+    },
+    {
+      "group": "core-clocks",
+      "repository": "design",
+      "path": "README.md",
+      "location": "1–20、3.3–3.6：副本、频率配置、FPGA_MC_PHY与trace局限；文内历史测量未作为本篇新实测",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "6e983e5ee115a7965099de957279b5bd0a700bb98eb7d7856f12464a88b90a49"
+    },
+    {
+      "group": "core-ports",
+      "repository": "design",
+      "path": "rtl/zeus518/load_dma/load_dma_518_load_to_l2.v",
+      "location": "1024-bit L2 payload端口",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "cb54b312109a5183a1fde8d7e689931a65e23b67510973645e08edb67aeec7c6"
+    },
+    {
+      "group": "core-ports",
+      "repository": "design",
+      "path": "rtl/zeus518/sdma/Zeus518_sdma_top_wrapper.v",
+      "location": "1024-bit L2 payload端口",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "a05903101818e7afef24e65253e7414bbd97981161d7f9fa50fc7c35d04d2671"
+    },
+    {
+      "group": "core-ports",
+      "repository": "design",
+      "path": "rtl/zeus518/pegroup/pegroup518_dt.v",
+      "location": "16路FP32输入→128-bit最终输出；DFO分拍",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "e7ce490d584a77c69226ff4cf3bd152a218ed6e2183678fc0617c617e0b34cfb"
+    },
+    {
+      "group": "core-weight",
+      "repository": "design",
+      "path": "rtl/zeus518/wl1/wl1_518_hub_weight_req_distribute.v",
+      "location": "17–35, 58–83：16×256-bit聚合",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "fb59dba778b84dabf3481d435439e9ab80ca5d8acc8a8f92ee221f1dd0033f00"
+    },
+    {
+      "group": "core-weight",
+      "repository": "design",
+      "path": "rtl/zeus518/wl1/wl1_518_weight_ctrl.v",
+      "location": "1377–1386：单/双hub读取次数",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "c88b8edb5bb5dc3af12c5c53f6c74d5841c5f527b5743fef8487ffb7dab9809c"
+    },
+    {
+      "group": "core-weight",
+      "repository": "design",
+      "path": "rtl/gdg/gdg_unit/gdg_flowctrl.v",
+      "location": "27–51：读在途15门控",
+      "status": "non-Git snapshot; revision unknown",
+      "revision": null,
+      "sha256": "54bbb7e259b5dd5f965902a919aa6e42a09a294c80640d954da30032d5ecafae"
+    },
+    {
+      "group": "core-weight",
+      "repository": "triton_shared",
+      "path": "docs/ldg-bandwidth-explained-2026-10-15.html",
+      "location": "本地未跟踪研究稿：R=23的条件建模背景，不是版本化编译器代码或本轮实测",
+      "status": "untracked snapshot",
+      "revision": null,
+      "sha256": "3f9e201fdb7c057ff3fa6ef5ab64b346f37270523857a43dc06507a611004c97"
+    }
+  ]
+}
