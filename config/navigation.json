@@ -25,7 +25,7 @@
       "groups": [
         {
           "id": "operators",
-          "title": "Attention：从完整 KV 到压缩、稀疏与递归状态",
+          "title": "Attention：完整历史、窗口、压缩与状态记忆",
           "chapters": [
             "attention-inference-guide"
           ]
@@ -41,7 +41,7 @@
       "learningPath": [
         {
           "title": "走完一次 Attention",
-          "description": "从 Qwen3-8B 的数字 shape 理解历史读取、计算和算法演进",
+          "description": "从 Qwen3 的真实 shape 到 MLA、DSA、SWA、CSA/HCA，再读懂混合模型与执行优化",
           "chapter": "attention-inference-guide"
         },
         {
