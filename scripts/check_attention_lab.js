@@ -388,3 +388,47 @@ vector(numericReplay(pipeline), probabilityOracle(pipeScores, pipeValues));
 const earlyRescale = numericReplay(moveBefore(pipeline, ['rescale', 1], ['output', 0]));
 assert.ok(earlyRescale.some((x, i) => Math.abs(x - numericReplay(pipeline)[i]) > 0.01), 'Moving u rescale ahead of pending PV must corrupt this fixture');
 console.log('FA3 pipeline: independent dependency DAG, pending-PV overlap, TMA readiness, slot ownership/reuse, drain, delayed-u numerical oracle, and seven illegal schedules passed. Teaching schedule only; no device timing or speedup model.');
+
+// Page placement is arbitrary: compare reordered physical pools against a dense
+// logical oracle, including non-power-of-two sizes and poisoned unused slots.
+for (const pageSize of [1,3,4,16]) {
+  for (const length of [0,1,pageSize-1,pageSize,pageSize+1,2*pageSize+1]) {
+    const dense = Array.from({length}, (_, i) => ({score: (i-3)/7, value:[i+1,2-i]}));
+    const count = Math.ceil(length/pageSize);
+    const pool = Array.from({length:count+3}, () => Array(pageSize).fill(null));
+    const table = Array.from({length:count}, (_, i) => count+1-i);
+    dense.forEach((row,i) => { pool[table[Math.floor(i/pageSize)]][i%pageSize]=row; });
+    // Invalid padding in an oversized block table must not be dereferenced.
+    const rows = model.pagedRows(pool,[...table,-1],length,pageSize);
+    assert.deepEqual(rows.map(r=>r.data),dense);
+    assert.deepEqual(rows.map(r=>r.position),Array.from({length},(_,i)=>i));
+    assert.equal(new Set(rows.map(r=>r.slot)).size,length);
+    const allocated=count*pageSize;
+    assert.ok(allocated-length>=0 && allocated-length<pageSize);
+    if(length) vector(model.onlineAttention(rows.map(r=>r.data.score),rows.map(r=>r.data.value)).output, probabilityOracle(dense.map(r=>r.score),dense.map(r=>r.value)));
+  }
+}
+const pageValues=[[1,0],[0,1],[1,1],[2,0],[0,2],[2,2]];
+const pagePool=Array.from({length:8},()=>Array(4).fill(null));
+pageValues.forEach((value,i)=>{pagePool[[5,1][Math.floor(i/4)]][i%4]={score:Math.log(i+1),value};});
+const pageRows=model.pagedRows(pagePool,[5,1],6,4);
+assert.deepEqual(pageRows.map(r=>r.slot),[20,21,22,23,4,5]);
+vector(model.onlineAttention(pageRows.map(r=>r.data.score),pageRows.map(r=>r.data.value),[[0,1,2,3],[4,5]]).output,[8/7,9/7]);
+// Pages normalized independently and averaged are not the same attention.
+const pa=probabilityOracle(pageRows.slice(0,4).map(r=>r.data.score),pageValues.slice(0,4));
+const pb=probabilityOracle(pageRows.slice(4).map(r=>r.data.score),pageValues.slice(4));
+assert.ok(Math.abs((pa[0]+pb[0])/2-8/7)>0.001);
+assert.throws(()=>model.pagedRows(pagePool,[5],6,4),RangeError);
+assert.throws(()=>model.pagedRows(pagePool,[-1],1,4),RangeError);
+assert.throws(()=>model.pagedRows(pagePool,[8],1,4),RangeError);
+assert.throws(()=>model.pagedRows(pagePool,[5],1,0),RangeError);
+assert.throws(()=>model.pagedRows(pagePool,[5],-1,4),RangeError);
+// One request's length excludes another request and unwritten tail slots.
+pagePool[3]=[{owner:'B0'},{owner:'B1'},{owner:'B2'},null];
+assert.deepEqual(model.pagedRows(pagePool,[3],3,4).map(r=>r.data.owner),['B0','B1','B2']);
+assert.deepEqual(model.pagedRows(pagePool,[5,1],6,4).map(r=>r.data.value),pageValues);
+// Independent byte accounting for the declared Qwen3-8B two-request example.
+assert.equal((4097+2050)*2*8*128*2/1024,24588);
+assert.equal((Math.ceil(4097/16)+Math.ceil(2050/16))*16*2*8*128*2/1024,24704);
+assert.equal(4*32*128*(4097+2050),100712448);
+console.log('Paged KV: physical permutations, arbitrary page sizes, exact boundaries, poisoned tails, request isolation, global normalization counterexample, invalid tables and capacity/FLOP accounting passed. Teaching model only.');
