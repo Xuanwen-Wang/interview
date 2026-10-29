@@ -398,26 +398,36 @@ function renderAttentionLab(root) {
     const rows = AttentionLabMath.pagedRows(poolData, [5,1], 6, 4);
     const result = AttentionLabMath.onlineAttention(rows.map(r => r.data.score), rows.map(r => r.data.value), [[0,1,2,3],[4,5]]);
     const lookup = rows[2];
-    const memory = (aLength = 6, b = true, c = false, selected = -1) => {
-      const slots = Array.from({length: 8}, () => Array(4).fill('空'));
+    const memory = (aLength = 6, b = true, c = false, selected = -1, offset = -1) => {
+      const slots = Array.from({length: 8}, () => Array(4).fill('·'));
       const table = [5,1,6];
       for (let n = 0; n < aLength; n++) slots[table[Math.floor(n / 4)]][n % 4] = `A${n}`;
       for (let n = 0; n < 3; n++) if (b || c) slots[3][n] = `${c ? 'C' : 'B'}${n}`;
-      return `<div class="al-page-pool">${slots.map((tokens, page) => `<div class="al-page-card${page === selected ? ' al-page-selected' : ''}"><strong>物理块 ${page}</strong><div>${tokens.map(token => `<span class="${token[0] === 'A' ? 'al-page-a' : token[0] === 'B' ? 'al-page-b' : token[0] === 'C' ? 'al-page-c' : 'al-page-empty'}">${token}</span>`).join('')}</div><small>${tokens.every(t => t === '空') ? '空闲块' : '已分配；空槽是尾部容量'}</small></div>`).join('')}</div>`;
+      const used = slots.filter(tokens => tokens.some(token => token !== '·')).length;
+      const valid = aLength + (b || c ? 3 : 0);
+      return `<div class="al-page-memory"><div class="al-page-heading"><strong>GPU 物理块池</strong><span>8 块 × 4 槽 · 列为块内偏移</span></div><div class="al-page-axis"><span>块号</span><div class="al-page-offsets" aria-label="块内偏移"><span>0</span><span>1</span><span>2</span><span>3</span></div><span>状态</span></div><div class="al-page-pool">${slots.map((tokens, page) => {
+        const empty = tokens.every(token => token === '·');
+        return `<div class="al-page-row${page === selected ? ' al-page-selected' : ''}${empty ? ' al-page-free' : ''}"><strong>P${String(page).padStart(2,'0')}</strong><div>${tokens.map((token, index) => `<span class="al-page-token${page === selected && index === offset ? ' al-page-current-token' : ''} ${token[0] === 'A' ? 'al-page-a' : token[0] === 'B' ? 'al-page-b' : token[0] === 'C' ? 'al-page-c' : 'al-page-empty'}"${token === '·' ? ' aria-label="未使用的槽"' : ''}>${token}</span>`).join('')}</div><small>${page === selected ? '← 当前' : empty ? '空闲' : tokens.includes('·') ? '尾块' : '已满'}</small></div>`;
+      }).join('')}</div><div class="al-page-legend"><span><i class="al-page-a"></i>请求 A</span><span><i class="${c ? 'al-page-c' : 'al-page-b'}"></i>请求 ${c ? 'C' : 'B'}</span><span>· 未使用的槽</span></div><div class="al-page-metrics"><div><strong>${used}<small> / 8</small></strong><span>已分配块</span></div><div><strong>${valid}</strong><span>有效 KV 槽</span></div><div><strong>${used * 4 - valid}</strong><span>尾部空槽</span></div></div></div>`;
     };
-    const tables = (aLength = 6, b = true, c = false) => columns(box(`A：${aLength} 个有效位置`, aLength > 8 ? '页表 [5, 1, 6]' : '页表 [5, 1]', '数字是物理块号'), box(c ? 'C：3 个有效位置' : b ? 'B：3 个有效位置' : 'B 已结束', c || b ? '页表 [3]' : '已解除映射', '没有预留下一块'));
+    const tables = (aLength = 6, b = true, c = false) => {
+      const entry = (name, count, blocks, tone) => `<div class="al-page-request"><div class="al-page-request-title"><b class="${tone}">${name}</b><span>${count === null ? '已结束 · 解除映射' : `${count} 个有效位置`}</span></div><div class="al-page-table">${blocks.map((page, logical) => `<span><small>逻辑 ${logical}</small><b>→ P${String(page).padStart(2,'0')}</b></span>`).join('') || '<span class="al-page-no-map">无有效表项</span>'}</div></div>`;
+      return `<div class="al-page-requests"><div class="al-page-heading"><strong>请求页表</strong><span>逻辑块 → 物理块</span></div>${entry('A', aLength, aLength > 8 ? [5,1,6] : [5,1], 'al-page-a')}${entry(c ? 'C' : 'B', b || c ? 3 : null, b || c ? [3] : [], c ? 'al-page-c' : 'al-page-b')}<p>先按请求查表，再读取池中的块。物理块号不代表 token 的顺序。</p></div>`;
+    };
+    const board = (length = 6, b = true, c = false, selected = -1, offset = -1) => `<div class="al-page-board">${tables(length,b,c)}${memory(length,b,c,selected,offset)}</div>`;
+    const route = `<div class="al-page-route"><span><small>逻辑位置</small><b>t = ${lookup.position}</b></span><i>→</i><span><small>逻辑块 / 偏移</small><b>${lookup.logical} / ${lookup.offset}</b></span><i>→</i><span><small>查 A 的页表</small><b>P${String(lookup.physical).padStart(2,'0')}</b></span><i>→</i><span class="al-page-destination"><small>物理槽</small><b>${lookup.slot}</b></span></div>`;
     return {
-      title: '跟着页表走一次：读历史、跨页追加、回收再利用',
-      intro: '纯教学块池：8 个物理块，每块 S=4 个 token 槽；A 初始长度6、B初始长度3。A0 表示请求A的位置0的KV，不是词表中的token ID。每格概括该位置的K和V，不表示一个标量；步骤4之后演示后续迭代。',
+      title: '跟着一个请求，观察 KV 内存如何变化',
+      intro: '教学块池：8 块，每块 S=4 槽。A 初始长度6，B初始长度3；A0 表示请求A的位置0；每格代表该位置的整份 K/V。逐步查看寻址、追加和复用，步骤4起进入后续迭代。',
       foot: '同一请求按逻辑位置取数据，物理页号只负责寻址。图中不涉及共享；回收步骤假定GPU已经完成且没有其他引用。所有有效历史仍参与全量Attention。最终池中A占3块、C占1块，8块池仍有4块空闲。',
       steps: [
-        step('已有历史：A 的相邻逻辑块不挨着存', 'A的位置0～3在物理块5，位置4～5在块1；B的位置0～2在块3。A、B各有自己的块表和有效长度。只分配了3块，剩余5块仍可用。', flow(tables(), memory()), '有效9槽；分配3×4=12槽；尾块空闲3槽。'),
-        step('查 A 的位置2：先页表，再块内偏移', '2÷4得到逻辑块0、余数2；A的第0个表项是物理块5，slot为22。相同规则查位置4会得到物理块1的偏移0，slot4。物理地址先后不会改变逻辑位置或RoPE。', flow(box('从逻辑位置到物理槽', `t=${lookup.position} → 逻辑块${lookup.logical} → 物理块${lookup.physical} → offset ${lookup.offset}`, `slot=${lookup.slot}`, 'al-active'), memory(6,true,false,lookup.physical)), 'slot = block_table[A, floor(t/S)] × S + (t mod S)'),
+        step('已有历史：A 的相邻逻辑块不挨着存', 'A的位置0～3在物理块5，位置4～5在块1；B的位置0～2在块3。A、B各有自己的块表和有效长度。只分配了3块，剩余5块仍可用。', board(), '有效9槽；分配3×4=12槽；尾块空闲3槽。'),
+        step('查 A 的位置2：先页表，再块内偏移', '位置2整除4得逻辑块0，余数是块内偏移2；A的第0个表项是物理块5，slot为22。相同规则查位置4会得到物理块1的偏移0，slot4。物理地址先后不会改变逻辑位置或RoPE。', flow(route, board(6,true,false,lookup.physical,lookup.offset)), 'slot = block_table[A, floor(t/S)] × S + (t mod S)'),
         step('读取全部6个位置，得到一个统一的输出', '人工设定6个已缩放分数为[ln1,ln2,ln3,ln4,ln5,ln6]，V依次为[1,0]、[0,1]、[1,1]、[2,0]、[0,2]、[2,2]。物理块5提供前4项，块1只提供后2项；其余槽不进入计算。', flow(columns(box('读块5：逻辑0～3', '未归一化权重 1,2,3,4', '质量和10；加权V和[12,5]'), box('读块1：逻辑4～5', '未归一化权重 5,6', '质量和11；加权V和[12,22]')), arrow('在全部有效位置上归一化；可用在线归约'), box('A 当前 head 的二维输出', vec(result.output), '([12,5]+[12,22]) / (10+11) = [8/7,9/7]', 'al-output')), '两页各自输出不能直接相加或平均；物理位置变了，Attention语义不变。'),
-        step('随后两次 decode：先填满自己的尾块', 'A接下来分别追加位置6和7，写入物理块1的偏移2和3。已有位置0～5保持原值，也没有给A分配新块。这里展示两次追加完成后的状态。', flow(tables(8), memory(8,true,false,1)), 'A长度6 → 7 → 8；页表仍是[5,1]；占用仍是2块。'),
-        step('再追加位置8：申请一个新块', '位置8属于逻辑块2，原页表没有该项。分配器从空闲池选物理块6，将其追加到A的页表，再在offset0写入A8；旧块5和1都不搬迁。', flow(tables(9), memory(9,true,false,6)), 'A页表：[5,1] → [5,1,6]；slot(A8)=6×4+0=24。'),
-        step('B结束：满足生命周期条件后回收块3', '假定B的GPU任务已经完成，且块3没有共享引用。解除B的页表后，将物理块3放回空闲池；A的页表和数据保持不变。图中的空表示可分配，不代表运行时必须把旧字节清零。', flow(tables(9,false), memory(9,false,false,3)), '分配器处理引用与完成状态；不能在kernel仍读取时复用物理块。'),
-        step('新请求C复用块3：不用整理A的历史', 'C的3个输入位置写入刚释放的块3，C建立自己的页表[3]。A继续通过[5,1,6]读取9个位置，C通过[3]读取3个位置。这里只展示缓存写入后的状态，不模拟prefill耗时。', flow(tables(9,false,true), memory(9,false,true,3)), 'A与C合计12个有效位置，占4块共16槽；其他4块保持空闲。')
+        step('随后两次 decode：先填满自己的尾块', 'A接下来分别追加位置6和7，写入物理块1的偏移2和3。已有位置0～5保持原值，也没有给A分配新块。这里展示两次追加完成后的状态。', board(8,true,false,1), 'A长度6 → 7 → 8；页表仍是[5,1]；占用仍是2块。'),
+        step('再追加位置8：申请一个新块', '位置8属于逻辑块2，原页表没有该项。分配器从空闲池选物理块6，将其追加到A的页表，再在offset0写入A8；旧块5和1都不搬迁。', board(9,true,false,6), 'A页表：[5,1] → [5,1,6]；slot(A8)=6×4+0=24。'),
+        step('B结束：满足生命周期条件后回收块3', '假定B的GPU任务已经完成，且块3没有共享引用。解除B的页表后，将物理块3放回空闲池；A的页表和数据保持不变。图中的空闲标记表示可分配，不代表运行时必须把旧字节清零。', board(9,false,false,3), '分配器处理引用与完成状态；不能在kernel仍读取时复用物理块。'),
+        step('新请求C复用块3：不用整理A的历史', 'C的3个输入位置写入刚释放的块3，C建立自己的页表[3]。A继续通过[5,1,6]读取9个位置，C通过[3]读取3个位置。这里只展示缓存写入后的状态，不模拟prefill耗时。', board(9,false,true,3), 'A与C合计12个有效位置，占4块共16槽；其他4块保持空闲。')
       ]
     };
   }
@@ -442,7 +452,8 @@ function renderAttentionLab(root) {
     const item = spec.steps[current];
     root.dataset.step = String(current);
     select('counter').textContent = `${current + 1} / ${spec.steps.length} · ${item.title}`;
-    select('progress').innerHTML = spec.steps.map((s, i) => `<button type="button" data-al-goto="${i}"${i === current ? ' aria-current="step"' : ''} aria-label="第 ${i + 1} 步：${s.title}">${i + 1}</button>`).join('');
+    const pageLabels = ['分配', '寻址', '计算', '填页', '扩容', '回收', '复用'];
+    select('progress').innerHTML = spec.steps.map((s, i) => `<button type="button" data-al-goto="${i}"${i === current ? ' aria-current="step"' : ''} aria-label="第 ${i + 1} 步：${s.title}">${kind === 'paged' ? `<span>${i + 1}</span><small>${pageLabels[i]}</small>` : i + 1}</button>`).join('');
     select('scene').innerHTML = `<h5>${item.title}</h5><p>${item.text}</p><div class="al-visual">${item.visual}</div>${item.equation ? `<p class="al-equation"><code>${item.equation}</code></p>` : ''}`;
     if (kind === 'fa3-pipeline') {
       const viewport = select('scene').querySelector('.al-fa-scroll');
