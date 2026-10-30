@@ -154,6 +154,8 @@ TMPDIR=/data/wangxw/tmp g++ -std=c++17 -Wall -Wextra -Werror \
 
 ## CUDA 与 GPU 通信教程
 
+依据用户 2026-10-30 对 H200 开篇的反馈，硬件入门按“具体产品整体 → 硬件分组 → 单个 SM 内部 → 存储归属 → 跨块协作”逐层放大。图中标明启用单元数、每级资源数量与来源，完整芯片设计和产品实际启用配置分别展示；不要以“省略实际 SM 数量”的抽象框代替整机认识。物理 GPC/TPC、程序 grid/block/cluster、CTA 的 Shared 对象与 SM 的 SRAM 预算需明确区分。
+
 `cuda` 知识域固定两篇连续入口：`cuda.html`（Hopper 与算子开发）和 `cuda-communication.html`（通信库与多卡部署）。正文分别在 `content/24-cuda-hopper.json`、`content/25-cuda-communication.json`；保留稳定章节与小节 ID。
 
 `web/cuda-guide.js` 提供 `data-cuda-lab="occupancy"`、`"ring"`、`"communication"` 三种交互；构建时与 CSS 内嵌，不依赖外部网络。修改模型运行 `node scripts/check_cuda_model.js`：资源上界用可行 CTA 枚举检查，Ring 用贡献守恒与直接求和检查，softmax 用完整向量 oracle 检查。教学上界不包含分配粒度、动态寄存器和集群调度；通信模型不预测 NCCL 自动算法或实测带宽。
