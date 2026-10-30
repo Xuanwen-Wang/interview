@@ -1,0 +1,356 @@
+{
+  "date": "2026-10-30",
+  "repository": "design",
+  "revision": "unknown; non-Git reference snapshot",
+  "validation": "Read-only RTL inspection and whole-file SHA256 comparison; no simulation, synthesis or hardware measurement.",
+  "reference_figure": {
+    "provenance": "User-provided VP design diagram, received 2026-10-30",
+    "revision": "unknown",
+    "sha256": "ecd42dc034b66a850e828a9de984b35a42f8e459cdc175849e35f6258c9c5d2e",
+    "publication": "Not included; article contains original diagrams."
+  },
+  "files": [
+    {
+      "repository": "design",
+      "path": "README.md",
+      "sha256": "6e983e5ee115a7965099de957279b5bd0a700bb98eb7d7856f12464a88b90a49",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "filelist/filelist_vp_518_top.f",
+      "sha256": "e68b20fbfde7a4a1c17e0d9f70766c3a85b2ff76495d7982c0f6c66857151cb9",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/prl/vp_518_cal_fifo.v",
+      "sha256": "5254f254deda2309c2c8d08818af76e25e83f23e6223719470ac5d43f474bea0",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/prl/vp_518_cal_fifo_demux.v",
+      "sha256": "8d13f47776edd5014778283770ab4fc712f71425073d1f4da3b0b321312c3c9f",
+      "matches_2026_10_25_evidence": null
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/prl/vp_518_cal_relu.v",
+      "sha256": "c4dedbdb56e2a3e0d7419defe8769478789f239d1ce6dd3cc6483b99d3240564",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/prl/vp_518_diff_disconnect.v",
+      "sha256": "aa3666a90237727a3cbd60d866145d5f7558926044f6167500585c29a3efed84",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/prl/vp_518_fp32_dispart.v",
+      "sha256": "c821fa8667f64dcb7b028eb0c252113e6dd48f2152d35062795fa1649e8fd2ec",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/prl/vp_518_fp32_dispart_group.v",
+      "sha256": "803f6f3c08fbd855bb944e4d8273e2228f79b7c2db3a457ad9b5fc4a7f4f585b",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/prl/vp_518_fp32_floor.v",
+      "sha256": "391ffd488966f0b243f15a91b1a6725ee6421c989c03ab0321600bb6bafe425b",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/prl/vp_518_fp32_floor_group.v",
+      "sha256": "025730931ef3b76618d4d6ffe0d96d7d039a3ca5d3a4d422c06f264dce5d19f5",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/prl/vp_518_fp32_mul_group.v",
+      "sha256": "e0d9fdd603db9dd63d0e720041f5867a56a14fae36aa72b04fafa374adeb9a18",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/prl/vp_518_fp32_shift.v",
+      "sha256": "c8095231931f8864de38da7d391331a2552236a761aee54e0c545f1559cf2bc7",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/prl/vp_518_fp32_shift_group.v",
+      "sha256": "6013da6d62dc77f1abe75378a2c25430e48b8a5c5a6048b4bfb90d60434b53fa",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/prl/vp_518_fp32_sumsub_group0.v",
+      "sha256": "d2cdd0b78a178cc0481db21e058b4d91c44eab6b1a327d9edb78f79fcea393ed",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/prl/vp_518_fp32_sumsub_group1.v",
+      "sha256": "9e50ae8be9ca918b29f08887e58bde7b3632909cc7fa6b209092601f2e7b5ebf",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/prl/vp_518_param_gen_group.v",
+      "sha256": "a3e81c8e05aa4acc394b0d9673053747d78373f1d64d3166e572bd1c2a8ba580",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/prl/vp_518_param_gen_self.v",
+      "sha256": "149cccadc78e208cb92ad01e88749252b6d8137adf5f9023943c9070f8a0f25d",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/prl/vp_518_param_gen_self_sub.v",
+      "sha256": "941083577c29d01960f0dd654dd5e83e5e23d75a896898c3fc344f30f00f6bb4",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/scl/vp_518_s2p.v",
+      "sha256": "0766b6d0dc9a4cc4f858562771ff93b4e3e280eac9fba147305ef4c4ea407727",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/scl/vp_518_s2p_scalar.v",
+      "sha256": "72b0307d6d6ce784c0a9347170a5c16f8a065f2648fcd5e0d0ad1e66f0792f1d",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/scl/vp_518_square_root_div_scalar.v",
+      "sha256": "0ef9f8e183f7d46a7123def062d9dfd59623a012913548512e0e30dfa581b4dc",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/vp_518_acc_tree.v",
+      "sha256": "a5e7b40a5ec0ce74415e4df4c21fc0983679442ffd11e410052bba2411ea4892",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/vp_518_acc_tree_group.v",
+      "sha256": "e60173cff57c90eea15d7c7a8e33fd5acbea9db0e4cec77b7f81212fc57c13c5",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/vp_518_cal_group_para_engine.v",
+      "sha256": "875dec6d9b6a082a87c0416a007cde52325d58f984fbe0aad3c3985b64a8333a",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/vp_518_cal_group_scal_engine.v",
+      "sha256": "2bd1203fff3a39b1060de135bacadc994506fe7398b95f26212e7f5c3a1c1ea3",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/vp_518_cal_group_scal_register_demux.v",
+      "sha256": "3c16819a458f431c6b4238a366e3dda6badb578aa3ae15fb1087a412621a5cb4",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/vp_518_cal_group_top.v",
+      "sha256": "2b00edceb4b2be634022cae5ef951f5309cae2e4b61fa6891303c0d651a9e823",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/vp_518_compare_group.v",
+      "sha256": "0eb1ca772497a352ccfd4f34e2414a0a987dea78b1991336e7039f183e161279",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/vp_518_compare_tree.v",
+      "sha256": "d991bf9809d0b123c6551dabf3bdc87a7b69aaafcf783f122607a324bb989a2a",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/vp_518_mask.v",
+      "sha256": "c74654814100789f3e09b4c99be1b643e7015e8e3737e07a0d7652ebbcd88f29",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/cal/vp_518_mask_group.v",
+      "sha256": "a9f63d08135f7b6008a057e8d0b171b97040ab1e76f95b7abcccd606d767e3ac",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/common/vp_518_out_mux.v",
+      "sha256": "19fe73a8f780a6638daaa57d0b4f6541315a99748cc5ca3e106fea9108ff8e7a",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/ctrl/vp_518_ctrl_top.v",
+      "sha256": "3bfb840f0409ff214c33b67ec6ea1769103dd8f581269f7891b3fa6375113fc3",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/ctrl/vp_518_inst_decode.v",
+      "sha256": "404c0c401619a455f71c40fe16d69c05302cc645e55e938c2780925fb4e57d26",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/ctrl/vp_518_rd_addr_gen.v",
+      "sha256": "fe709b87fc2aa6813bac33efa7ddceb6943699b8bf12ac7003bacbc1919d3d68",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/ctrl/vp_518_rd_addr_gen_top.v",
+      "sha256": "721ea39c56b59ac44d4cbd062f95fa35ed7c1a6eed8d2a822527152f89b1d05c",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/ctrl/vp_518_wr_addr_gen.v",
+      "sha256": "5c63e742abccd71b30e2dc581126a09b7715e568ba5ca66b3d1151963e91cf4e",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/post_cal/vp_518_fp2fi_post_group.v",
+      "sha256": "8b0fd0d6ec19cddc3a88fe4423648370ff42e82404a797a809d14371895a92bc",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/post_cal/vp_518_fp32_mul_post_group.v",
+      "sha256": "af873f21090b376a37da86afe5a4fa22600480071db2905356fa1e97103fb79a",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/post_cal/vp_518_fp32_sumsub_post_group.v",
+      "sha256": "0c1f4a5665d1ba478151a72f6bf96fe3bdf2808cc82d7e0e132ceb6460a2129d",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/post_cal/vp_518_p2s.v",
+      "sha256": "513ce1f12284eb44f83b5f2861ecf6a17a5b3b0a410565b4a121488cd97e91d7",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/post_cal/vp_518_p2s_post_group.v",
+      "sha256": "575bf9d80e14643c4746d52fd25884cc8fe8f01d09ab90f7ebdad4541524313f",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/post_cal/vp_518_post_cal_group_top.v",
+      "sha256": "23d0c309ba3654f94d4754b4734760888811e5fa04aed708d80bc08f3f3d7530",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/pre_cal/vp_518_pre_cal.v",
+      "sha256": "88b3fb6cb77473288ec6ed56b0d9aaee3f02f97e8f002f0ca2c07839e3466ec5",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/pre_cal/vp_518_pre_cal_concat.v",
+      "sha256": "5650720ddc57aa2e17436594458a561192c93551d24739d13b81d9d82a7b9204",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/pre_cal/vp_518_pre_cal_data_distr.v",
+      "sha256": "e3aaabd955cf832fd84dccb3a7be920868785078b85d26b2a71322d5115a1956",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/pre_cal/vp_518_pre_cal_data_mux.v",
+      "sha256": "969538f42b063fa140e89e4842411e0e887759b67145c2c65570e51dd512f915",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/pre_cal/vp_518_pre_cal_dispart.v",
+      "sha256": "56c1f13a7acb4c4bcf082643fc8e6939af3c2058ca267bfd80ed15edb32b363d",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/pre_cal/vp_518_pre_cal_fi2fp_group.v",
+      "sha256": "79c7bfe2690a5b4545031d2e9bed5cb56bfa3c9b520f7d9c317488a33279d198",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/pre_cal/vp_518_pre_cal_re_quan_group.v",
+      "sha256": "f23b5cef94f8cf8d85aa3dd9e2cb1a1c0095fe5c611c22a8a7b84cfd01909766",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/sub_module/pre_cal/vp_518_pre_cal_split_send.v",
+      "sha256": "0410b8e4da0d51ffb706d287b56ce5f87940c2dea5b4ce293c1fb6cac4e9a14c",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/top_wrapper/vp_518_cal_top.v",
+      "sha256": "5ad558f3ef001bdfae9e8841b600179a75276a03ebbaba3202a187108ad640b2",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/top_wrapper/vp_518_cdc_top.v",
+      "sha256": "b3d15ea6ef972df7092cdb7bc5d4c645b6334de4447cfc41d02499c1f46bb4d9",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/top_wrapper/vp_518_ecc_gen_check_top.v",
+      "sha256": "9d031b70a2c4463f1f5c2a1220139a4a9af4a24c2457c44b3e1314913f9a76fa",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/top_wrapper/vp_518_top.v",
+      "sha256": "079dfa45a99cd6fe111cd396830a540df10d38d4ef638e8eed06309819f8f06b",
+      "matches_2026_10_25_evidence": true
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/top_wrapper/vp_518_zeus_top_wrapper.v",
+      "sha256": "935caed412d2bb186ad43d90e9214144a6a792edc00875fcc8f543bdcf9ea3d5",
+      "matches_2026_10_25_evidence": null
+    },
+    {
+      "repository": "design",
+      "path": "rtl/zeus518/vp_v3/top_wrapper/vp_macro.v",
+      "sha256": "aa5db213a1441b10f9400cd9ab4240254d5574984861a7faed7f18e5bff566dc",
+      "matches_2026_10_25_evidence": true
+    }
+  ]
+}

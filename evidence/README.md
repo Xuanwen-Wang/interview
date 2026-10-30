@@ -38,6 +38,7 @@
 - [VP顶层与控制](vp-top-control-rtl.md)：CTRL/ECC/CDC、四套配置、数据标签与写响应完成。
 - [VP完整CAL连线](vp-datapath-rtl.md)：比较/归约双出口、TopK包、S2P与六类专用反馈目标。
 - [VP向量引擎逐模块](vp-vector-pipeline-rtl.md)：真实操作数、单写FIFO、跨组SHF和PreCal/PostCal分支。
+- [VP设计图与完整执行过程](vp-design-walkthrough.md)：2026-10-30 RTL复核、命令状态、固定shape逐元素走读、归约轴、反馈寿命与条件性能模型；[文件指纹](vp-design-source-hashes.json)、[本轮审查](review-vp-design-walkthrough.md)。
 - [TopK真实路径](vp-topk-operator.md)：Router选择域、原生packet、CT Gather和前缀发布。
 - [sigmoid与RMSNorm](vp-rms-sigmoid-operators.md)：真实系数、accurate修正、tile归约次序与共享γ。
 - [CUDA固定实现对照](vp-cuda-operators.md)：PyTorch/vLLM源码与NVIDIA版本化文档，区分数学合同和执行组织。
