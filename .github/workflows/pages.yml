@@ -43,6 +43,7 @@ jobs:
           node --check web/deepseek-architecture.js
           node --check web/cuda-guide.js
           node --check web/communication-lab.js
+          node --check web/math-foundations.js
           node scripts/check_pe_model.js
           node scripts/check_moe_model.js
           node scripts/check_interviews.js
@@ -54,6 +55,7 @@ jobs:
           node scripts/check_deepseek_model.js
           node scripts/check_cuda_model.js
           node scripts/check_communication_model.js
+          node scripts/check_math_foundations.js
           python3 practice/communication/cpu_reference.py
       - name: Verify original coding references
         run: |

@@ -101,6 +101,7 @@ function renderChapter(id, section) {
  initDeepSeekArchitectureLabs();
  initCudaLabs();
  initCommunicationLabs();
+ initMathFoundations();
  enableFigureZoom();
  initInterviewQuestions();
  if(section)scrollChapterAnchor(section);

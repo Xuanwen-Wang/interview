@@ -18,6 +18,39 @@
       ]
     },
     {
+      "id": "math-foundations",
+      "title": "数学与算子基础",
+      "number": "M",
+      "description": "从忘记的数学重新开始：图解张量、概率、Softmax、激活、Norm、Top‑K，再走完 Attention、MoE 与一次完整推理。",
+      "groups": [
+        {
+          "id": "llm-math",
+          "title": "大模型数学与算子补课",
+          "chapters": [
+            "llm-math-foundations"
+          ],
+          "continuousReading": true
+        }
+      ],
+      "learningPath": [
+        {
+          "title": "先补数学与算子",
+          "description": "按轴读公式，亲手计算关键中间量",
+          "chapter": "llm-math-foundations"
+        },
+        {
+          "title": "接到 Attention 数据流",
+          "description": "带着 Softmax、矩阵与位置编码基础继续",
+          "chapter": "attention-inference-guide"
+        },
+        {
+          "title": "接到 FFN 与专家网络",
+          "description": "把激活、路由与索引连回模型",
+          "chapter": "ffn-inference-guide"
+        }
+      ]
+    },
+    {
       "id": "algorithms",
       "title": "算法与数据流",
       "number": "02",
