@@ -72,7 +72,27 @@ const CudaGuideModel = (() => {
     }
     return {m,l,o,value: l ? o / l : 0};
   }
-  return {occupancy,ring,communication,onlineAttention};
+  function sharedWord(row, column, layout) {
+    if (![row,column].every(n => Number.isInteger(n) && n >= 0 && n < 32) ||
+        !['plain','padded','xor'].includes(layout)) throw new RangeError('Invalid Shared coordinate');
+    if (layout === 'padded') return row * 33 + column;
+    return row * 32 + (layout === 'xor' ? column ^ row : column);
+  }
+
+  function bankPattern(mode, stride = 1, column = 0) {
+    if (!['stride','broadcast','plain','padded','xor'].includes(mode) ||
+        !Number.isInteger(stride) || stride < 1 || stride > 32 ||
+        !Number.isInteger(column) || column < 0 || column > 31)
+      throw new RangeError('Invalid bank pattern');
+    const words = Array.from({length:32},(_,lane) => mode === 'stride' ? lane * stride :
+      mode === 'broadcast' ? column : sharedWord(lane,column,mode));
+    const banks = Array.from({length:32},() => new Set());
+    words.forEach(word => banks[word % 32].add(word));
+    const counts = banks.map(bank => bank.size);
+    return {words,counts,passes:Math.max(...counts),used:counts.filter(Boolean).length,
+      distinct:new Set(words).size};
+  }
+  return {occupancy,ring,communication,onlineAttention,sharedWord,bankPattern};
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = CudaGuideModel;
 
@@ -88,7 +108,18 @@ function initCudaLabs() {
     if (root.dataset.ready) return;
     root.dataset.ready = 'true'; root.classList.add('cuda-lab');
     const kind = root.dataset.cudaLab;
-    if (kind === 'occupancy') {
+    if (kind === 'banks') {
+      root.innerHTML = `<div class="cuda-lab-heading"><span>SHARED BANK LAB / 04</span><h4>改变地址，观察同一个 bank 要服务几个不同 word</h4><p>32 个 lane 同时各读一个对齐的 32-bit word；只分析这一条标量访问。</p></div><div class="cuda-controls">${select('mode','访问模式',[['stride','线性 stride'],['plain','32×32 按列读'],['padded','32×33 padding 按列读'],['xor','XOR swizzle 按列读'],['broadcast','同一 word 广播']],'plain')}${select('stride','word stride',[1,2,4,8,16,32].map(n=>[n,String(n)]),1)}${select('column','列 / 广播 word',[0,1,7,31].map(n=>[n,String(n)]),0)}${select('lane','追踪 lane',Array.from({length:32},(_,n)=>[n,String(n)]),7)}</div><div class="cuda-lab-output" aria-live="polite"></div>`;
+      const render = () => {
+        const read = name => root.querySelector(`[data-control="${name}"]`).value;
+        const mode=read('mode'),stride=Number(read('stride')),column=Number(read('column')),lane=Number(read('lane'));
+        root.querySelector('[data-control="stride"]').disabled=mode!=='stride';
+        root.querySelector('[data-control="column"]').disabled=mode==='stride';
+        const result=CudaGuideModel.bankPattern(mode,stride,column),word=result.words[lane],bank=word%32;
+        root.querySelector('.cuda-lab-output').innerHTML = `<p class="cuda-current">当前：${root.querySelector('[data-control="mode"] option:checked').textContent} · ${mode==='stride'?`word stride=${stride}`:mode==='broadcast'?`广播 word=${column}`:`读取第 ${column} 列`}</p><div class="cuda-stats">${stat(result.used,'使用的 bank 数')}${stat(result.passes,'最忙 bank 的不同 word 数')}${stat(result.distinct,'全 warp 的不同 word 数')}</div><div class="cuda-bank-grid">${result.counts.map((n,b)=>`<div class="${n>1?'conflict ':''}${b===bank?'selected':''}"><strong>bank ${b}</strong><span>${n} 个 word</span>${b===bank?'<small>选中 lane →</small>':''}</div>`).join('')}</div><p class="cuda-bank-trace">lane ${lane} → word ${word} → byte offset ${word*4} → bank ${bank}</p><p>${mode==='broadcast'?'32 个线程读同一个 word，可广播；不能由此认为多个线程同址写入也安全。':result.passes===1?'这组标量读在地址模型中没有 bank conflict。':`最忙 bank 收到 ${result.passes} 个不同 word，需要更多服务批次。`}</p><p>这是请求地址模型，不是实测周期；向量、FP16、ldmatrix 和 TMA 必须按实际指令的 phase 与布局分析。</p>`;
+      };
+      root.addEventListener('change',render); render();
+    } else if (kind === 'occupancy') {
       root.innerHTML = `<div class="cuda-lab-heading"><span>RESOURCE LAB / 01</span><h4>一个 SM 可以住下多少 CTA？</h4><p>调整资源需求，观察哪项预算先耗尽。采用 Hopper 理论上限，忽略分配粒度、动态寄存器与 cluster。</p></div><div class="cuda-controls">${select('threads','每 CTA 线程数',[128,256,512].map(x=>[x,String(x)]),256)}${select('registers','每线程寄存器（32-bit）',[32,64,96,128].map(x=>[x,String(x)]),64)}${select('shared','每 CTA Shared',[32,64,96,128,192].map(x=>[x,x+' KiB']),64)}</div><div class="cuda-lab-output" aria-live="polite"></div>`;
       const render = () => {
         const read = name => Number(root.querySelector(`[data-control="${name}"]`).value);

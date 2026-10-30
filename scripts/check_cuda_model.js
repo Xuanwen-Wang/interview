@@ -83,3 +83,36 @@ assert.equal(sectors(4),4); assert.equal(sectors(4,4),5); assert.equal(sectors(1
 assert.equal(new Set(Array.from({length:32},(_,r)=>(r*32)%32)).size,1);
 assert.equal(new Set(Array.from({length:32},(_,r)=>(r*33)%32)).size,32);
 console.log(`CUDA teaching models passed: ${cases} parameter cases, ring contribution conservation, softmax oracle, memory examples and counterexamples.`);
+
+// Independent address checks: modular arithmetic, broadcast exception and layout roundtrip.
+const gcd=(a,b)=>b?gcd(b,a%b):a;
+for(let stride=1;stride<=32;stride++) {
+  const r=model.bankPattern('stride',stride);
+  assert.equal(r.passes,gcd(stride,32));
+  assert.equal(r.used,32/gcd(stride,32));
+  assert.equal(r.distinct,32);
+}
+for(let column=0;column<32;column++) {
+  assert.equal(model.bankPattern('plain',1,column).passes,32);
+  assert.equal(model.bankPattern('padded',1,column).passes,1);
+  assert.equal(model.bankPattern('xor',1,column).passes,1);
+  assert.equal(model.bankPattern('broadcast',1,column).passes,1);
+  assert.equal(model.bankPattern('broadcast',1,column).distinct,1);
+}
+for(const layout of ['plain','padded','xor']) {
+  const memory=new Map();
+  for(let r=0;r<32;r++)for(let c=0;c<32;c++){
+    const address=model.sharedWord(r,c,layout);
+    assert.ok(!memory.has(address),'Each logical element has a unique physical word');
+    memory.set(address,r*101+c*7-19);
+  }
+  assert.equal(memory.size,1024);
+  for(let r=0;r<32;r++)for(let c=0;c<32;c++)
+    assert.equal(memory.get(model.sharedWord(r,c,layout)),r*101+c*7-19);
+}
+// A producer using XOR and a consumer using plain layout is wrong for distinct input values.
+assert.notEqual(model.sharedWord(1,0,'plain'),model.sharedWord(1,0,'xor'));
+assert.throws(()=>model.bankPattern('bad'),RangeError);
+assert.throws(()=>model.bankPattern('stride',0),RangeError);
+assert.throws(()=>model.sharedWord(32,0,'plain'),RangeError);
+console.log('Shared bank model passed: all 32 strides and columns, broadcast, 3 layout bijections and mismatch counterexample.');

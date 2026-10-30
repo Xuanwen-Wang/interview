@@ -1,0 +1,42 @@
+{
+  "repo": "triton-lang/triton",
+  "version": "v3.5.0",
+  "commit": "c3c476f357f1e9768ea4e45aa5c17528449ab9ef",
+  "files": [
+    {
+      "path": "third_party/nvidia/backend/compiler.py",
+      "sha256": "3e3d33fbab70c7c05fc70e2e2fdd763dca0b847f62150592b99f8886a419ee64",
+      "bytes": 21822
+    },
+    {
+      "path": "lib/Dialect/TritonGPU/Transforms/Coalesce.cpp",
+      "sha256": "f9ef119b29fdb6c25a3a75a185e5d567ada277098b14b09846a374e991b1e99b",
+      "bytes": 7516
+    },
+    {
+      "path": "lib/Dialect/TritonGPU/Transforms/RemoveLayoutConversions.cpp",
+      "sha256": "b2e2b8c2b567d4e6609e6641614ed3ba1cea31489e75fcca019721866b03d5fe",
+      "bytes": 64322
+    },
+    {
+      "path": "lib/Dialect/TritonGPU/Transforms/OptimizeDotOperands.cpp",
+      "sha256": "6cdd4773630395a6814e1b20c3407c471f1e586db97f7f59232bf3de2831fe62",
+      "bytes": 12810
+    },
+    {
+      "path": "lib/Analysis/Membar.cpp",
+      "sha256": "a97452934921fc572ff18cc7f336306de1102d0812e3239995617214cd550432",
+      "bytes": 11805
+    },
+    {
+      "path": "lib/Analysis/Allocation.cpp",
+      "sha256": "f850b694875206cc1a2bbbe365079730011f30e5029ef58fcdad9200b00102fe",
+      "bytes": 24287
+    },
+    {
+      "path": "python/tutorials/10-block-scaled-matmul.py",
+      "sha256": "e1a28d642211acd2b527b5686ada6a8ce3e8c5b46b4f5efaf5799e1e078448cd",
+      "bytes": 14994
+    }
+  ]
+}

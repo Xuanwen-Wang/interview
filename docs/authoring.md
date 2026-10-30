@@ -159,9 +159,11 @@ TMPDIR=/data/wangxw/tmp g++ -std=c++17 -Wall -Wextra -Werror \
 
 讲解 launch 到硬件执行时，用同一个具体算子的 shape、grid/block、输出 tile 和线程索引贯穿 CTA 驻留、warp 分区归属与指令发射。区分程序能指定的工作划分、硬件决定的映射和图中的教学假设；不把示意的 warp 编号配对写成硬件保证，不把驻留数量当成每周期执行数量。CUDA Core 与 Tensor Core 的比较须给出指令参与范围、操作数与结果归属，改变精度或 tile 合同时明确标注。
 
+依据用户 2026-10-30 对软硬件映射的进一步反馈，执行、存储与同步机制要沿“程序表达什么 → 编译器安排什么 → 硬件跟踪什么 → 程序员仍须保证什么”说明。发射吞吐、依赖延迟、SIMD 宽度、逻辑 warp 宽度分别定义；公开 ISA 合同不能充当未公开的芯片 RTL 或逐拍流水。对标参数注明产品、精度、稠密/稀疏、单向/双向、标称/实测。跨架构扩展绑定 target 和文档版本；量化数据、scale 分组、scale 布局与完成协议一起解释，不只罗列新指令名。引用课件时提供页码，区分教学假设和课件中的设备实验。
+
 `cuda` 知识域固定两篇连续入口：`cuda.html`（Hopper 与算子开发）和 `cuda-communication.html`（通信库与多卡部署）。正文分别在 `content/24-cuda-hopper.json`、`content/25-cuda-communication.json`；保留稳定章节与小节 ID。
 
-`web/cuda-guide.js` 提供 `data-cuda-lab="occupancy"`、`"ring"`、`"communication"` 三种交互；构建时与 CSS 内嵌，不依赖外部网络。修改模型运行 `node scripts/check_cuda_model.js`：资源上界用可行 CTA 枚举检查，Ring 用贡献守恒与直接求和检查，softmax 用完整向量 oracle 检查。教学上界不包含分配粒度、动态寄存器和集群调度；通信模型不预测 NCCL 自动算法或实测带宽。
+`web/cuda-guide.js` 提供 `data-cuda-lab="occupancy"`、`"ring"`、`"communication"`、`"banks"` 四种交互；构建时与 CSS 内嵌，不依赖外部网络。修改模型运行 `node scripts/check_cuda_model.js`：资源上界用可行 CTA 枚举检查，Ring 用贡献守恒与直接求和检查，softmax 用完整向量 oracle 检查；bank 模型用步长与 32 的最大公因数、全部列、广播、布局双射和错配反例检查。bank 模型限定同一 warp 的标量 32-bit 读，不能将不同 word 数当作实测周期。教学驻留上界不包含分配粒度、动态寄存器和集群调度；通信模型不预测 NCCL 自动算法或实测带宽。
 
 新增图分别注明数据输入、归约轴、参与组、结果归属、字节方向与比较条件。NCCL、DeepEP 的接口和后端绑定版本；H200 标称规格、FA3 论文结果与现场实测分开。检查桌面、移动横向滚动/放大、Ring 前后步与重置、参数变化、打印当前假设/末态、独立 HTML 离线交互。
 
