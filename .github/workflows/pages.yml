@@ -42,6 +42,7 @@ jobs:
           node --check web/cyclesim-explorer.js
           node --check web/deepseek-architecture.js
           node --check web/cuda-guide.js
+          node --check web/communication-lab.js
           node scripts/check_pe_model.js
           node scripts/check_moe_model.js
           node scripts/check_interviews.js
@@ -52,6 +53,8 @@ jobs:
           node scripts/check_cyclesim_model.js
           node scripts/check_deepseek_model.js
           node scripts/check_cuda_model.js
+          node scripts/check_communication_model.js
+          python3 practice/communication/cpu_reference.py
       - name: Verify original coding references
         run: |
           python3 -m unittest discover -s practice -v

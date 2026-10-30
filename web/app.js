@@ -100,6 +100,7 @@ function renderChapter(id, section) {
  initCycleCasebooks();
  initDeepSeekArchitectureLabs();
  initCudaLabs();
+ initCommunicationLabs();
  enableFigureZoom();
  initInterviewQuestions();
  if(section)scrollChapterAnchor(section);

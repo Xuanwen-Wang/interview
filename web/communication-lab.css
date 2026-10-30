@@ -1,0 +1,81 @@
+/* Scoped course typography and original, data-driven communication diagrams. */
+main:has([data-communication-course]){--sans:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif}
+main:has([data-communication-course]) .page-title{max-width:1000px;font-family:var(--sans);font-weight:650;letter-spacing:-1.4px}
+main:has([data-communication-course]) .page-lead{max-width:900px;line-height:1.95}
+main:has([data-communication-course]) .article{color:#26364a}
+main:has([data-communication-course]) .article p{font-size:15px;line-height:2.05}
+main:has([data-communication-course]) .article :is(li,td,th){font-size:14px;line-height:1.9}
+main:has([data-communication-course]) .article .chapter-stage>section>h3{font-family:var(--sans);font-size:27px;font-weight:650;letter-spacing:-.5px}
+main:has([data-communication-course]) .article h4{font-family:var(--sans);font-size:20px;font-weight:650;margin-top:35px;color:#1d344d}
+main:has([data-communication-course]) .reading-stage-heading{border-color:#c7d7e7}
+main:has([data-communication-course]) .reading-stage-heading h2{font-family:var(--sans);font-weight:600}
+main:has([data-communication-course]) .reading-path ol{grid-template-columns:repeat(4,minmax(0,1fr))}
+.comm-intro{padding:25px 28px;border:1px solid #cedce9;border-radius:13px;background:linear-gradient(115deg,#edf4ff,#f3f8f5);margin:24px 0 30px}
+.comm-intro .comm-kicker{font:11px var(--mono);letter-spacing:1.4px;color:#3565ce;margin-bottom:10px}
+.article .comm-intro p:last-child{margin-bottom:0}
+.comm-objective{border-left:3px solid #3565ce;padding:4px 0 4px 17px;margin:22px 0;color:#536a85}
+.comm-figure{padding:0!important;background:white!important;border:1px solid #d7e1ec!important;border-radius:14px;overflow:hidden;box-shadow:0 7px 25px #243d5c07;margin:30px 0!important}
+.comm-figure svg{display:block;width:100%;height:auto;min-width:0!important}
+.article .comm-figure figcaption{padding:15px 21px!important;background:#f7f9fc;border-top:1px solid #e0e7ef;color:#5b6f88;font:12px/1.9 var(--sans)}
+.comm-callout{border:1px solid #d5e2dc;border-left:4px solid #168363;border-radius:0 9px 9px 0;padding:15px 21px;background:#eff7f2;margin:24px 0}
+.comm-callout.warning{border-color:#e8d5b5;border-left-color:#c78128;background:#fff8eb}
+.article .comm-callout p:last-child{margin-bottom:0}
+.comm-equation{font:14px/1.9 var(--mono);background:#eff4fa;border:1px solid #dce5ef;border-radius:8px;padding:16px 19px;margin:20px 0;overflow-wrap:anywhere}
+.comm-check{margin:27px 0;padding:18px 21px;background:#fff;border:1px dashed #aebfd1;border-radius:9px}
+.comm-check>summary{font-size:15px;font-weight:600;color:#315d91;cursor:pointer;line-height:1.8}
+.comm-check[open]>summary{margin-bottom:14px}
+.comm-source{font-size:12px!important;color:#708098;border-top:1px solid #e1e7ef;padding-top:14px;margin-top:25px}
+.comm-details{border:1px solid #d8e1ec;border-radius:9px;padding:15px 19px;background:#f8fafc;margin:20px 0}
+.comm-details>summary{cursor:pointer;font-size:14px;color:#355f90;font-weight:550;line-height:1.8}
+.comm-details[open]>summary{margin-bottom:16px}
+.comm-lab{margin:30px 0;border:1px solid #bfcede;border-radius:14px;background:white;overflow:hidden;box-shadow:0 7px 25px #243d5c07}
+.comm-lab-head{padding:23px 26px 20px;background:linear-gradient(110deg,#eaf1ff,#f4f8fc);border-bottom:1px solid #d8e2ef}
+.comm-lab-head>span{font:11px var(--mono);letter-spacing:1.3px;color:#3565ce}
+.article .comm-lab-head h4{font:650 22px/1.5 var(--sans);margin:10px 0}
+main:has([data-communication-course]) .article .comm-lab-head h4{font:650 22px/1.5 var(--sans);margin:10px 0}
+.article .comm-lab-head p{font-size:13px!important;line-height:1.9;margin:0;color:#5a708b}
+.comm-controls{display:flex;flex-wrap:wrap;align-items:end;gap:12px;padding:17px 23px;border-bottom:1px solid #e0e7f0;background:#f8fafd}
+.comm-controls label{display:flex;flex-direction:column;flex:1 1 130px;gap:7px;min-width:0;font:12px/1.6 var(--sans);color:#546b86}
+.comm-controls :is(select,button){background:white;border:1px solid #bfcee0;border-radius:7px;padding:10px 11px;font:13px var(--sans);color:#294c77;min-height:39px}
+.comm-controls select{width:100%;min-width:0}.comm-controls button{cursor:pointer}.comm-controls :disabled{opacity:.45;cursor:default}
+.comm-controls input[type=range]{accent-color:#3565ce;width:100%;margin:10px 0}
+.comm-controls :is(button,select,input):focus-visible{outline:3px solid #c78128;outline-offset:3px}
+.comm-output{padding:20px 23px 23px}.comm-output svg{display:block;width:100%;height:auto;background:#fff;border-radius:8px}
+.article .comm-output p{font-size:14px!important;line-height:1.95}
+.article .comm-output p:last-child{margin-bottom:0}
+.comm-step-label{font:600 16px/1.8 var(--sans)!important;color:#3565ce;margin:0 0 12px}
+.comm-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:17px 0}
+.comm-stat{padding:17px 16px;border:1px solid #d5e1eb;background:#f7fafc;border-radius:9px;min-width:0}
+.comm-stat strong{display:block;font:600 21px/1.6 var(--sans);color:#285c92;overflow-wrap:anywhere}
+.comm-stat span{display:block;font:12px/1.8 var(--sans);color:#657990;margin-top:5px}
+.comm-result{background:#edf7f1;border-left:3px solid #168363;border-radius:0 6px 6px 0;padding:13px 17px;margin:17px 0;color:#245b48}
+.comm-result.comm-warning{background:#fff4df;border-color:#c78128;color:#81551e}
+.article .comm-footnote{font-size:12px!important;line-height:1.9;color:#718097}
+.comm-table-scroll{overflow-x:auto;max-width:100%}.article .comm-table-scroll table{width:100%;margin:15px 0}
+.article .comm-matrix :is(td,th){text-align:center;padding:10px 7px;border:1px solid #e0e7ef;white-space:nowrap;font-size:13px}
+.comm-matrix caption{text-align:left;font:12px/1.8 var(--sans);color:#65788f;padding:0 0 11px}
+.comm-matrix b{display:block;font:550 21px/1.7 var(--mono);color:#253f5b}.comm-matrix small{display:block;font:10px/1.7 var(--mono);color:#61778e}
+.comm-matrix .comm-complete{background:#e8f7ef}.comm-matrix .comm-focus{box-shadow:inset 0 0 0 2px #7b9cca}
+.comm-state-strip{display:flex;flex-wrap:wrap;gap:9px;list-style:none;padding:0!important;margin:20px 0!important}
+.article .comm-state-strip li{padding:7px 13px;border-radius:6px;border:1px solid #d5dfeb;font-size:12px;background:#f7f9fc;color:#637790;margin:0}
+.article .comm-state-strip li.active{background:#eaf1ff;color:#285cc0;border-color:#7698dc}
+.comm-print-only{display:none}
+main:has([data-communication-course]) .cuda-lab{border-color:#bfcede;background:#fff;box-shadow:0 7px 25px #243d5c07}
+main:has([data-communication-course]) .cuda-lab-heading{background:linear-gradient(110deg,#eaf1ff,#f4f8fc);border-color:#d8e2ef}
+main:has([data-communication-course]) .article .cuda-lab-heading h4{font:650 22px/1.5 var(--sans);margin:10px 0}
+main:has([data-communication-course]) .cuda-controls{background:#f8fafd;border-color:#e0e7f0}
+main:has([data-communication-course]) .cuda-controls :is(label,select,button){font-size:13px}
+main:has([data-communication-course]) .article .cuda-lab-output p{font-size:14px}
+main:has([data-communication-course]) .article table th{background:#edf2f8;color:#3f5976;border-color:#dce4ef}
+@media print{
+ main:has([data-communication-course]) .article p{font-size:10pt;line-height:1.8}
+ main:has([data-communication-course]) .article :is(li,td,th){font-size:9pt}
+ .comm-figure{break-inside:avoid;box-shadow:none!important}.comm-figure svg{width:100%}
+ .comm-lab{overflow:visible;box-shadow:none;break-inside:auto}.comm-lab-head{break-after:avoid}
+ .comm-controls,.comm-state-strip{display:none}.comm-print-only{display:block}
+ .comm-output{padding:12px}.comm-output>svg,.comm-table-scroll,.comm-stats{break-inside:avoid}
+ .comm-stat strong{font-size:13pt}.comm-stat span{font-size:8pt}.comm-table-scroll{overflow:visible}
+ .comm-print-only .comm-matrix{break-inside:avoid}.comm-print-only>p{break-after:avoid}
+ .comm-check,.comm-callout{break-inside:avoid}.comm-details{background:white;border:0;padding:0}
+ .comm-figure,.comm-lab,.comm-stats{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}

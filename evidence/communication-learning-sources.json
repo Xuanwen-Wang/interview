@@ -1,0 +1,337 @@
+{
+  "collected": "2026-10-30",
+  "scope": "Read-only source snapshots; no upstream code included in the site",
+  "repositories": {
+    "mpi": {
+      "repo": "mpitutorial/mpitutorial",
+      "branch": "gh-pages",
+      "sha": "10b191f3f84fc0b7089840fde038d1e2a9d0b324",
+      "date": "2026-08-11T18:27:43Z",
+      "tree_truncated": false,
+      "files": 117
+    },
+    "hoti": {
+      "repo": "NVIDIA/hoti-gpu-comms-tutorial",
+      "branch": "main",
+      "sha": "02f0200c79f9329dd74d34313a96561d0217d69b",
+      "date": "2026-09-28T21:55:11Z",
+      "tree_truncated": false,
+      "files": 129
+    },
+    "nccl": {
+      "repo": "NVIDIA/nccl",
+      "branch": "master",
+      "sha": "3e46c089f4ae4732722a419eb6096aead7e47a30",
+      "date": "2026-10-08T21:16:00Z",
+      "tree_truncated": false,
+      "files": 1454
+    },
+    "mscclpp": {
+      "repo": "microsoft/mscclpp",
+      "branch": "main",
+      "sha": "c226cc99f5e999e06c5b03779f6f77ad995f4653",
+      "date": "2026-10-29T22:44:41Z",
+      "tree_truncated": false,
+      "files": 532
+    },
+    "picotron": {
+      "repo": "huggingface/picotron_tutorial",
+      "branch": "master",
+      "sha": "8c14c925e2069ec2756cdf1510ed2b8bb56a098e",
+      "date": "2025-02-13T10:31:15Z",
+      "tree_truncated": false,
+      "files": 67
+    },
+    "visualizer": {
+      "repo": "devinjeon/gpu-comm-visualizer",
+      "branch": "main",
+      "sha": "9799f3da379f909950fafb3d93dd047272c68ff2",
+      "date": "2026-03-24T00:04:07Z",
+      "tree_truncated": false,
+      "files": 34
+    },
+    "tests": {
+      "repo": "NVIDIA/nccl-tests",
+      "branch": "master",
+      "sha": "afd59abab774a6a4b492eb344bd0c845a0b7bb4d",
+      "date": "2026-10-05T19:40:17Z",
+      "tree_truncated": false,
+      "files": 79
+    }
+  },
+  "files": [
+    {
+      "project": "mpi",
+      "path": "tutorials/mpi-broadcast-and-collective-communication/index.md",
+      "bytes": 10951,
+      "sha256": "124d353bc6b4b611118860d94785134fca67f1719e5e7a7305fafe0f310f1ace",
+      "url": "https://raw.githubusercontent.com/mpitutorial/mpitutorial/10b191f3f84fc0b7089840fde038d1e2a9d0b324/tutorials/mpi-broadcast-and-collective-communication/index.md"
+    },
+    {
+      "project": "mpi",
+      "path": "tutorials/mpi-broadcast-and-collective-communication/code/my_bcast.c",
+      "bytes": 1528,
+      "sha256": "4a873930f497659979b83e94a904f8cca73cc67d13e5b4aa4bc31216ba002a11",
+      "url": "https://raw.githubusercontent.com/mpitutorial/mpitutorial/10b191f3f84fc0b7089840fde038d1e2a9d0b324/tutorials/mpi-broadcast-and-collective-communication/code/my_bcast.c"
+    },
+    {
+      "project": "mpi",
+      "path": "tutorials/mpi-broadcast-and-collective-communication/code/compare_bcast.c",
+      "bytes": 2482,
+      "sha256": "b45e9bd42e60fba998c6f080c88cfee617f4771cccc1740760e82697adb79431",
+      "url": "https://raw.githubusercontent.com/mpitutorial/mpitutorial/10b191f3f84fc0b7089840fde038d1e2a9d0b324/tutorials/mpi-broadcast-and-collective-communication/code/compare_bcast.c"
+    },
+    {
+      "project": "mpi",
+      "path": "tutorials/mpi-scatter-gather-and-allgather/index.md",
+      "bytes": 10364,
+      "sha256": "699ec5763899a95bb0aacd3b0f9aca0da0957ea3651e7dd48567eca1f09b6664",
+      "url": "https://raw.githubusercontent.com/mpitutorial/mpitutorial/10b191f3f84fc0b7089840fde038d1e2a9d0b324/tutorials/mpi-scatter-gather-and-allgather/index.md"
+    },
+    {
+      "project": "mpi",
+      "path": "tutorials/mpi-reduce-and-allreduce/index.md",
+      "bytes": 10198,
+      "sha256": "8be894adf1445ff28be6adafb54aa1cb3453b3b627663f313e6e75665846abb4",
+      "url": "https://raw.githubusercontent.com/mpitutorial/mpitutorial/10b191f3f84fc0b7089840fde038d1e2a9d0b324/tutorials/mpi-reduce-and-allreduce/index.md"
+    },
+    {
+      "project": "mpi",
+      "path": "tutorials/mpi-reduce-and-allreduce/code/reduce_stddev.c",
+      "bytes": 2632,
+      "sha256": "2f26a6be004379ca24e81690546ae51daf3ee619db90a7831d4e1be5c49f09e0",
+      "url": "https://raw.githubusercontent.com/mpitutorial/mpitutorial/10b191f3f84fc0b7089840fde038d1e2a9d0b324/tutorials/mpi-reduce-and-allreduce/code/reduce_stddev.c"
+    },
+    {
+      "project": "hoti",
+      "path": "04-memory-model/README.md",
+      "bytes": 4623,
+      "sha256": "3b48dedd7bc6329e469bd40aba36c08303e995e757dce21eb9b39225d2eac4f6",
+      "url": "https://raw.githubusercontent.com/NVIDIA/hoti-gpu-comms-tutorial/02f0200c79f9329dd74d34313a96561d0217d69b/04-memory-model/README.md"
+    },
+    {
+      "project": "hoti",
+      "path": "04-memory-model/02-put-quiet-signal-wait/README.md",
+      "bytes": 2572,
+      "sha256": "50c823458ef531da2ff0331693da02f0d6ae791d6f200d91f1ab7dcfdba6344c",
+      "url": "https://raw.githubusercontent.com/NVIDIA/hoti-gpu-comms-tutorial/02f0200c79f9329dd74d34313a96561d0217d69b/04-memory-model/02-put-quiet-signal-wait/README.md"
+    },
+    {
+      "project": "hoti",
+      "path": "04-memory-model/02-put-quiet-signal-wait/put_quiet_signal_wait_SOLVED.cu",
+      "bytes": 3175,
+      "sha256": "bc359398df4a094551ae8e76d4eeb73d4d92febe35a32357f3bcd4d8bc6991b5",
+      "url": "https://raw.githubusercontent.com/NVIDIA/hoti-gpu-comms-tutorial/02f0200c79f9329dd74d34313a96561d0217d69b/04-memory-model/02-put-quiet-signal-wait/put_quiet_signal_wait_SOLVED.cu"
+    },
+    {
+      "project": "hoti",
+      "path": "04-memory-model/03-put-signal/put_signal_SOLVED.cu",
+      "bytes": 3143,
+      "sha256": "1e369e034974cb263cf8ce360dcc338598a792f0b2a3d244bcffade1d9008135",
+      "url": "https://raw.githubusercontent.com/NVIDIA/hoti-gpu-comms-tutorial/02f0200c79f9329dd74d34313a96561d0217d69b/04-memory-model/03-put-signal/put_signal_SOLVED.cu"
+    },
+    {
+      "project": "hoti",
+      "path": "06-applications/02-fused-gemm-allreduce/README.md",
+      "bytes": 5262,
+      "sha256": "191bf812e304b4a224fc1006d9cc0c98ca4c76520459158480b30220f81e90b7",
+      "url": "https://raw.githubusercontent.com/NVIDIA/hoti-gpu-comms-tutorial/02f0200c79f9329dd74d34313a96561d0217d69b/06-applications/02-fused-gemm-allreduce/README.md"
+    },
+    {
+      "project": "hoti",
+      "path": "06-applications/02-fused-gemm-allreduce/fused_gemm_allreduce_nccl_SOLVED.cu",
+      "bytes": 5294,
+      "sha256": "cdecc7bc74fa2cb9bb75b9abe34faa18da5a5b7c4ff1b40600b84b977006a735",
+      "url": "https://raw.githubusercontent.com/NVIDIA/hoti-gpu-comms-tutorial/02f0200c79f9329dd74d34313a96561d0217d69b/06-applications/02-fused-gemm-allreduce/fused_gemm_allreduce_nccl_SOLVED.cu"
+    },
+    {
+      "project": "hoti",
+      "path": "09-alltoallv/README.md",
+      "bytes": 7237,
+      "sha256": "fb60119666eb76db2fcaf86ab687e18159b97a3c971319fefc6855cdb933219b",
+      "url": "https://raw.githubusercontent.com/NVIDIA/hoti-gpu-comms-tutorial/02f0200c79f9329dd74d34313a96561d0217d69b/09-alltoallv/README.md"
+    },
+    {
+      "project": "nccl",
+      "path": "docs/examples/06_device_api/01_allreduce_lsa/README.md",
+      "bytes": 5567,
+      "sha256": "656b07d0d2205e0f6285122391d66c53441345a74176046b03a326081466c5f8",
+      "url": "https://raw.githubusercontent.com/NVIDIA/nccl/3e46c089f4ae4732722a419eb6096aead7e47a30/docs/examples/06_device_api/01_allreduce_lsa/README.md"
+    },
+    {
+      "project": "nccl",
+      "path": "docs/examples/06_device_api/01_allreduce_lsa/c/main.cu",
+      "bytes": 11265,
+      "sha256": "129a0360f16f92c9883ce35cad4e9a2c0c95f6b65ef77492ff315019aad20965",
+      "url": "https://raw.githubusercontent.com/NVIDIA/nccl/3e46c089f4ae4732722a419eb6096aead7e47a30/docs/examples/06_device_api/01_allreduce_lsa/c/main.cu"
+    },
+    {
+      "project": "nccl",
+      "path": "docs/examples/07_kernel_fusion/01_rmsnorm_lsa/README.md",
+      "bytes": 3123,
+      "sha256": "433bfd504cfc99c487689339b170f7026ecc958eb12fb8fe8a1ccfadcf707292",
+      "url": "https://raw.githubusercontent.com/NVIDIA/nccl/3e46c089f4ae4732722a419eb6096aead7e47a30/docs/examples/07_kernel_fusion/01_rmsnorm_lsa/README.md"
+    },
+    {
+      "project": "nccl",
+      "path": "docs/examples/07_kernel_fusion/01_rmsnorm_lsa/c/main.cu",
+      "bytes": 13495,
+      "sha256": "444b52a8ba470ed8e8e4bc36a49a27b14937c0e4a16a7828f18a5f5b9d62a413",
+      "url": "https://raw.githubusercontent.com/NVIDIA/nccl/3e46c089f4ae4732722a419eb6096aead7e47a30/docs/examples/07_kernel_fusion/01_rmsnorm_lsa/c/main.cu"
+    },
+    {
+      "project": "nccl",
+      "path": "src/collectives.cc",
+      "bytes": 25270,
+      "sha256": "ec1ab0d268cad919bbb368f1ab5275cfac3e19d60ae403aa4bdf458a107d6d6d",
+      "url": "https://raw.githubusercontent.com/NVIDIA/nccl/3e46c089f4ae4732722a419eb6096aead7e47a30/src/collectives.cc"
+    },
+    {
+      "project": "nccl",
+      "path": "src/device/all_reduce.h",
+      "bytes": 41497,
+      "sha256": "bfb84015f985be9ee398e82082eaaa80a095f8636b83f1a0170ec9ceba2e68a7",
+      "url": "https://raw.githubusercontent.com/NVIDIA/nccl/3e46c089f4ae4732722a419eb6096aead7e47a30/src/device/all_reduce.h"
+    },
+    {
+      "project": "mscclpp",
+      "path": "docs/tutorials/01-basic-concepts.md",
+      "bytes": 11968,
+      "sha256": "61baf6834dc9208d86bd8457a2f0ea95ef1d77a05d1d40dcf588df8d279a3364",
+      "url": "https://raw.githubusercontent.com/microsoft/mscclpp/c226cc99f5e999e06c5b03779f6f77ad995f4653/docs/tutorials/01-basic-concepts.md"
+    },
+    {
+      "project": "mscclpp",
+      "path": "docs/tutorials/03-memory-channel.md",
+      "bytes": 20354,
+      "sha256": "203ee9318e3b6179aa00aefa26729a9a93bfb243366c686a928c6ee67598cfc3",
+      "url": "https://raw.githubusercontent.com/microsoft/mscclpp/c226cc99f5e999e06c5b03779f6f77ad995f4653/docs/tutorials/03-memory-channel.md"
+    },
+    {
+      "project": "mscclpp",
+      "path": "docs/tutorials/04-port-channel.md",
+      "bytes": 10113,
+      "sha256": "8aab82d94a92215c9d36d08b4b53d5e9259e872d1385597283e00afe88f17df1",
+      "url": "https://raw.githubusercontent.com/microsoft/mscclpp/c226cc99f5e999e06c5b03779f6f77ad995f4653/docs/tutorials/04-port-channel.md"
+    },
+    {
+      "project": "mscclpp",
+      "path": "examples/tutorials/03-memory-channel/bidir_memory_channel.cu",
+      "bytes": 9095,
+      "sha256": "9cfe971c0708ae9f2f829744c583386c88145910073e5a39be5cad91d36186d0",
+      "url": "https://raw.githubusercontent.com/microsoft/mscclpp/c226cc99f5e999e06c5b03779f6f77ad995f4653/examples/tutorials/03-memory-channel/bidir_memory_channel.cu"
+    },
+    {
+      "project": "mscclpp",
+      "path": "examples/tutorials/04-port-channel/bidir_port_channel.cu",
+      "bytes": 7168,
+      "sha256": "cd4d20071c5dff82b17ba766c27a3beb38cdae69ef9e780bf3bcbd770d39a176",
+      "url": "https://raw.githubusercontent.com/microsoft/mscclpp/c226cc99f5e999e06c5b03779f6f77ad995f4653/examples/tutorials/04-port-channel/bidir_port_channel.cu"
+    },
+    {
+      "project": "picotron",
+      "path": "step4_tensor_parallel/tensor_parallel.py",
+      "bytes": 12822,
+      "sha256": "f6f128e890469dc76d49c3768570b4add420c86987d5125c55f4682d5243b2cf",
+      "url": "https://raw.githubusercontent.com/huggingface/picotron_tutorial/8c14c925e2069ec2756cdf1510ed2b8bb56a098e/step4_tensor_parallel/tensor_parallel.py"
+    },
+    {
+      "project": "picotron",
+      "path": "step5_data_parallel_naive/data_parallel.py",
+      "bytes": 1390,
+      "sha256": "1be024fa9f0905efd33bb54bc59fb18ec74954bf8473d8dfcefcfa07a8d396ae",
+      "url": "https://raw.githubusercontent.com/huggingface/picotron_tutorial/8c14c925e2069ec2756cdf1510ed2b8bb56a098e/step5_data_parallel_naive/data_parallel.py"
+    },
+    {
+      "project": "picotron",
+      "path": "step6_data_parallel_bucket/data_parallel.py",
+      "bytes": 12802,
+      "sha256": "559058a78fe002510ae077a4812bca9812a11da10893d42aab5b10f634c50b31",
+      "url": "https://raw.githubusercontent.com/huggingface/picotron_tutorial/8c14c925e2069ec2756cdf1510ed2b8bb56a098e/step6_data_parallel_bucket/data_parallel.py"
+    },
+    {
+      "project": "picotron",
+      "path": "step2_process_group_manager/process_group_manager.py",
+      "bytes": 3067,
+      "sha256": "a578f316a26411f89c19b446fd6c85a2fdd66b6e0eb785c154728db478d869d8",
+      "url": "https://raw.githubusercontent.com/huggingface/picotron_tutorial/8c14c925e2069ec2756cdf1510ed2b8bb56a098e/step2_process_group_manager/process_group_manager.py"
+    },
+    {
+      "project": "picotron",
+      "path": "step8_pipeline_parallel_1f1b/pipeline_parallel.py",
+      "bytes": 13309,
+      "sha256": "298fe18a08b1249c3c01b478371aa141758077355427ec415640d424cd4befff",
+      "url": "https://raw.githubusercontent.com/huggingface/picotron_tutorial/8c14c925e2069ec2756cdf1510ed2b8bb56a098e/step8_pipeline_parallel_1f1b/pipeline_parallel.py"
+    },
+    {
+      "project": "visualizer",
+      "path": "src/engine/dataModel.js",
+      "bytes": 2283,
+      "sha256": "d0e53fec6c89c546c618d9132f34aa308c8966004df3cb7b5f72e4932e2276ec",
+      "url": "https://raw.githubusercontent.com/devinjeon/gpu-comm-visualizer/9799f3da379f909950fafb3d93dd047272c68ff2/src/engine/dataModel.js"
+    },
+    {
+      "project": "visualizer",
+      "path": "src/engine/stepGenerator.js",
+      "bytes": 4817,
+      "sha256": "9e1fc9988143e3792564063cbc2bc8b4a432db982dc72a549ed60c9d455d2ffa",
+      "url": "https://raw.githubusercontent.com/devinjeon/gpu-comm-visualizer/9799f3da379f909950fafb3d93dd047272c68ff2/src/engine/stepGenerator.js"
+    },
+    {
+      "project": "visualizer",
+      "path": "src/engine/animation.js",
+      "bytes": 2224,
+      "sha256": "103d7a16900f9714b4fd25b42c93de167bd31bae6e927d328ed163311e0aafb8",
+      "url": "https://raw.githubusercontent.com/devinjeon/gpu-comm-visualizer/9799f3da379f909950fafb3d93dd047272c68ff2/src/engine/animation.js"
+    },
+    {
+      "project": "visualizer",
+      "path": "src/engine/layout.js",
+      "bytes": 4028,
+      "sha256": "34cb90c5c842fe262633b0e441d32a3bb6258bf4d0d88ed502673d770369c842",
+      "url": "https://raw.githubusercontent.com/devinjeon/gpu-comm-visualizer/9799f3da379f909950fafb3d93dd047272c68ff2/src/engine/layout.js"
+    },
+    {
+      "project": "visualizer",
+      "path": "src/components/Controls.jsx",
+      "bytes": 7570,
+      "sha256": "1690babf99c55ee94a61f7909fd90368118dad704f05d142d3dd6d929ddc33f2",
+      "url": "https://raw.githubusercontent.com/devinjeon/gpu-comm-visualizer/9799f3da379f909950fafb3d93dd047272c68ff2/src/components/Controls.jsx"
+    },
+    {
+      "project": "tests",
+      "path": "doc/PERFORMANCE.md",
+      "bytes": 5692,
+      "sha256": "2242493053a6f9d5db1c6542a8ce7740be919778645125b94eeae440efd31edf",
+      "url": "https://raw.githubusercontent.com/NVIDIA/nccl-tests/afd59abab774a6a4b492eb344bd0c845a0b7bb4d/doc/PERFORMANCE.md"
+    },
+    {
+      "project": "tests",
+      "path": "src/all_reduce.cu",
+      "bytes": 24971,
+      "sha256": "c98bb6d5bc6c54ebfedd9eef36976d45063c8a18ba6ed2877ef3b770092fffde",
+      "url": "https://raw.githubusercontent.com/NVIDIA/nccl-tests/afd59abab774a6a4b492eb344bd0c845a0b7bb4d/src/all_reduce.cu"
+    },
+    {
+      "project": "tests",
+      "path": "src/common.cu",
+      "bytes": 71797,
+      "sha256": "74cecb9591aeeadbabef6967af2ccb1ec4507f163cc7119c5e9299c470232626",
+      "url": "https://raw.githubusercontent.com/NVIDIA/nccl-tests/afd59abab774a6a4b492eb344bd0c845a0b7bb4d/src/common.cu"
+    },
+    {
+      "project": "nccl",
+      "path": "src/enqueue/enqueue.cc",
+      "bytes": 163381,
+      "sha256": "06972ff4b88c55d10813f6ee8bdbc9154381de7bfe09cdc66fb164a0fdb911a2",
+      "url": "https://raw.githubusercontent.com/NVIDIA/nccl/3e46c089f4ae4732722a419eb6096aead7e47a30/src/enqueue/enqueue.cc"
+    }
+  ],
+  "model_config": {
+    "repo": "Qwen/Qwen3-8B",
+    "revision": "b968826d9c46dd6066d109eabc6255188de91218",
+    "path": "config.json",
+    "url": "https://huggingface.co/Qwen/Qwen3-8B/resolve/b968826d9c46dd6066d109eabc6255188de91218/config.json",
+    "sha256": "f7c4eadfbbf522470667b797a3c89be2524832d2d599797248dc304fff447c30"
+  }
+}
