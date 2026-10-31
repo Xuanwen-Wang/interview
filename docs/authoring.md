@@ -161,7 +161,11 @@ TMPDIR=/data/wangxw/tmp g++ -std=c++17 -Wall -Wextra -Werror \
 
 依据用户 2026-10-30 对软硬件映射的进一步反馈，执行、存储与同步机制要沿“程序表达什么 → 编译器安排什么 → 硬件跟踪什么 → 程序员仍须保证什么”说明。发射吞吐、依赖延迟、SIMD 宽度、逻辑 warp 宽度分别定义；公开 ISA 合同不能充当未公开的芯片 RTL 或逐拍流水。对标参数注明产品、精度、稠密/稀疏、单向/双向、标称/实测。跨架构扩展绑定 target 和文档版本；量化数据、scale 分组、scale 布局与完成协议一起解释，不只罗列新指令名。引用课件时提供页码，区分教学假设和课件中的设备实验。
 
+依据用户 2026-10-31 对 SM 执行章节的进一步反馈，CUDA Core、Tensor Core 与 NVIDIA 原生依赖管理分别形成连续学习段。每段至少给一个可追踪的指令/数据例子：定义参与线程、寄存器或矩阵坐标，列出发射、操作数消费、结果可用和复用边界；cycle 图必须声明流水参数并可手算。不要把所有依赖笼统归给硬件 scoreboard，须区分编译器静态间隔、动态读写依赖槽与线程间同步。大学课程、公开反向研究、第三方编译器、原生编译输出和设备测量分别标注；未公开的物理阵列与流水级数不能由 PTX 形状推断。
+
 `cuda` 知识域固定两篇连续入口：`cuda.html`（Hopper 与算子开发）和 `cuda-communication.html`（通信库与多卡部署）。正文分别在 `content/24-cuda-hopper.json`、`content/25-cuda-communication.json`；保留稳定章节与小节 ID。
+
+`web/cuda-execution.js` 提供逐拍流水交互；运行 `node scripts/check_cuda_execution.js` 检查时间不变量、fragment 独立逆映射与整数 GEMM oracle，运行 `python3 scripts/check_sm90_evidence.py` 核对保存的 sm_90 编译证据。新探针目前只完成本机编译/反汇编，未在 GPU 执行。
 
 `web/cuda-guide.js` 提供 `data-cuda-lab="occupancy"`、`"ring"`、`"communication"`、`"banks"` 四种交互；构建时与 CSS 内嵌，不依赖外部网络。修改模型运行 `node scripts/check_cuda_model.js`：资源上界用可行 CTA 枚举检查，Ring 用贡献守恒与直接求和检查，softmax 用完整向量 oracle 检查；bank 模型用步长与 32 的最大公因数、全部列、广播、布局双射和错配反例检查。bank 模型限定同一 warp 的标量 32-bit 读，不能将不同 word 数当作实测周期。教学驻留上界不包含分配粒度、动态寄存器和集群调度；通信模型不预测 NCCL 自动算法或实测带宽。
 

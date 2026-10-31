@@ -1,0 +1,24 @@
+{
+  "date": "2026-10-31",
+  "validation": "compilation and disassembly only; no GPU execution",
+  "target": "sm_90",
+  "ptxas": "12.8.93",
+  "nvdisasm": "12.8.90",
+  "command": [
+    "ptxas -arch=sm_90 -O3 -v practice/cuda-sm90/execution.ptx -o execution.cubin",
+    "nvdisasm -hex -c execution.cubin > execution.sass"
+  ],
+  "repository_files": {
+    "practice/cuda-sm90/execution.ptx": "b776e3040d72696c8276a2cefe3dbbedf2a634467770d65af328308a11f5700a",
+    "practice/cuda-sm90/decode_controls.py": "29d192d1a15f6e3e6ac3b856d409a850c3ef70ad11626b48b1b15ce69efb930b",
+    "evidence/cuda-sm90-20261031/execution.sass": "b7236084823de9fccd17a3ac994f849bc13a83edbb1c394c9b86db660957835b",
+    "evidence/cuda-sm90-20261031/controls.json": "d95d226baf6693ced91933dbb921cc1a1f48cfa76e2253f322305ba3a70c8dcc"
+  },
+  "cubin_sha256": "7ab9a6155c2a3306f7f29250939d09465ca088c497bb0d735c8b858c2aadaafb",
+  "decoder_reference": {
+    "repository": "Mesa NAK",
+    "commit": "61a2e907f1d6e4a8432d91d0fde5d439a875fbbe",
+    "file": "src/nouveau/compiler/nak/sm70_encode.rs",
+    "function": "set_instr_deps"
+  }
+}

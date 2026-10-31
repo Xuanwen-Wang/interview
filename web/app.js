@@ -100,6 +100,7 @@ function renderChapter(id, section) {
  initCycleCasebooks();
  initDeepSeekArchitectureLabs();
  initCudaLabs();
+ initCudaExecutionLabs();
  initCommunicationLabs();
  initMathFoundations();
  enableFigureZoom();

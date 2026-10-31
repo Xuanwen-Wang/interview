@@ -1,0 +1,80 @@
+// Compilation-only probes. Inputs and outputs require valid, non-overlapping
+// buffers. Launch exactly one 32-thread CTA; no runtime harness is supplied.
+.version 8.7
+.target sm_90
+.address_size 64
+
+.visible .entry fma_chain(.param .u64 input, .param .u64 output) {
+    .reg .b32 tid;
+    .reg .b64 src, dst, offset, addr;
+    .reg .f32 x, y;
+    ld.param.u64 src, [input];
+    ld.param.u64 dst, [output];
+    mov.u32 tid, %tid.x;
+    mul.wide.u32 offset, tid, 4;
+    add.u64 addr, src, offset;
+    ld.global.f32 x, [addr];
+    mov.f32 y, 0f3F000000;
+    fma.rn.f32 x, x, 0f3F800001, y;
+    fma.rn.f32 x, x, 0f3F800001, y;
+    fma.rn.f32 x, x, 0f3F800001, y;
+    fma.rn.f32 x, x, 0f3F800001, y;
+    fma.rn.f32 x, x, 0f3F800001, y;
+    fma.rn.f32 x, x, 0f3F800001, y;
+    fma.rn.f32 x, x, 0f3F800001, y;
+    fma.rn.f32 x, x, 0f3F800001, y;
+    add.u64 addr, dst, offset;
+    st.global.f32 [addr], x;
+    ret;
+}
+
+.visible .entry fma_ilp(.param .u64 input, .param .u64 output) {
+    .reg .b32 tid;
+    .reg .b64 src, dst, offset, addr;
+    .reg .f32 x<4>, y;
+    ld.param.u64 src, [input];
+    ld.param.u64 dst, [output];
+    mov.u32 tid, %tid.x;
+    mul.wide.u32 offset, tid, 16;
+    add.u64 addr, src, offset;
+    ld.global.v4.f32 {x0,x1,x2,x3}, [addr];
+    mov.f32 y, 0f3F000000;
+    fma.rn.f32 x0, x0, 0f3F800001, y;
+    fma.rn.f32 x1, x1, 0f3F800001, y;
+    fma.rn.f32 x2, x2, 0f3F800001, y;
+    fma.rn.f32 x3, x3, 0f3F800001, y;
+    fma.rn.f32 x0, x0, 0f3F800001, y;
+    fma.rn.f32 x1, x1, 0f3F800001, y;
+    fma.rn.f32 x2, x2, 0f3F800001, y;
+    fma.rn.f32 x3, x3, 0f3F800001, y;
+    add.u64 addr, dst, offset;
+    st.global.v4.f32 [addr], {x0,x1,x2,x3};
+    ret;
+}
+
+// A: 32 lanes x 4 packed b32 = 256 half values (16 x 16).
+// B: 32 lanes x 2 packed b32 = 128 half values (16 x 8).
+// D: 32 lanes x 4 f32 = 128 float values (16 x 8).
+// Buffer order is lane-fragment order, NOT row-major matrix order.
+.visible .entry tensor_m16n8k16(.param .u64 ap, .param .u64 bp, .param .u64 dp) {
+    .reg .b32 tid, a<4>, b<2>;
+    .reg .b64 pa, pb, pd, offa, offb, aa, ab, ad;
+    .reg .f32 d<4>, zero;
+    ld.param.u64 pa, [ap];
+    ld.param.u64 pb, [bp];
+    ld.param.u64 pd, [dp];
+    mov.u32 tid, %tid.x;
+    mul.wide.u32 offa, tid, 16;
+    mul.wide.u32 offb, tid, 8;
+    add.u64 aa, pa, offa;
+    add.u64 ab, pb, offb;
+    ld.global.v4.b32 {a0,a1,a2,a3}, [aa];
+    ld.global.v2.b32 {b0,b1}, [ab];
+    mov.f32 zero, 0f00000000;
+    mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32
+        {d0,d1,d2,d3}, {a0,a1,a2,a3}, {b0,b1},
+        {zero,zero,zero,zero};
+    add.u64 ad, pd, offa;
+    st.global.v4.f32 [ad], {d0,d1,d2,d3};
+    ret;
+}

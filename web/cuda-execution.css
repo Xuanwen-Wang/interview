@@ -1,0 +1,9 @@
+.cuda-execution-pending{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px;margin:12px 0}
+.cuda-execution-pending>div{border:1px solid var(--border,#a2b8bc);border-radius:10px;padding:12px;background:var(--panel,#f6f8f5)}
+.cuda-execution-pending span,.cuda-execution-pending small{display:block;margin-top:5px}
+.cuda-cycle-current{background:rgba(40,130,105,.13);font-weight:600}
+.cuda-execution-lab [data-execution-step]{min-width:200px}
+.cuda-execution-lab caption{caption-side:top;text-align:left;padding:8px 0;font-size:.9em}
+@media print{.cuda-execution-lab .cuda-controls{display:none}.cuda-execution-lab{break-inside:auto}.cuda-execution-pending>div{break-inside:avoid}.cuda-execution-lab table{font-size:9pt}}
+
+@media print{#tensor-fragment-layout pre,#sass-control-fields pre,#tensor-instruction-timing pre{break-inside:avoid;page-break-inside:avoid}}
