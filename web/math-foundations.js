@@ -7,6 +7,17 @@ const MathFoundations = (() => {
   const sigmoid = x => x>=0 ? 1/(1+Math.exp(-x)) : Math.exp(x)/(1+Math.exp(x));
   const softplus = x => Math.max(x,0)+Math.log1p(Math.exp(-Math.abs(x)));
   const silu = x => x*sigmoid(x);
+  function lse(xs) {
+    if(!xs.length||xs.some(x=>Number.isNaN(x)||x===Infinity))throw new RangeError('Invalid scores');
+    const maximum=Math.max(...xs);
+    if(maximum===-Infinity)return -Infinity;
+    return maximum+Math.log(sum(xs.map(x=>Math.exp(x-maximum))));
+  }
+  function topk(xs,k) {
+    if(!Number.isInteger(k)||k<1||k>xs.length||xs.some(x=>!Number.isFinite(x)))throw new RangeError('Invalid top-k');
+    const indices=xs.map((_,i)=>i).sort((a,b)=>xs[b]-xs[a]||a-b).slice(0,k);
+    return {indices,values:indices.map(i=>xs[i])};
+  }
   function softmax(xs, temperature=1) {
     if (!(temperature>0) || !xs.length || xs.some(x=>Number.isNaN(x)||x===Infinity)) throw new RangeError('Invalid scores');
     const m=Math.max(...xs);
@@ -17,8 +28,10 @@ const MathFoundations = (() => {
   function norm(xs, kind='rms', eps=1e-5) {
     if(!xs.length||xs.some(x=>!Number.isFinite(x))||eps<0||!['rms','layer'].includes(kind))throw new RangeError('Invalid norm');
     const mean=sum(xs)/xs.length, centered=kind==='layer'?xs.map(x=>x-mean):xs;
-    const denominator=Math.sqrt(dot(centered,centered)/xs.length+eps);
-    return {mean,denominator,values:centered.map(x=>denominator?x/denominator:0)};
+    const squares=centered.map(x=>x*x),meanSquare=sum(squares)/xs.length;
+    const denominator=Math.sqrt(meanSquare+eps);
+    if(denominator===0)throw new RangeError('Undefined zero norm denominator');
+    return {mean,centered,squares,meanSquare,denominator,values:centered.map(x=>x/denominator)};
   }
   function route(scores, k, bias=scores.map(()=>0), scale=1) {
     if(!Number.isInteger(k)||k<1||k>scores.length||scores.some(x=>x<0||!Number.isFinite(x)))throw new RangeError('Invalid route');
@@ -63,7 +76,7 @@ const MathFoundations = (() => {
     }
     return a;
   }
-  return {sum,dot,sigmoid,softplus,silu,softmax,norm,route,nucleus,attention,rotate,online,sinkhorn};
+  return {sum,dot,sigmoid,softplus,silu,lse,topk,softmax,norm,route,nucleus,attention,rotate,online,sinkhorn};
 })();
 
 function initMathFoundations(root=document) {
@@ -79,6 +92,8 @@ function initMathFoundations(root=document) {
     if(kind==='route')controls=slider(`${prefix}-k`,'保留专家数 K',1,4,1,2)+slider(`${prefix}-b`,'专家 0 的选择偏置',0,.9,.1,0);
     if(kind==='attention')controls=slider(`${prefix}-q`,'查询 q 的第 1 分量',-3,3,.5,1)+`<label for="${prefix}-mask"><input id="${prefix}-mask" type="checkbox">屏蔽第 3 个历史位置</label>`;
     if(kind==='activation')controls=slider(`${prefix}-x`,'输入 x',-5,5,.25,-1);
+    if(kind==='lse')controls=slider(`${prefix}-c`,'整行共同偏移 c',-1000,1000,100,0);
+    if(kind==='topk')controls=slider(`${prefix}-k`,'选中数量 K',1,4,1,2)+slider(`${prefix}-s`,'候选 A 的分数',-1,1,.1,.1);
     host.innerHTML=`<div class="math-lab-heading">动手改变一个条件</div><div class="math-controls">${controls}<button type="button" data-math-reset>重置</button></div><div class="math-result" aria-live="polite"></div><p class="math-lab-note">教学算例；数值在本机浏览器计算。打印保留当前参数与结果。</p>`;
     const value=s=>Number(host.querySelector(`#${prefix}-${s}`).value);
     function render(){
@@ -87,9 +102,16 @@ function initMathFoundations(root=document) {
       if(kind==='softmax'){
         const t=value('t'), c=value('c'), z=[0,1,2].map(x=>x+c), p=m.softmax(z,t), e=z.map(x=>Math.exp((x-Math.max(...z))/t));
         html=`<p>logits = [${z.join(', ')}]，τ = ${t}。先减最大值，再除温度；共同偏移不改变分布。</p>`+table(['位置','z','(z−max z)/τ','exp','概率'],z.map((x,i)=>[i,x,fmt((x-Math.max(...z))/t),fmt(e[i]),fmt(p[i])]))+bars(p,['位置 0','位置 1','位置 2']);
+      } else if(kind==='lse'){
+        const z=[0,Math.log(2),Math.log(3)].map(x=>x+value('c')),maximum=Math.max(...z),e=z.map(x=>Math.exp(x-maximum)),total=m.sum(e),l=m.lse(z),p=m.softmax(z);
+        html=`<p>一行 z=[${z.map(fmt).join(', ')}] → 一个 LSE 标量；三项概率各自保留。</p>`+table(['候选','原分数 z','z−max','exp(z−max)','概率'],z.map((v,i)=>[i,fmt(v),fmt(v-maximum),fmt(e[i]),fmt(p[i])]))+`<p>max=${fmt(maximum)}；平移后总和=${fmt(total)}；ln(总和)=${fmt(Math.log(total))}。<strong>LSE=max+ln(总和)=${fmt(l)}</strong>。改变 c，LSE 随 c 移动，概率保持不变。</p>`+bars(p,['候选 0','候选 1','候选 2']);
+      } else if(kind==='topk'){
+        const scores=[value('s'),.4,.8,.6],k=value('k'),t=m.topk(scores,k),selected=m.softmax(t.values),full=m.softmax(scores),mass=m.sum(t.indices.map(i=>full[i]));
+        const names=['A','B','C','D'];
+        html=`<p>输入为 <strong>logits</strong>；教学并列规则为较小原索引优先。Top-${k} values=[${t.values.map(fmt)}]，indices=[${t.indices}]。</p>`+table(['候选/索引','logit','选中？','完整 Softmax','过滤后概率'],scores.map((x,i)=>[`${names[i]}/${i}`,fmt(x),t.indices.includes(i)?'是':'否',fmt(full[i]),fmt(t.indices.includes(i)?selected[t.indices.indexOf(i)]:0)]))+`<p>所选集合原本的概率质量=${fmt(mass)}。过滤后重新分配为总和 1；例如候选 ${names[t.indices[0]]}：${fmt(full[t.indices[0]])}/${fmt(mass)}=${fmt(selected[0])}。</p>`+bars(scores.map((_,i)=>t.indices.includes(i)?selected[t.indices.indexOf(i)]:0),names);
       } else if(kind==='norm'){
         const x=[1,2,3,4].map(v=>value('a')*v+value('c')), l=m.norm(x,'layer'), r=m.norm(x,'rms');
-        html=`<p>x = [${x.join(', ')}]；γ = 1，β = 0，ε = 10⁻⁵。LayerNorm 均值 μ = ${fmt(l.mean)}。</p>`+table(['特征','输入','LayerNorm','RMSNorm'],x.map((v,i)=>[i,v,fmt(l.values[i]),fmt(r.values[i])]))+`<p>LayerNorm 分母 ${fmt(l.denominator)}；RMSNorm 分母 ${fmt(r.denominator)}。先改 c，再改 a，观察哪种变化被消去。</p>`;
+        html=`<p>x = [${x.join(', ')}]；γ = 1，β = 0，ε = 10⁻⁵。LayerNorm 均值 μ = ${fmt(l.mean)}。</p>`+table(['特征','输入 x','x−μ','(x−μ)²','x²','LayerNorm','RMSNorm'],x.map((v,i)=>[i,v,fmt(l.centered[i]),fmt(l.squares[i]),fmt(r.squares[i]),fmt(l.values[i]),fmt(r.values[i])]))+`<p>LayerNorm 方差=${fmt(l.meanSquare)}，分母 √(方差+ε)=${fmt(l.denominator)}；RMSNorm 均方=${fmt(r.meanSquare)}，分母 √(均方+ε)=${fmt(r.denominator)}。先改 c，再改 a，观察哪种变化被消去。</p>`;
       } else if(kind==='route'){
         const scores=[.1,.4,.8,.6], b=[value('b'),0,0,0], r=m.route(scores,value('k'),b);
         html=`<p>先按 s+b 选择，再按原始 s 归一化。选中专家：${r.indices.join(', ')}。教学并列规则：较小编号优先。</p>`+table(['专家','亲和分 s','选择分 s+b','合并权重'],scores.map((v,i)=>[i,v,fmt(v+b[i]),fmt(r.weights[i])]))+bars(r.weights,['专家 0','专家 1','专家 2','专家 3']);

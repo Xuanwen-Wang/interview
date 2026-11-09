@@ -7,6 +7,27 @@ function vector(a,b,tol){assert.equal(a.length,b.length);a.forEach((x,i)=>close(
 
 // Exact ratios, invariance, and a hostile numerical range.
 vector(m.softmax([0,Math.log(2),Math.log(3)]),[1/6,1/3,1/2]);
+close(m.lse([0,Math.log(2),Math.log(3)]),Math.log(6));
+close(m.lse([1000,1001]),1001+Math.log1p(Math.exp(-1)));
+for(const shift of [-1000,-10,0,13,1000]){
+ const z=[0,Math.log(2),Math.log(3)].map(x=>x+shift),l=m.lse(z);
+ close(l,Math.log(6)+shift);
+ vector(z.map(x=>Math.exp(x-l)),[1/6,1/3,1/2]);
+}
+assert.equal(m.lse([-Infinity,-Infinity]),-Infinity);
+assert.throws(()=>m.lse([]),RangeError);
+// Block masses from LSE must reproduce a global weighted sum.
+const globalL=m.lse([0,Math.log(3)]);
+close(Math.exp(-globalL)*2+Math.exp(Math.log(3)-globalL)*8,6.5);
+// Independent ranking and conditional-probability checks for every K.
+for(const k of [1,2,3,4]){
+ const z=[.1,.4,.8,.6],t=m.topk(z,k),p=m.softmax(z),mass=m.sum(t.indices.map(i=>p[i]));
+ vector(t.values,[.8,.6,.4,.1].slice(0,k));
+ vector(m.softmax(t.values),t.indices.map(i=>p[i]/mass));
+}
+assert.deepEqual(m.topk([-3,-1,-2],2),{indices:[1,2],values:[-1,-2]});
+assert.deepEqual(m.topk([1,1,1],2).indices,[0,1]);
+for(const invalid of [0,5,1.5])assert.throws(()=>m.topk([1,2,3,4],invalid),RangeError);
 vector(m.softmax([1000,1001,1002]),m.softmax([0,1,2]));
 vector(m.softmax([-1000,-999,-998]),m.softmax([0,1,2]));
 vector(m.softmax([7,7,7,7]),[.25,.25,.25,.25]);
@@ -17,6 +38,12 @@ const entropy=p=>-m.sum(p.filter(x=>x>0).map(x=>x*Math.log(x)));
 assert.ok(entropy(m.softmax([0,1,2],.5))<entropy(m.softmax([0,1,2],2)));
 close(m.sigmoid(-1000),0);close(m.sigmoid(1000),1);
 close(m.softplus(1000),1000);close(m.softplus(-1000),0);
+for(const x of [-4,-1,0,1,4]){
+ close(m.softplus(x)-m.softplus(-x),x);
+ // Finite difference is independent of the analytic derivative claim.
+ const h=1e-5;
+ close((m.softplus(x+h)-m.softplus(x-h))/(2*h),m.sigmoid(x),1e-8);
+}
 close(m.silu(0),0);assert.ok(m.silu(-1)<0);
 
 // Statistical invariants, not a second copy of the norm implementation.
@@ -27,6 +54,20 @@ vector(m.norm(x.map(v=>v+19),'layer').values,m.norm(x,'layer').values);
 vector(m.norm(x.map(v=>v*3),'rms',0).values,rn.values);
 assert.ok(Math.abs(m.norm(x.map(v=>v+19),'rms').values[0]-rn.values[0])>.2);
 vector(m.norm([2,2],'layer').values,[0,0]);vector(m.norm([0,0],'rms').values,[0,0]);
+assert.throws(()=>m.norm([0,0],'rms',0),RangeError);
+assert.throws(()=>m.norm([2,2],'layer',0),RangeError);
+vector(m.norm([-1,1],'layer').values,m.norm([-1,1],'rms').values);
+const raw=m.norm(x,'rms',1e-5),center=m.norm(x,'layer',1e-5);
+close(m.dot(raw.values,raw.values)/4,7.5/(7.5+1e-5));
+close(m.dot(center.values,center.values)/4,1.25/(1.25+1e-5));
+vector(raw.squares,[1,4,9,16]);vector(center.squares,[2.25,.25,.25,2.25]);
+
+// A score matrix is pairwise dot products and also a sum of feature outer products.
+const Q=[[1,2],[3,4]],K=[[5,6],[7,8],[9,10]];
+const pairwise=Q.map(q=>K.map(k=>m.dot(q,k)));
+assert.deepEqual(pairwise,[[17,23,29],[39,53,67]]);
+const featureOuter=Q.map((q,t)=>K.map((k,n)=>Q[t][0]*K[n][0]+Q[t][1]*K[n][1]));
+assert.deepEqual(featureOuter,pairwise);
 
 // Choice bias and combine weights are distinct. Also verify a tie policy explicitly.
 const r=m.route([.1,.4,.8,.6],2,[.8,0,0,0]);
