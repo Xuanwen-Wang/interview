@@ -285,7 +285,7 @@
         },
         {
           "id": "pe",
-          "title": "PE 与 LDG：权重布局、计算与访存",
+          "title": "PE 架构：组成、布局与执行",
           "chapters": [
             "hw-memory-hierarchy"
           ]
