@@ -26,7 +26,6 @@ body.pe-architecture-reading .portable-reading{margin-top:0;font-size:12px}
 body.pe-architecture-reading .chapter-stage:first-child>.reading-stage-heading{padding:0 0 15px;margin:0 0 20px;border-top:0}
 body.pe-architecture-reading .chapter-stage:first-child>.reading-stage-heading>span{display:none}
 body.pe-architecture-reading .chapter-stage:first-child>.reading-stage-heading h2{font-size:28px;margin:0 0 8px}
-body.pe-architecture-reading .article #hw-map>h3{display:none}
 body.pe-architecture-reading .article>section>p,
 body.pe-architecture-reading .chapter-stage>section>p{max-width:960px;font-size:15px;line-height:1.95}
 body.pe-architecture-reading .skip{left:max(36px,calc((100vw - 1312px)/2))}

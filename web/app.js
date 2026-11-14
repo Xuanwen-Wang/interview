@@ -3,7 +3,7 @@ const $ = (s, root = document) => root.querySelector(s);
 const $$ = (s, root = document) => [...root.querySelectorAll(s)];
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const plain = html => { const d = document.createElement('div'); d.innerHTML = html; return d.textContent || ''; };
-const sectionTitle = title => title.replace(/^\d+(?:\.\s*|\s*\/\s*)/, '');
+const sectionTitle = title => title.replace(/^\d+(?:\.\s+|\s*\/\s*)/, '');
 const STORE_KEY = 'interview-field-notes-v1';
 const emptyState = () => ({readingVersion:2,read:[],legacyRead:[],notes:{},practice:{},last:null});
 function normalizeState(raw) {
