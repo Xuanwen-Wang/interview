@@ -285,7 +285,7 @@
         },
         {
           "id": "pe",
-          "title": "PE 架构：由外到内的一篇讲解",
+          "title": "PE 与 LDG：权重布局、计算与访存",
           "chapters": [
             "hw-memory-hierarchy"
           ]
@@ -305,8 +305,8 @@
           "chapter": "hw-zeuscore-architecture"
         },
         {
-          "title": "深入 PE 与 VP",
-          "description": "把整体图中的矩阵与向量路径逐层放大",
+          "title": "沿矩阵乘法深入 PE 与 LDG",
+          "description": "把权重布局、物理阵列、minitile与MC读序连成一条路径",
           "chapter": "hw-memory-hierarchy"
         },
         {

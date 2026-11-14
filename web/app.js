@@ -91,6 +91,8 @@ function renderChapter(id, section) {
  $('#read-toggle').onclick=toggleRead;$('#read-main').onclick=toggleRead;
  if('IntersectionObserver' in window){sectionObserver=new IntersectionObserver(entries=>{entries.filter(e=>e.isIntersecting).forEach(e=>{highlightReadingSection(e.target.id);});},{rootMargin:'-90px 0px -65% 0px'});$$('section[data-section]').forEach(s=>sectionObserver.observe(s));}
  initPeExplorers();
+ initPeMemoryExplorers();
+ initPeWeightLayouts();
  initMoeExplorers();
  initPerformanceExplorers();
  initDecodeExplorers();
