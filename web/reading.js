@@ -25,21 +25,47 @@ function currentRoute() {
   const target = section === 'notes' && state.notes[noteKey] ? 'note-' + noteKey : alias.anchorMap?.[section] || section || alias.section;
   return [route, alias.chapter, target];
 }
+function sectionOrdinal(number) {
+  const digits = '零一二三四五六七八九';
+  if (number < 10) return digits[number];
+  if (number < 100) return (number < 20 ? '' : digits[Math.floor(number / 10)]) + '十' + (number % 10 ? digits[number % 10] : '');
+  return String(number);
+}
+function sectionNumberLabel(number) {
+  return number.includes('.') ? number : sectionOrdinal(Number(number)) + '、';
+}
+function numberedSections(c) {
+  if (!c.readingStages) return c.sections.map((section,i)=>({section,number:String(i+1)}));
+  const byId = new Map(c.sections.map(section=>[section.id,section]));
+  return c.readingStages.flatMap((stage,i)=>stage.sections.map((id,j)=>({section:byId.get(id),number:`${i+1}.${j+1}`})));
+}
+function sectionBodyHTML(section, number, grouped) {
+  const html = grouped ? section.html.replace(/<(\/?)h3\b/g,'<$1h4') : section.html;
+  const tag = grouped ? 'h4' : 'h3';
+  let child = 0;
+  // Only explicit heading ordinals opt into the next level. Diagram steps,
+  // quantities such as "1.5 TB", and unnumbered headings keep their meaning.
+  return html.replace(new RegExp(`<${tag}(\\s[^>]*)?>\\s*\\d+\\.\\s+`,'g'),(_,attrs)=>`<${tag}${attrs || ''}><span class="subsec-no">${number}.${++child}</span> `);
+}
 function readingPathHTML(c) {
   if (!c.readingStages) return '';
   const portable = c.portableReading;
   const download = portable ? `<a class="portable-reading" href="${esc(portable.file)}" download="${esc(portable.download)}">${esc(portable.label)}</a>` : '';
-  return `<nav class="reading-path" aria-label="本文阅读路径"><p>${esc(c.readingLabel || '从外到内，沿一条数据路径读完')}</p><ol>${c.readingStages.map((stage,i)=>`<li><a href="#chapter/${c.id}/${stage.id}"><small>${String(i+1).padStart(2,'0')}</small><span>${esc(stage.title)}</span></a></li>`).join('')}</ol>${download}</nav>`;
+  return `<nav class="reading-path" aria-label="本文阅读路径"><p>${esc(c.readingLabel || '从外到内，沿一条数据路径读完')}</p><ol>${c.readingStages.map((stage,i)=>`<li><a href="#chapter/${c.id}/${stage.id}"><small>${sectionOrdinal(i+1)}、</small><span>${esc(stage.title)}</span></a></li>`).join('')}</ol>${download}</nav>`;
 }
 function chapterSectionsHTML(c) {
-  const sectionHTML = (s,i,tag) => `<section id="${s.id}" data-section="${s.id}"><${tag}><span class="sec-no">${String(i+1).padStart(2,'0')}</span>${esc(sectionTitle(s.title))}</${tag}>${tag==='h3'?s.html.replace(/<(\/?)h3\b/g,'<$1h4'):s.html}</section>`;
-  if (!c.readingStages) return c.sections.map((s,i)=>sectionHTML(s,i,'h2')).join('');
-  return c.readingStages.map((stage,i)=>`<section class="chapter-stage" id="${stage.id}" data-reading-stage="${stage.id}"><header class="reading-stage-heading"><span>${esc(c.readingStageLabel || '放大层次')} ${String(i+1).padStart(2,'0')} / ${String(c.readingStages.length).padStart(2,'0')}</span><h2>${esc(stage.title)}</h2><p>${esc(stage.summary)}</p></header>${stage.sections.map(id=>{const index=c.sections.findIndex(s=>s.id===id);return sectionHTML(c.sections[index],index,'h3');}).join('')}</section>`).join('');
+  const numbered = numberedSections(c);
+  const sectionHTML = ({section:s,number},tag) => `<section id="${s.id}" data-section="${s.id}"><${tag}><span class="sec-no">${sectionNumberLabel(number)}</span><span>${esc(sectionTitle(s.title))}</span></${tag}>${sectionBodyHTML(s,number,tag==='h3')}</section>`;
+  if (!c.readingStages) return numbered.map(entry=>sectionHTML(entry,'h2')).join('');
+  const byId = new Map(numbered.map(entry=>[entry.section.id,entry]));
+  return c.readingStages.map((stage,i)=>`<section class="chapter-stage" id="${stage.id}" data-reading-stage="${stage.id}"><header class="reading-stage-heading"><span>${esc(c.readingStageLabel || '阅读部分')}</span><h2><span class="sec-no">${sectionOrdinal(i+1)}、</span><span>${esc(stage.title)}</span></h2><p>${esc(stage.summary)}</p></header>${stage.sections.map(id=>sectionHTML(byId.get(id),'h3')).join('')}</section>`).join('');
 }
 function chapterTocHTML(c, selected) {
-  const link = (s,i) => `<a href="#chapter/${c.id}/${s.id}" data-toc="${s.id}">${String(i+1).padStart(2,'0')} ${esc(sectionTitle(s.title))}</a>`;
-  if (!c.readingStages) return c.sections.map(link).join('');
-  return c.readingStages.map((stage,i)=>`<details class="toc-stage" data-toc-stage="${stage.id}" ${i===0||stage.id===selected||stage.sections.includes(selected)?'open':''}><summary>${String(i+1).padStart(2,'0')} ${esc(stage.title)}</summary>${stage.sections.map(id=>{const index=c.sections.findIndex(s=>s.id===id);return link(c.sections[index],index);}).join('')}</details>`).join('');
+  const numbered = numberedSections(c);
+  const link = ({section:s,number}) => `<a href="#chapter/${c.id}/${s.id}" data-toc="${s.id}"><span class="toc-no">${sectionNumberLabel(number)}</span><span>${esc(sectionTitle(s.title))}</span></a>`;
+  if (!c.readingStages) return numbered.map(link).join('');
+  const byId = new Map(numbered.map(entry=>[entry.section.id,entry]));
+  return c.readingStages.map((stage,i)=>`<details class="toc-stage" data-toc-stage="${stage.id}" style="--toc-number-width:${String(i+1).length+1+String(stage.sections.length).length}ch" ${i===0||stage.id===selected||stage.sections.includes(selected)?'open':''}><summary><span class="toc-no">${sectionOrdinal(i+1)}、</span><span>${esc(stage.title)}</span></summary>${stage.sections.map(id=>link(byId.get(id))).join('')}</details>`).join('');
 }
 function highlightReadingSection(id) {
   // Keep an explicit stage jump selected while its heading is visible; the
