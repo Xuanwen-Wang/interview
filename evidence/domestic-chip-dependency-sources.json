@@ -233,6 +233,194 @@
       "sha256": "d1232dd174c166acbabbe57c3e162432ec3a4a39735641dc265436c255ad60e8",
       "bytes": 222267,
       "revision": "unknown; non-Git reference copy"
+    },
+    {
+      "kind": "revision source",
+      "path": "huawei-arch-83.html",
+      "url": "https://www.hiascend.com/doc_center/source/zh/CANNCommunityEdition/83RC1/opdevg/Ascendcopdevg/atlas_ascendc_10_0008.html",
+      "revision": "CANN 8.3.RC1",
+      "bytes": 31780,
+      "sha256": "fcf8d49c9819f5fe0c168750aa00915f171a1e18a8fe91726975e6997a8446db"
+    },
+    {
+      "kind": "revision source",
+      "path": "cambricon-arch.html",
+      "url": "https://www.cambricon.com/docs/sdk_1.14.0/cntoolkit_3.6.1/cntoolkit_tuning_0.4.1/chapter1_mlu_architecture/index.html",
+      "revision": "MLU tuning guide 0.4.1",
+      "bytes": 40558,
+      "sha256": "e4b3064cab9678ff4824aaabaac3384eb30062ba929664351e0974fae6332718"
+    },
+    {
+      "kind": "revision source",
+      "path": "cambricon-memory.html",
+      "url": "https://www.cambricon.com/docs/sdk_1.15.0/cntoolkit_3.7.2/programming_guide_1.7.0/hardware_implementation/index.html",
+      "revision": "BANG programming guide 1.7.0",
+      "bytes": 81461,
+      "sha256": "02fefeb9be6255dc28cadf339baf7fc00fcb9a722e2fbe1cc4927a554cec2802"
+    },
+    {
+      "kind": "revision source",
+      "path": "ascend-crossset-80rc2.html",
+      "url": "https://www.hiascend.com/doc_center/source/zh/canncommercial/80RC2/apiref/opdevgapi/atlasascendc_api_07_0268.html",
+      "revision": "CANN commercial 8.0.RC2",
+      "bytes": 7243,
+      "sha256": "4ae1ab7e73f78d16176e9a704528c18ebde4d1cd878438fe7d3426344ef4b64f"
+    },
+    {
+      "kind": "revision source",
+      "path": "ascend-crosswait-80rc2.html",
+      "url": "https://www.hiascend.com/doc_center/source/zh/canncommercial/80RC2/apiref/opdevgapi/atlasascendc_api_07_0269.html",
+      "revision": "CANN commercial 8.0.RC2",
+      "bytes": 4447,
+      "sha256": "873cd680ceeaa01cfd5cc6ec65019008cb5d11a3a20ad26fe2e8a4794eb5e794"
+    },
+    {
+      "kind": "revision source",
+      "path": "ascend-910-architecture.html",
+      "url": "https://asc.gitcode.com/guide/programming_guide/advanced_programming/hardware_implementation/basic_architecture.html",
+      "revision": "Development snapshot: d433ffc4f752; built 2026-11-14; includes uncommitted modifications",
+      "bytes": 37494,
+      "sha256": "d4a0231dcfe531e4759831aaae63e854b0cc6f4b9e8da04438d463c0fc39e3f8"
+    },
+    {
+      "kind": "revision source",
+      "path": "ascend-event-preview.html",
+      "url": "https://asc.gitcode.com/api/SIMD-API/basic_api/sync_control/intra_core_sync/SetFlag_WaitFlag_ISASI.html",
+      "revision": "Development snapshot: d433ffc4f752; built 2026-11-14; includes uncommitted modifications",
+      "bytes": 30085,
+      "sha256": "14fd44b00a328ab47da0166b404c3adcfdae49dcaac94f638def5421ddbbb08a"
+    },
+    {
+      "kind": "revision source",
+      "path": "ascend-unitflag-preview.html",
+      "url": "https://asc.gitcode.com/api/SIMD-API/basic_api/cube_compute_ISASI/mmad_compute_key_features/UnitFlag.html",
+      "revision": "Development snapshot: d433ffc4f752; built 2026-11-14; includes uncommitted modifications",
+      "bytes": 25118,
+      "sha256": "1ab7dd23dc23bb215d1a1496268e47f6b2b9a221d6916a0eb86fd196ae49769f"
+    },
+    {
+      "kind": "revision source",
+      "path": "ascend-mutex.html",
+      "url": "https://asc.gitcode.com/api/SIMD-API/basic_api/sync_control/intra_core_sync/Mutex_ISASI.html",
+      "revision": "Development snapshot: d433ffc4f752; built 2026-11-14; includes uncommitted modifications",
+      "bytes": 18693,
+      "sha256": "8a3bffcf844e29e2f17c2e4ebe0ab2d24ff9fd9753f370de26881eeb1f850ae6"
+    },
+    {
+      "kind": "revision source",
+      "path": "ascend-crosscore.html",
+      "url": "https://asc.gitcode.com/api/SIMD-API/basic_api/sync_control/inter_core_sync/CrossCoreSetFlag_ISASI.html",
+      "revision": "Development snapshot: d433ffc4f752; built 2026-11-14; includes uncommitted modifications",
+      "bytes": 39309,
+      "sha256": "8b3525c62c8d312ef6fb2041c6fecc52c7a24634fccc94750419b502acf00930"
+    },
+    {
+      "kind": "revision source",
+      "path": "ascend-crosswait.html",
+      "url": "https://asc.gitcode.com/api/SIMD-API/basic_api/sync_control/inter_core_sync/CrossCoreWaitFlag_ISASI.html",
+      "revision": "Development snapshot: d433ffc4f752; built 2026-11-14; includes uncommitted modifications",
+      "bytes": 37350,
+      "sha256": "472b9cad0dcb0fcbbe7ac8668eda4c5172d54d39b5df046b53c0533a9772f1de"
+    },
+    {
+      "kind": "revision source",
+      "path": "ascend-2201.html",
+      "url": "https://asc.gitcode.com/guide/programming_guide/advanced_programming/hardware_implementation/architecture_spec/npu_arch_2201.html",
+      "revision": "Development snapshot: d433ffc4f752; built 2026-11-14; includes uncommitted modifications",
+      "bytes": 33045,
+      "sha256": "4153db35017e8ce435cdbccfa368a6b3815c5fea43c3db3b8a716e8cc69f1c99"
+    },
+    {
+      "kind": "revision source",
+      "path": "ascend-3510.html",
+      "url": "https://asc.gitcode.com/guide/programming_guide/advanced_programming/hardware_implementation/architecture_spec/npu_arch_3510.html",
+      "revision": "Development snapshot: d433ffc4f752; built 2026-11-14; includes uncommitted modifications",
+      "bytes": 42770,
+      "sha256": "1a88fd14efd235e99ebda804d1b129fc00ad5b603db9c6717fd5fb513df30f03"
+    },
+    {
+      "kind": "revision source",
+      "path": "compiler/GraphSolver.cpp",
+      "url": "https://github.com/Ascend/AscendNPU-IR/blob/255344be91f234b622c16290f14b8638ac894001/bishengir/lib/Dialect/HIVM/Transforms/GraphSyncSolver/GraphSolver.cpp",
+      "revision": "255344be91f234b622c16290f14b8638ac894001",
+      "bytes": 5432,
+      "sha256": "3c096e8f28821efaa958cdf3bab71f73d4c979481b86cd573a92f45199c5f0b8"
+    },
+    {
+      "kind": "revision source",
+      "path": "compiler/GraphSolverBase.cpp",
+      "url": "https://github.com/Ascend/AscendNPU-IR/blob/255344be91f234b622c16290f14b8638ac894001/bishengir/lib/Dialect/HIVM/Transforms/GraphSyncSolver/GraphSolverBase.cpp",
+      "revision": "255344be91f234b622c16290f14b8638ac894001",
+      "bytes": 5926,
+      "sha256": "dd65f589a97f774a45206d29444da47fe964fa46dace8e3ad39ce6d9894b11b8"
+    },
+    {
+      "kind": "revision source",
+      "path": "compiler/SyncSolverV2.cpp",
+      "url": "https://github.com/Ascend/AscendNPU-IR/blob/255344be91f234b622c16290f14b8638ac894001/bishengir/lib/Dialect/HIVM/Transforms/GraphSyncSolver/SyncSolverV2.cpp",
+      "revision": "255344be91f234b622c16290f14b8638ac894001",
+      "bytes": 33840,
+      "sha256": "5bb2c38137f2f8c7bfc08311c661b987c05689d6969470299032bc7c2c029949"
+    },
+    {
+      "kind": "revision source",
+      "path": "compiler/SyncSolverCodeGen.cpp",
+      "url": "https://github.com/Ascend/AscendNPU-IR/blob/255344be91f234b622c16290f14b8638ac894001/bishengir/lib/Dialect/HIVM/Transforms/GraphSyncSolver/SyncSolverCodeGen.cpp",
+      "revision": "255344be91f234b622c16290f14b8638ac894001",
+      "bytes": 45019,
+      "sha256": "8a34862de5580e8571466245cb1a3a506fde13cf8b2cf81e17773d57b96f1d6f"
+    },
+    {
+      "kind": "revision source",
+      "path": "compiler/MemInfo.cpp",
+      "url": "https://github.com/Ascend/AscendNPU-IR/blob/255344be91f234b622c16290f14b8638ac894001/bishengir/lib/Dialect/HIVM/Transforms/GraphSyncSolver/MemInfo.cpp",
+      "revision": "255344be91f234b622c16290f14b8638ac894001",
+      "bytes": 14198,
+      "sha256": "286037cca0dbbff278d236c7a95467f3f835bef688636d384bee4f644dbe8644"
+    },
+    {
+      "kind": "source figure",
+      "path": "images/ascend-split.png",
+      "url": "https://www.hiascend.com/doc_center/source/zh/CANNCommunityEdition/83RC1/opdevg/Ascendcopdevg/figure/zh-cn_image_0000002446516986.png",
+      "revision": "Original figure, unmodified bytes; vendor attribution in caption",
+      "bytes": 71472,
+      "sha256": "64fa3cb1bd8fad9300d0ce1cadab20476d1c692e272886a7c016df2063b13d3b"
+    },
+    {
+      "kind": "source figure",
+      "path": "images/mlu-core-v03.png",
+      "url": "https://www.cambricon.com/docs/sdk_1.14.0/cntoolkit_3.6.1/cntoolkit_tuning_0.4.1/_images/figure1-7.png",
+      "revision": "Original figure, unmodified bytes; vendor attribution in caption",
+      "bytes": 35998,
+      "sha256": "a87e9229d72cee2c2d717363cabd13e81600ef9b38f66ab1b7ee89143a9a6a74"
+    },
+    {
+      "kind": "source figure",
+      "path": "images/mlu-cluster-v03.png",
+      "url": "https://www.cambricon.com/docs/sdk_1.14.0/cntoolkit_3.6.1/cntoolkit_tuning_0.4.1/_images/figure1-4.png",
+      "revision": "Original figure, unmodified bytes; vendor attribution in caption",
+      "bytes": 66910,
+      "sha256": "7a155175bdf0fc68a597643b816353b255cdc163fdd85bf3764e753c5fbfed57"
+    },
+    {
+      "kind": "source figure",
+      "path": "images/mlu-figure4-1.png",
+      "url": "https://raw.githubusercontent.com/Cambricon/mlu-ops/8c428bfca7fd20cdbbdd4396cff20c017302dbca/docs/images/figure4-1.png",
+      "revision": "Original figure, unmodified bytes; vendor attribution in caption",
+      "bytes": 105497,
+      "sha256": "7c683a125a3cb09cc286cb9e03b346eac1e56534055b81a49c7662a2379ec37b"
+    }
+  ],
+  "revised": "2026-11-16",
+  "revision_focus": "Huawei and Cambricon hardware contracts and compiler abstractions; Zeus is a brief comparison.",
+  "online_only_sources": [
+    {
+      "url": "https://sdk.cambricon.com/static/independent/CNToolkit/3.8.4/releasenote/3.8.4/build/html/chapter_components/index.html",
+      "verification": "Official indexed page body inspected; confirms MLU570/590 mtp_592 compute_50 and CNCC/CNAS roles. Direct HTTP acquisition returned 502; no local HTML hash claimed."
+    },
+    {
+      "url": "https://www.hiascend.com/document/detail/zh/canncommercial/900/releasenote/release-notes.md",
+      "verification": "Official release-note body inspected for 950 Reg APIs and SIMD/SIMT support; not used as a physical block diagram."
     }
   ]
 }

@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Build a portable, dependency-free field guide from reviewed JSON content."""
+import base64
+import binascii
 import json
 import re
 from pathlib import Path
@@ -26,6 +28,15 @@ class ContentCheck(HTMLParser):
         if tag in {'script', 'iframe', 'object', 'embed', 'form'}:
             raise ValueError(f'Unexpected active content: {tag}')
         for key, value in attrs:
+            # Permit offline raster figures only, never active SVG/data documents.
+            if tag == 'image' and key == 'href' and value and value.startswith('data:image/png;base64,'):
+                try:
+                    png = base64.b64decode(value.partition(',')[2], validate=True)
+                except (ValueError, binascii.Error) as error:
+                    raise ValueError('Invalid embedded PNG') from error
+                if not png.startswith(b'\x89PNG\r\n\x1a\n'):
+                    raise ValueError('Invalid embedded PNG signature')
+                continue
             if key.startswith('on') or (value and re.match(r'\s*(javascript|data):', value, re.I)):
                 raise ValueError(f'Unexpected attribute: {key}')
 

@@ -132,7 +132,7 @@
       "id": "domestic-chips",
       "title": "国产芯片调研",
       "number": "CN",
-      "description": "从公开论文、官方文档与实际源码出发，研究国产 AI 芯片的指令、存储和执行机制。首篇比较昇腾、寒武纪与 Zeus 的指令依赖和同步合同。",
+      "description": "从厂商架构图、官方文档、论文和公开源码出发，研究国产 AI 芯片的指令、存储和执行机制。首篇深入昇腾与寒武纪的硬件同步及编译求解。",
       "readingCollection": true,
       "collectionLabel": "国产芯片 · ARCHITECTURE RESEARCH",
       "groups": [
@@ -144,8 +144,8 @@
       ],
       "learningPath": [
         {
-          "title": "从依赖问题到硬件合同",
-          "description": "事件、选择性屏障、匿名 mailbox 与编译器责任",
+          "title": "从硬件结构到同步求解",
+          "description": "AIC/AIV、IPU/MPU、事件回收、计数通知与选择性屏障",
           "chapter": "domestic-chip-dependency"
         }
       ]
