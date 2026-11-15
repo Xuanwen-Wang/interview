@@ -1,34 +1,9 @@
-/* The PE chapter keeps the existing chapter TOC and releases the global rail. */
-body.pe-architecture-reading{--pe-reading-rail:184px;--pe-reading-gap:40px;background:#f7f6f1}
-body.pe-architecture-reading .sidebar{display:none}
-body.pe-architecture-reading .workspace{margin-left:0}
-body.pe-architecture-reading #main{max-width:1384px;padding:36px 36px 64px}
-body.pe-architecture-reading .topbar{padding-left:max(36px,calc((100vw - 1312px)/2));padding-right:max(36px,calc((100vw - 1312px)/2));background:#f7f6f1f5}
-body.pe-architecture-reading #menu-toggle{display:none}
-body.pe-architecture-reading #main>.chapter-layout{display:grid;grid-template-columns:var(--pe-reading-rail) minmax(0,1fr);gap:var(--pe-reading-gap);margin-top:28px}
-body.pe-architecture-reading #main>:not(.chapter-layout){margin-left:calc(var(--pe-reading-rail) + var(--pe-reading-gap));max-width:1088px}
-body.pe-architecture-reading .chapter-layout>.article{grid-column:2;grid-row:1;width:100%;max-width:none}
-body.pe-architecture-reading .chapter-layout>.toc{display:block;grid-column:1;grid-row:1;top:101px;max-height:calc(100vh - 125px);padding:0 18px 0 0;border-left:0;border-right:1px solid #d8dfd5;scrollbar-width:thin}
-body.pe-architecture-reading .toc-title{font-size:11px;letter-spacing:.08em;color:#677b72}
-body.pe-architecture-reading .toc-stage{padding:10px 0;border-color:#e1e5dc}
-body.pe-architecture-reading .toc-stage summary{font-size:13px;line-height:1.7}
-body.pe-architecture-reading .toc a{font-size:12px;line-height:1.75;padding-top:6px;padding-bottom:6px}
-body.pe-architecture-reading .toc-stage a{padding-left:8px}
-body.pe-architecture-reading .toc a.current{color:#117e83}
-body.pe-architecture-reading .page-title{font-size:37px;line-height:1.45;letter-spacing:-.5px}
-body.pe-architecture-reading .page-lead{font-size:15px;line-height:1.9}
-body.pe-architecture-reading #main>.chapter-meta,
-body.pe-architecture-reading #main>.chapter-meta+div,
-body.pe-architecture-reading .reading-path>p,
-body.pe-architecture-reading .reading-path>ol{display:none}
-body.pe-architecture-reading .reading-path{padding:0;margin-top:12px;margin-bottom:20px;border:0}
-body.pe-architecture-reading .portable-reading{margin-top:0;font-size:12px}
+/* PE-specific figure and article presentation; shared layout is in reading.css. */
 body.pe-architecture-reading .chapter-stage:first-child>.reading-stage-heading{padding:0 0 15px;margin:0 0 20px;border-top:0}
 body.pe-architecture-reading .chapter-stage:first-child>.reading-stage-heading>span{display:none}
 body.pe-architecture-reading .chapter-stage:first-child>.reading-stage-heading h2{font-size:28px;margin:0 0 8px}
 body.pe-architecture-reading .article>section>p,
 body.pe-architecture-reading .chapter-stage>section>p{max-width:960px;font-size:15px;line-height:1.95}
-body.pe-architecture-reading .skip{left:max(36px,calc((100vw - 1312px)/2))}
 
 body.pe-architecture-reading .article figure.diagram{padding:12px 0 10px;background:#fff;border:0;border-radius:0}
 body.pe-architecture-reading .article figure.diagram>svg{min-width:0}
@@ -48,22 +23,8 @@ body.pe-architecture-reading .article figure.pe-architecture-figure>figcaption{p
 /* Node labels keep their original contrast while the other routes recede. */
 .pe-architecture-svg [data-pe-flow-active=true]:is(path,line,polyline),
 .pe-architecture-svg [data-pe-flow-active=true]>:is(path,line,polyline){stroke-opacity:1}
-@media(min-width:981px) and (max-width:1250px){
- body.pe-architecture-reading{--pe-reading-rail:152px;--pe-reading-gap:28px}
- body.pe-architecture-reading #main{padding-left:24px;padding-right:24px}
- body.pe-architecture-reading .toc-stage summary{font-size:12px}
-}
-@media(max-width:980px){
- body.pe-architecture-reading #main{padding:28px 24px 48px}
- body.pe-architecture-reading #main>.chapter-layout{display:block}
- body.pe-architecture-reading #main>:not(.chapter-layout){margin-left:0}
- body.pe-architecture-reading .chapter-layout>.toc{display:none}
-}
 @media print{
- body.pe-architecture-reading #main{max-width:none;padding:0}
- body.pe-architecture-reading #main>:not(.chapter-layout){margin-left:0;max-width:none}
- body.pe-architecture-reading #main>.chapter-layout{display:block}
- body.pe-architecture-reading .chapter-layout>.toc,.pe-architecture-tools,.pe-architecture-explanation{display:none!important}
+ .pe-architecture-tools,.pe-architecture-explanation{display:none!important}
  body.pe-architecture-reading .article figure.pe-architecture-figure{padding:0;margin:16px 0;break-inside:avoid}
  .pe-architecture-svg [data-pe-flow-active=false]:is(path,rect,circle,ellipse,line,polyline,polygon),
  .pe-architecture-svg [data-pe-flow-active=false] :is(path,rect,circle,ellipse,line,polyline,polygon){opacity:1}

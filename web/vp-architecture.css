@@ -1,30 +1,4 @@
-/* Match the PE reading layout with one light chapter rail beside the article. */
-body.vp-reading{--vp-reading-rail:184px;--vp-reading-gap:40px;background:#f7f6f1}
-body.vp-reading .sidebar{display:none}
-body.vp-reading .workspace{margin-left:0}
-body.vp-reading #main{max-width:1384px;padding:36px 36px 64px}
-body.vp-reading .topbar{padding-left:max(36px,calc((100vw - 1312px)/2));padding-right:max(36px,calc((100vw - 1312px)/2));background:#f7f6f1f5}
-body.vp-reading #menu-toggle{display:none}
-body.vp-reading #main>.chapter-layout{display:grid;grid-template-columns:var(--vp-reading-rail) minmax(0,1fr);gap:var(--vp-reading-gap);margin-top:28px}
-body.vp-reading #main>:not(.chapter-layout){margin-left:calc(var(--vp-reading-rail) + var(--vp-reading-gap));max-width:1088px}
-body.vp-reading .chapter-layout>.article{grid-column:2;grid-row:1;width:100%;max-width:none}
-body.vp-reading .chapter-layout>.toc{display:block;grid-column:1;grid-row:1;top:101px;max-height:calc(100vh - 125px);padding:0 18px 0 0;border-left:0;border-right:1px solid #d8dfd5;scrollbar-width:thin}
-body.vp-reading .toc-title{font-size:11px;letter-spacing:.08em;color:#677b72}
-body.vp-reading .toc-stage{padding:10px 0;border-color:#e1e5dc}
-body.vp-reading .toc-stage summary{font-size:13px;line-height:1.7}
-body.vp-reading .toc a{font-size:12px;line-height:1.75;padding-top:6px;padding-bottom:6px}
-body.vp-reading .toc-stage a{padding-left:8px}
-body.vp-reading .toc a.current{color:#117e83}
-body.vp-reading .toc :is(a,summary,button):focus-visible{outline:2px solid #117e83;outline-offset:3px}
-body.vp-reading .page-title{font-size:37px;line-height:1.45;letter-spacing:-.5px}
-body.vp-reading .page-lead{max-width:960px;font-size:15px;line-height:1.9}
-body.vp-reading #main>.chapter-meta,
-body.vp-reading #main>.chapter-meta+div,
-body.vp-reading .reading-path>p,
-body.vp-reading .reading-path>ol{display:none}
-body.vp-reading .reading-path{padding:0;margin-top:12px;margin-bottom:20px;border:0}
-body.vp-reading .portable-reading{margin-top:0;font-size:12px}
-body.vp-reading .skip{left:max(36px,calc((100vw - 1312px)/2))}
+/* VP-specific typography and interactive figures; shared layout is in reading.css. */
 body.vp-reading .article p,body.vp-reading .article li{font-size:16px;line-height:1.95}
 body.vp-reading .article .chapter-stage>section{margin-bottom:64px}
 body.vp-reading .article .chapter-stage>section>h3{font-size:27px;line-height:1.5;margin-top:35px}
@@ -107,30 +81,7 @@ body.vp-reading .vp-lab .vp-event{font-size:14px;line-height:1.8;padding:13px 16
 .vp-slider input{flex:1;accent-color:#416b48;min-width:0}
 .vp-slider output{font:12px var(--mono);min-width:55px;text-align:right}
 .vp-presets{margin-top:18px}
-body.vp-reading.focus #main{max-width:1160px}
-body.vp-reading.focus #main>:not(.chapter-layout){margin-left:0;max-width:none}
-body.vp-reading.focus #main>.chapter-layout{display:block}
-body.vp-reading.focus .chapter-layout>.toc{display:none}
-@media(min-width:981px) and (max-width:1250px){
-  body.vp-reading{--vp-reading-rail:152px;--vp-reading-gap:28px}
-  body.vp-reading #main{padding-left:24px;padding-right:24px}
-  body.vp-reading .toc-stage summary{font-size:12px}
-}
-@media(max-width:980px){
-  body.vp-reading #main{padding:28px 24px 48px}
-  body.vp-reading #main>.chapter-layout{display:block}
-  body.vp-reading #main>:not(.chapter-layout){margin-left:0}
-  body.vp-reading .chapter-layout>.toc{display:none}
-}
 @media print{
-  body.vp-reading{background:white}
-  body.vp-reading .workspace{margin:0}
-  body.vp-reading #main,body.vp-reading.focus #main{padding:0;max-width:none}
-  body.vp-reading #main>:not(.chapter-layout){margin-left:0;max-width:none}
-  body.vp-reading #main>.chapter-layout{display:block}
-  body.vp-reading .chapter-layout>.toc{display:none!important}
-  body.vp-reading .page-title{font-size:24pt;line-height:1.4}
-  body.vp-reading .page-lead{font-size:10pt}
   body.vp-reading .article p,body.vp-reading .article li{font-size:10pt}
   body.vp-reading .article .reading-stage-heading h2{font-size:23pt}
   body.vp-reading .article .chapter-stage>section>h3{font-size:17pt}

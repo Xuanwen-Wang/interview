@@ -3,6 +3,64 @@
 @media(max-width:700px){.reading-path{margin:22px 0;padding:17px 0}.reading-path span{font-size:11px}.reading-path li a{padding-left:8px}.reading-path ol{gap:15px 6px}.article .reading-stage-heading h2{font-size:27px}.article .chapter-stage>section>h3{font-size:22px;gap:10px}.article .chapter-stage h4{font-size:15px}.reading-stage-heading{padding-top:20px}.legacy-notes{padding:13px}}
 @media print{.reading-path,.legacy-notes{display:none}.reading-stage-heading{break-after:avoid;margin-top:25px}.article .reading-stage-heading h2{font-size:23pt}.article .chapter-stage>section>h3{font-size:17pt;break-after:avoid}.article .chapter-stage h4{font-size:12pt;break-after:avoid}.chapter-stage{break-inside:auto}.longform-chapter .chapter-stage>section{margin-bottom:25px}}
 
+/* Every chapter shares one reading layout, including standalone HTML entries. */
+.reader-action{display:none}
+body.chapter-reading{--reading-rail:224px;--reading-gap:32px;background:#f7f6f1}
+body.chapter-reading .sidebar,body.chapter-reading #menu-toggle,body.chapter-reading .edition{display:none}
+body.chapter-reading .workspace{margin-left:0}
+body.chapter-reading #main{max-width:1384px;padding:36px 36px 64px}
+body.chapter-reading .topbar{padding-left:max(36px,calc((100vw - 1312px)/2));padding-right:max(36px,calc((100vw - 1312px)/2));gap:24px;background:#f7f6f1f5}
+body.chapter-reading #breadcrumb{flex:1;min-width:0;max-width:none}
+body.chapter-reading .top-actions{flex-shrink:0;white-space:nowrap}
+body.chapter-reading .reader-action{display:inline-block}
+body.chapter-reading #main>.chapter-layout{display:grid;grid-template-columns:var(--reading-rail) minmax(0,1fr);gap:var(--reading-gap);margin-top:28px}
+body.chapter-reading #main>:not(.chapter-layout){margin-left:calc(var(--reading-rail) + var(--reading-gap));max-width:1088px}
+body.chapter-reading .chapter-layout>.article{grid-column:2;grid-row:1;width:100%;max-width:none}
+body.chapter-reading .chapter-layout>.toc{display:block;grid-column:1;grid-row:1;top:101px;max-height:calc(100vh - 125px);padding:0 18px 0 0;border-left:0;border-right:1px solid #d8dfd5;scrollbar-width:thin;overscroll-behavior:contain}
+body.chapter-reading .toc-title{font-size:11px;letter-spacing:.08em;color:#677b72}
+body.chapter-reading .toc-stage{padding:10px 0;border-color:#e1e5dc}
+body.chapter-reading .toc-stage summary{font-size:13px;line-height:1.7}
+body.chapter-reading .toc a{font-size:12px;line-height:1.75;padding-top:6px;padding-bottom:6px}
+body.chapter-reading .toc-stage a{padding-left:8px}
+body.chapter-reading .toc a.current{color:#117e83}
+body.chapter-reading .toc :is(a,summary,button):focus-visible{outline:2px solid #117e83;outline-offset:3px}
+body.chapter-reading .page-title{font-size:37px;line-height:1.45;letter-spacing:-.5px}
+body.chapter-reading .page-lead{max-width:960px;font-size:15px;line-height:1.9}
+body.chapter-reading #main>.chapter-meta,
+body.chapter-reading #main>.chapter-meta+div,
+body.chapter-reading .reading-path>p,
+body.chapter-reading .reading-path>ol{display:none}
+body.chapter-reading .reading-path{padding:0;margin-top:12px;margin-bottom:20px;border:0}
+body.chapter-reading .portable-reading{margin-top:0;font-size:12px}
+body.chapter-reading .skip{left:max(36px,calc((100vw - 1312px)/2))}
+body.chapter-reading.focus #main{max-width:1160px}
+body.chapter-reading.focus #main>:not(.chapter-layout){margin-left:0;max-width:none}
+body.chapter-reading.focus #main>.chapter-layout{display:block}
+body.chapter-reading.focus .chapter-layout>.toc{display:none}
+@media(min-width:981px) and (max-width:1250px){
+ body.chapter-reading{--reading-rail:196px;--reading-gap:28px}
+ body.chapter-reading #main{padding-left:24px;padding-right:24px}
+ body.chapter-reading .toc-stage summary{font-size:12px}
+}
+@media(max-width:980px){
+ body.chapter-reading #main{padding:28px 24px 48px}
+ body.chapter-reading #main>.chapter-layout{display:block}
+ body.chapter-reading #main>:not(.chapter-layout){margin-left:0}
+ body.chapter-reading .chapter-layout>.toc{display:none}
+ body.chapter-reading .topbar{padding-left:24px;padding-right:24px;gap:12px}
+ body.chapter-reading #repo-link{display:none}
+}
+@media print{
+ body.chapter-reading{background:white}
+ body.chapter-reading .workspace{margin:0}
+ body.chapter-reading #main,body.chapter-reading.focus #main{max-width:none;padding:0}
+ body.chapter-reading #main>:not(.chapter-layout){margin-left:0;max-width:none}
+ body.chapter-reading #main>.chapter-layout{display:block}
+ body.chapter-reading .chapter-layout>.toc{display:none!important}
+ body.chapter-reading .page-title{font-size:24pt;line-height:1.4}
+ body.chapter-reading .page-lead{font-size:10pt}
+}
+
 /* The same visible outline numbers are used in navigation, headings and print. */
 .article h2 .sec-no{font:inherit;color:inherit;margin-right:0;vertical-align:baseline}
 .article h2:has(>.sec-no){display:flex;align-items:baseline}
