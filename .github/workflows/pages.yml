@@ -61,6 +61,7 @@ jobs:
           node scripts/check_decode_model.js
           node scripts/check_attention_lab.js
           node scripts/check_sync_model.js
+          python3 scripts/check_chip_dependency_examples.py
           node scripts/check_cyclesim_model.js
           node scripts/check_deepseek_model.js
           node scripts/check_cuda_model.js

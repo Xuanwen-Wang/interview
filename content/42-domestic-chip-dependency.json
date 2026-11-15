@@ -1,0 +1,420 @@
+[
+  {
+    "id": "domestic-chip-dependency",
+    "title": "指令依赖与同步机制：昇腾、寒武纪与 Zeus 对照",
+    "part": "国产芯片调研",
+    "order": 42,
+    "subtitle": "从公开论文、官方 API 和实际源码出发，比较有名事件、选择性屏障与九端点匿名 mailbox。",
+    "minutes": 110,
+    "level": "体系结构 · 编译器 · 研究定位",
+    "tags": [
+      "国产芯片",
+      "昇腾",
+      "华为",
+      "寒武纪",
+      "Zeus",
+      "mailbox",
+      "barrier",
+      "同步",
+      "ISA"
+    ],
+    "lead": "要让搬运、矩阵和向量执行重叠，就必须把数据就绪、缓冲区归还和控制流变成可执行的依赖协议。本文用八张原创机制图、公开文献与冻结版本的代码，解释三种合同的共同目标、真实差异与编译器责任。",
+    "readingLabel": "调研路线：语义 → 昇腾 → 寒武纪 → Zeus → 横向对照 → 研究定位",
+    "readingStageLabel": "调研部分",
+    "portableReading": {
+      "file": "chip-dependencies.html",
+      "download": "domestic-chip-dependencies.html",
+      "label": "保存完整指令依赖调研 HTML ↓"
+    },
+    "sections": [
+      {
+        "id": "findings",
+        "title": "先给结论：真正的差异在哪里",
+        "html": "\n<p>AI 加速器会把搬运、矩阵计算、向量计算等工作送入不同执行流水线，以重叠长延迟操作。问题随之出现：<strong>程序先写了 load，再写 compute，并不自动意味着 compute 开始读取时，load 已把数据写完。</strong>依赖指令的任务，是在允许重叠的同时，把必要的读写顺序、缓冲区归还和资源交接落实到硬件。</p>\n<p>本调研得到的首要结论是：<strong>“昇腾、寒武纪用 barrier，Zeus 用 mailbox”不足以作为架构分类。</strong>昇腾已有带 event ID 的定向 SetFlag/WaitFlag；寒武纪既有同步截面，也有可分别选择生产与消费流水线的接口，以及跨核分离到达与等待的 barrier。Zeus 的特点是九个逻辑同步端点、按端点对计数的匿名通知、指令上的收发掩码，以及有序 outbox 共同形成的协议。</p>\n<div class=\"table-wrap\"><table><thead><tr><th>对象</th><th>目前能证实的核心合同</th><th>比较时最容易忽略的事</th></tr></thead><tbody><tr><td>昇腾</td><td>源流水线 SetFlag；目标流水线 WaitFlag；按方向与 event ID 匹配</td><td>也有 PipeBarrier；event ID 有限；UnitFlag 还提供特定资源上的细粒度同步</td></tr><tr><td>现代寒武纪 MLU</td><td>核内同步可选择生产流水线集合和消费流水线集合</td><td>__sync_compute 并非只限制后续 Compute；核间 barrier 是另一层</td></tr><tr><td>Zeus</td><td>接收时按源端点计数扣 token；完成后经 outbox 按序发送</td><td>token 没有数据身份；九个端点不等于九个对称独立 PC</td></tr><tr><td>VTA 参照</td><td>load / compute / store 通过无信息依赖 token 和 push/pop 位同步</td><td>匿名 token 和指令附带依赖位已有公开先例，不能据此主张首创</td></tr></tbody></table></div>\n<p>因此，适合深入研究的核心问题是：<strong>如何把一个带控制流和资源寿命的依赖图，编译成多条独立执行流上正确、低开销、容量有界的通知协议？</strong>对 Zeus，最尖锐的约束是“无标签 token 如何维持逻辑对应关系”；对昇腾，是有限 event ID 的生命周期、复用与同步位置；对 MLU 公布的截面接口，是截面位置及生产者／消费者集合的选择。它们可以表达相近的顺序需求，但编译器需要管理的状态和代价不同。</p>\n<p class=\"source-note\">依据：<a href=\"https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/82RC1/API/ascendcopapi/atlasascendc_api_07_0181.html\">H2 · SetFlag / WaitFlag</a>；<a href=\"https://www.cambricon.com/docs/sdk_1.15.0/cntoolkit_3.7.2/cambricon_bang_c_4.7.2/2Builtin-Functions/Intra-Core%20Synchronization%20Functions.html\">C3 · BANG C 核内同步 API</a>；<a href=\"https://github.com/apache/tvm/blob/97c5de63ba6baa148fdf0c545ded2cd01d7838d1/docs/topic/vta/dev/hardware.rst\">V1 · VTA 数据流与依赖队列</a>；<a href=\"https://github.com/Xuanwen-Wang/interview/blob/main/evidence/domestic-chip-dependencies.md\">E1 · 本文证据与验证边界</a>。</p>"
+      },
+      {
+        "id": "scope",
+        "title": "对象、版本与证据层级",
+        "html": "\n<p>本文按体系结构研究的方式组织论证，但它是一份<strong>有版本边界的机制调研与研究定位稿</strong>，不是已经完成芯片实验的论文。采集日期为 <strong>2026-11-15</strong>。文中的“官方规定”“源码观察”“本文推导”“教学模型”分别指不同证据；不把接口语义直接当作门级实现。</p>\n<div class=\"table-wrap\"><table><thead><tr><th>范围</th><th>采用的材料</th><th>结论边界</th></tr></thead><tbody><tr><td>昇腾</td><td>CANN 8.2.RC1、8.5.0 与 9.0.0 文档；AscendNPU-IR 提交 <code>255344be91f2</code>；2025 年同步插入论文</td><td>稳定版与开发版分开标注；910A 论文中的六流水线和资源数量不外推到所有产品</td></tr><tr><td>寒武纪</td><td>ISCA 2016 原型；BANG C 4.7.2 API；MLU-OPS 提交 <code>8c428bfca7fd</code></td><td>2016 原型与现代 MLU 分开；MLUv03 是开发指南使用的具体例子；不声称已获得现代完整编码 ISA</td></tr><tr><td>Zeus</td><td>编译器提交 <code>a6161ef94b19</code>；非 Git 的 RTL 参考副本及逐文件摘要</td><td>相关已跟踪源码无修改；RTL 来源标签仅为副本 README 的记载，有局部差异，不能冒充已认证 tape-out 版本</td></tr><tr><td>VTA</td><td>TVM <code>97c5de63ba6b</code> 文档与 VTA 指令定义</td><td>用来定位已有思想；不同拓扑、缓存与执行语义，不是同芯片性能基线</td></tr></tbody></table></div>\n<p>公开源码需要再分层：<strong>MLU-OPS 公开算子实现；AscendNPU-IR 公开编译器与同步 IR；PTO 公开虚拟 ISA 和实现；研究论文公开一个设计与原型。</strong>这些都不自动等于“现代芯片的全部机器指令、编码、微架构和 RTL 已公开”。本次未取得可验证的现代 MLU 完整编码手册，也未由这些材料推导隐藏的 mailbox 电路是否存在。</p>\n<p>本文所有机制图均为原创重绘，表示结构或因果关系；没有用示意图伪装周期测量。Zeus 依据可以定位到仓库别名、相对文件和 SHA256，但这里不发布内部源码。完整来源身份见文末证据记录。</p>\n<p class=\"source-note\">依据：<a href=\"https://github.com/Ascend/AscendNPU-IR/blob/255344be91f234b622c16290f14b8638ac894001/docs/source/en/developer_guide/features/auto_sync.md\">H5 · AscendNPU-IR Auto-Sync</a>；<a href=\"https://github.com/hw-native-sys/pto-isa/tree/71ce9dd4e850e0fc04e9d9acdfdf8b8f52839d0c\">H9 · PTO virtual ISA</a>；<a href=\"https://github.com/Cambricon/mlu-ops/blob/8c428bfca7fd20cdbbdd4396cff20c017302dbca/docs/BANG-C-OPS-Develop-Guide.md\">C2 · BANG C OPS 开发指南</a>；<a href=\"https://github.com/Xuanwen-Wang/interview/blob/main/evidence/domestic-chip-dependencies.md\">E1 · 本文证据与验证边界</a>；<a href=\"https://github.com/Xuanwen-Wang/interview/blob/main/evidence/domestic-chip-dependency-sources.json\">E2 · 可复核来源清单</a>。</p>"
+      },
+      {
+        "id": "reading-route",
+        "title": "怎样读，以及哪些问题暂时没有答案",
+        "html": "\n<p>建议先读“共同问题与语义”，建立完成、等待、可见性和复用四个概念；再读两家厂商各自的机制；最后看 Zeus 反例与横向对照。已熟悉 Zeus 的读者也应先看寒武纪的<strong>六参数同步</strong>：它会直接修正“barrier 只能让所有队列一起停”的直觉。</p>\n<p>阅读后应能回答三件事：一条同步操作具体给哪些事件加了顺序；硬件保存的状态如何识别这次依赖；编译器必须怎样处理下一轮、另一条分支和有限资源。暂时不能回答的是：某款量产芯片每次同步多少周期、哪一家面积更小、同一 kernel 谁更快，以及某个未公开实现是否还藏着别的同步原语。这些需要目标硬件、完整合同和实验。</p>\n<p>站内进一步阅读：<a href=\"#chapter/compiler-sync\">Zeus 编译器同步长文</a>。本文侧重跨架构定位与公开证据；底层工程调试应回到具体源码和目标版本。</p>"
+      },
+      {
+        "id": "hazards",
+        "title": "先把依赖放回数据与缓冲区",
+        "html": "\n<p>设 Load 从外部存储取一块数据写入片上缓冲区 X，Compute 读取 X 后把结果写入 Y，Store 读取 Y 并写回外部存储。这里的 X、Y 是物理地址范围，不限定矩阵 shape。至少有三类冲突：RAW（写后读）要求新数据先写好；WAR（读后写）要求旧消费者先读完；WAW（写后写）要求覆盖顺序符合程序语义。两次只读一般不因这块内存互相等待，但仍可能争用端口或执行资源。</p>\n<figure class=\"diagram\"><svg viewBox=\"0 0 800 305\" role=\"img\" aria-label=\"同一缓冲区的就绪与归还\" xmlns=\"http://www.w3.org/2000/svg\"><title>同一缓冲区的就绪与归还</title><desc>图 1 · 原创依赖结构示意，横向是同一地址的生命周期，不是周期比例。箭头表示必须满足的完成到开始顺序；X、Y 是片上缓冲区，未指定 shape 或芯片。</desc><defs><marker id=\"chip-arrow-haz\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto-start-reverse\"><path d=\"M0 0 L10 5 L0 10 Z\" fill=\"#356a70\"/></marker></defs><g font-family=\"system-ui, sans-serif\"><text x=\"400\" y=\"28\" font-size=\"20\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"400\" dy=\"0\">一块输入缓冲区 X：不能只管“数据到了没有”</tspan></text><rect x=\"25\" y=\"65\" width=\"210\" height=\"70\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"130\" y=\"94\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"130\" dy=\"0\">Load i</tspan><tspan x=\"130\" dy=\"25\">把第 i 块写入 X</tspan></text><rect x=\"295\" y=\"65\" width=\"210\" height=\"70\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"400\" y=\"94\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"400\" dy=\"0\">Compute i</tspan><tspan x=\"400\" dy=\"25\">读取 X 并计算</tspan></text><rect x=\"565\" y=\"65\" width=\"210\" height=\"70\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"670\" y=\"94\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"670\" dy=\"0\">Load i+1</tspan><tspan x=\"670\" dy=\"25\">下一块重用 X</tspan></text><path d=\"M237 100 L292 100\" fill=\"none\" stroke=\"#356a70\" stroke-width=\"2.4\"  marker-end=\"url(#chip-arrow-haz)\"/><path d=\"M507 100 L562 100\" fill=\"none\" stroke=\"#356a70\" stroke-width=\"2.4\"  marker-end=\"url(#chip-arrow-haz)\"/><text x=\"265\" y=\"160\" font-size=\"16\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"265\" dy=\"0\">RAW</tspan><tspan x=\"265\" dy=\"25\">写完 → 才能读</tspan></text><text x=\"535\" y=\"160\" font-size=\"16\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"535\" dy=\"0\">WAR</tspan><tspan x=\"535\" dy=\"25\">读完 → 才能覆盖</tspan></text><rect x=\"70\" y=\"218\" width=\"660\" height=\"60\" rx=\"10\" fill=\"#f3e8d5\" stroke=\"#8aa6a0\"/><text x=\"400\" y=\"254\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"400\" dy=\"0\">输出缓冲区 Y 同理：Compute 写完 → Store 读完 → 下次覆盖</tspan></text></g></svg><figcaption>图 1 · 原创依赖结构示意，横向是同一地址的生命周期，不是周期比例。箭头表示必须满足的完成到开始顺序；X、Y 是片上缓冲区，未指定 shape 或芯片。</figcaption></figure>\n<p>流水化最常见的错误不是漏掉第一条 RAW，而是忘掉<strong>归还边</strong>：Compute 已开始不等于它已读完 X；Store 已发射不等于它已读完 Y。下一轮过早覆盖任一缓冲区，都可能破坏旧工作。双缓冲只是提供两个地址槽，并没有替我们建立“何时允许再次写这个槽”的合同。</p>\n<p>还有一类不应强塞进内存 RAW 的约束：描述符、配置寄存器或地址参数何时被前端采样。若某命令在等待 mailbox 之前就已经读取了描述符，晚到的 mailbox 不能把这次早读变成正确。必须分清<strong>控制信息的采样点</strong>与<strong>数据通路真正访问内存的时刻</strong>。</p>"
+      },
+      {
+        "id": "events",
+        "title": "依赖约束的是事件，不能只写两个指令名字",
+        "html": "\n<p>对一条异步命令，至少区分：前端分派 D、执行单元发射 I、最后一次相关读完成 R、相关写可见 W、命令完成 C、完成通知释放 N。它们不是总能在同一拍发生；某些 ISA 只暴露 C，硬件内部却在更早的 R 就可以归还输入资源，或者在 C 之后因通知队列反压推迟 N。这里的事件符号是分析工具，不声称所有芯片都实现六个寄存器状态。</p>\n<p>例如消费者 Q 读取 P 写出的缓冲区，真正要的是 <code>W(P) ≺ I_read(Q)</code>。如果同步合同保证“P 完成意味着该写对 Q 可见”，可以保守地用 <code>C(P) ≺ I(Q)</code> 实现它。若只保证命令已被接收，这个替代不成立。类似地，缓冲区归还需要 <code>R(Q) ≺ I_write(next)</code>，不必在理论上等待 Q 的所有无关后续工作都结束。</p>\n<div class=\"formula\">E_required ⊆ TC(E_hardware ∪ E_sync)</div>\n<p>式中 E_required 是程序必须保持的事件顺序，E_hardware 是硬件已经保证的顺序，E_sync 是新增同步边，TC 表示沿已有边能到达的传递闭包。<strong>它描述安全性的排序要求，不单独证明内存可见性、动态分支正确性或无死锁。</strong>这些要分别检查目标接口的完成合同、每条可执行路径，以及资源等待关系。</p>\n<p>因此，“同队列顺序发射”“同队列按序完成”“同队列按序发通知”是三种不同保证；“设置了同步标志”和“刷了所有 cache”也不是同义语。尤其不能把核内片上存储的顺序保证，直接升级成跨核、跨设备或 Host 可见性的保证。</p>"
+      },
+      {
+        "id": "taxonomy",
+        "title": "用五个维度分类，比 mailbox / barrier 二分更准确",
+        "html": "\n<div class=\"table-wrap\"><table><thead><tr><th>维度</th><th>要问的具体问题</th><th>影响</th></tr></thead><tbody><tr><td>范围</td><td>同流水线、跨流水线、同核、同 cluster、一个 kernel 的参与核，还是跨设备？</td><td>名称里有 all，也可能只覆盖一个 kernel 的参与集合</td></tr><tr><td>依赖选择</td><td>按流水线集合、event ID、缓冲区槽，还是隐含的第 k 枚 token？</td><td>决定谁与谁匹配，是否能区分多个同时在途的数据版本</td></tr><tr><td>位置</td><td>一个程序截面，还是可分开放置的通知与等待？</td><td>决定能否分别选择生产完成前沿和消费起始前沿</td></tr><tr><td>状态与复用</td><td>单 bit、计数器、队列条目、带 phase 的 barrier，还是地址比较表？</td><td>决定资源上限、跨轮复用、溢出与旧通知误用风险</td></tr><tr><td>完成粒度</td><td>整个命令、某段读写、一个资源块，还是参与者到齐？</td><td>决定可提前释放多少并行性；需要真实完成语义支持</td></tr></tbody></table></div>\n<p><strong>Barrier 的核心是汇合或顺序切分，不必然意味着全设备停顿。</strong>一个限定流水线的 barrier 可以只覆盖所选集合；一个 arrive/wait barrier 可以把“我已到达”和“我现在必须等待”拆开。反过来，mailbox 也可能因队头等待、通道满或前端 CT 阻塞造成广泛停顿。</p>\n<p>此外，软件叫 event、flag、mailbox、semaphore，不能据此断言硬件用了哪类存储器。本文把 Zeus mailbox 称为“匿名计数通道”，因为实际 inbox 代码体现这个可观测合同；不把它理解为可发送任意数据或消息 ID 的通用邮箱。</p>"
+      },
+      {
+        "id": "ascend-pipelines",
+        "title": "昇腾：多流水线与显式依赖是基本背景",
+        "html": "\n<p>昇腾 AI Core 将标量控制、向量、矩阵和搬运工作分散到不同执行流水线。常见名称有 S、V、M、MTE1、MTE2、MTE3，以及部分产品中的 FIX。GM 是外部全局存储，UB 是向量侧片上缓冲，L1 与 L0A/B/C 服务矩阵数据路径；具体连通性和名称支持范围要按代际核对。不能把某份图里的七个名字当成所有昇腾的七个等价线程。</p>\n<p>以 <strong>GM → UB → 向量计算</strong> 为例，MTE2 搬入与 V 计算可以重叠。V 使用一块 UB 数据之前，要等相应搬入完成；MTE2 下一轮覆盖这块 UB 之前，还要等 V 读取结束。它和 Zeus 的 LD→VP、VP→LD 方向在“建立数据就绪／空间归还关系”这一抽象上相似，不能因为 API 名称不同就归为截然不同的问题。</p>\n<p>2025 年论文使用的 910A 模型列出 S、V、M、MTE1、MTE2、MTE3 六条指令队列。这里的“六”属于论文研究对象；本文使用较新官方文档说明接口时，会保留代际差异。</p>\n<p class=\"source-note\">依据：<a href=\"https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/API/ascendcopapi/atlasascendc_api_07_0179.html\">H1 · 昇腾 AI Core 同步控制概览</a>；<a href=\"https://crad.ict.ac.cn/cn/article/pdf/preview/10.7544/issn1000-1239.202440093.pdf\">H8 · 面向昇腾处理器的高性能同步原语自动插入方法</a>。</p>"
+      },
+      {
+        "id": "ascend-events",
+        "title": "SetFlag / WaitFlag：有方向、有名字、一次消费",
+        "html": "\n<p>官方接口以生产流水线、消费流水线和 event ID 共同确定同步事件。生产侧 SetFlag 等前面相关操作完成后置位；消费侧 WaitFlag 在对应标志未就绪时阻止后面的操作继续，在成功等待后清零。因此，可以把一组匹配资源抽象为 <code>flag[src, dst, id] ∈ {0, 1}</code>。这是一位事件合同，不是可任意累加的 token 队列。</p>\n<figure class=\"diagram\"><svg viewBox=\"0 0 800 310\" role=\"img\" aria-label=\"昇腾跨流水线的有名事件\" xmlns=\"http://www.w3.org/2000/svg\"><title>昇腾跨流水线的有名事件</title><desc>图 2 · 昇腾事件合同的原创示意。横向是各流水线顺序，竖箭头传完成通知；e 是 event ID，UB 是向量本地缓冲。Set 与 Wait 分属源、目标流水线，不要求其他流水线同时到达。</desc><defs><marker id=\"chip-arrow-asc\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto-start-reverse\"><path d=\"M0 0 L10 5 L0 10 Z\" fill=\"#356a70\"/></marker></defs><g font-family=\"system-ui, sans-serif\"><text x=\"400\" y=\"27\" font-size=\"20\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"400\" dy=\"0\">两个独立位置：生产完成后 Set，使用之前 Wait</tspan></text><text x=\"20\" y=\"86\" font-size=\"17\" text-anchor=\"start\" fill=\"#203a40\"><tspan x=\"20\" dy=\"0\">MTE2</tspan></text><rect x=\"115\" y=\"55\" width=\"200\" height=\"55\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"215\" y=\"88.5\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"215\" dy=\"0\">Load X → UB</tspan></text><rect x=\"365\" y=\"55\" width=\"175\" height=\"55\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"452.5\" y=\"88.5\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"452.5\" dy=\"0\">SetFlag(e)</tspan></text><rect x=\"590\" y=\"55\" width=\"185\" height=\"55\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"682.5\" y=\"88.5\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"682.5\" dy=\"0\">后续独立搬运</tspan></text><path d=\"M317 82 L362 82\" fill=\"none\" stroke=\"#356a70\" stroke-width=\"2.4\"  marker-end=\"url(#chip-arrow-asc)\"/><path d=\"M542 82 L587 82\" fill=\"none\" stroke=\"#356a70\" stroke-width=\"2.4\"  marker-end=\"url(#chip-arrow-asc)\"/><text x=\"20\" y=\"236\" font-size=\"17\" text-anchor=\"start\" fill=\"#203a40\"><tspan x=\"20\" dy=\"0\">V</tspan></text><rect x=\"115\" y=\"205\" width=\"200\" height=\"55\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"215\" y=\"238.5\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"215\" dy=\"0\">独立向量工作</tspan></text><rect x=\"365\" y=\"205\" width=\"175\" height=\"55\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"452.5\" y=\"238.5\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"452.5\" dy=\"0\">WaitFlag(e)</tspan></text><rect x=\"590\" y=\"205\" width=\"185\" height=\"55\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"682.5\" y=\"238.5\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"682.5\" dy=\"0\">读取 X 计算</tspan></text><path d=\"M317 232 L362 232\" fill=\"none\" stroke=\"#356a70\" stroke-width=\"2.4\"  marker-end=\"url(#chip-arrow-asc)\"/><path d=\"M542 232 L587 232\" fill=\"none\" stroke=\"#356a70\" stroke-width=\"2.4\"  marker-end=\"url(#chip-arrow-asc)\"/><path d=\"M452 111 L452 202\" fill=\"none\" stroke=\"#356a70\" stroke-width=\"2.4\"  marker-end=\"url(#chip-arrow-asc)\"/><text x=\"468\" y=\"151\" font-size=\"16\" text-anchor=\"start\" fill=\"#203a40\"><tspan x=\"468\" dy=\"0\">(MTE2, V, e)</tspan><tspan x=\"468\" dy=\"25\">置 1；等待后清 0</tspan></text></g></svg><figcaption>图 2 · 昇腾事件合同的原创示意。横向是各流水线顺序，竖箭头传完成通知；e 是 event ID，UB 是向量本地缓冲。Set 与 Wait 分属源、目标流水线，不要求其他流水线同时到达。</figcaption></figure>\n<pre><code>// Semantic pseudocode, not a complete Ascend C kernel.\nMTE2: load(X); set_flag(MTE2, V, ready_id); independent_load();\nV:    independent_compute(); wait_flag(MTE2, V, ready_id); use(X);</code></pre>\n<p>它有三个重要性质。第一，生产与消费前沿可以分开放置，Set 后的独立生产工作与 Wait 前的独立消费工作仍有重叠空间。第二，同方向上的多个 event ID 可以表达不同在途依赖。第三，ID 是有限物理资源：编译器必须知道旧一轮的通知何时被消费，才可安全复用同一个 ID；连续两次置位不能被当成两枚可累计通知。</p>\n<p><strong>有 ID 不等于能绕过队头。</strong>若目标流水线先遇到 wait(B)，即使 A 的事件已就绪，排在后面的 wait(A) 和 A 的计算也未必能越过 B。event 的价值是提供显式匹配与独立生命周期，不是保证任意依赖重排执行。</p>\n<p>CANN 8.2.RC1 该接口列出的 ID 范围因产品不同有 0–3 或 0–7。使用更高层队列框架时，还要考虑软件保留和分配规则。不能把“某代有四个”“某份开发文档保留两个”合并成所有昇腾统一的可用容量。</p>\n<p class=\"source-note\">依据：<a href=\"https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/82RC1/API/ascendcopapi/atlasascendc_api_07_0181.html\">H2 · SetFlag / WaitFlag</a>；<a href=\"https://github.com/Ascend/AscendNPU-IR/blob/255344be91f234b622c16290f14b8638ac894001/bishengir/include/bishengir/Dialect/HIVM/IR/HIVMSynchronizationOps.td\">H6 · HIVM 同步操作定义</a>。</p>"
+      },
+      {
+        "id": "ascend-barrier",
+        "title": "PipeBarrier 与 UnitFlag：粒度并不只有一种",
+        "html": "\n<p><code>PipeBarrier&lt;PIPE&gt;</code>解决指定流水线中前后工作需要严格完成顺序的情况；<code>PIPE_ALL</code>覆盖的范围更广。它与跨流水线 SetFlag/WaitFlag 是互补工具。同流水线已经顺序发射，仍可能因为读写重叠或内部并行需要完成层面的屏障；也有具体代际对特定流水线提供更强自动顺序保证。采集到的开发版文档专门列出了这些限制，不能跨产品照抄。</p>\n<p>还要注意 <strong>UnitFlag</strong>。官方最佳实践说明，它可以支持矩阵计算与 Fixpipe 在 L0C 上进行更细粒度的交接，使后续处理不必总等整条矩阵命令完全结束。这类机制面向特定资源与数据通路，不能代替所有跨流水线事件；但它说明“昇腾只支持整条指令后的粗同步”同样不成立。</p>\n<p>于是，对比“谁更细”至少要问两遍：是<strong>选择哪条指令作为前沿</strong>更细，还是<strong>同一条命令内部何时允许释放资源</strong>更细？Zeus 在命令上附带收发掩码，回答的是前一种；UnitFlag 展示后一种。二者不能只按同步指令条数排名。</p>\n<p class=\"source-note\">依据：<a href=\"https://asc.gitcode.com/api/SIMD-API/basic_api/sync_control/intra_core_sync/PipeBarrier_ISASI.html\">H3 · PipeBarrier（开发版）</a>；<a href=\"https://www.hiascend.com/document/detail/en/CANNCommunityEdition/900/programug/Ascendcopdevg/atlas_ascendc_best_practices_10_10003.html\">H4 · UnitFlag 与 Mmad / Fixpipe 优化</a>。</p>"
+      },
+      {
+        "id": "ascend-compiler",
+        "title": "公开编译器与论文：困难落在同步位置和有限 ID",
+        "html": "\n<p>AscendNPU-IR 的 HIVM 方言公开了 <code>set_flag</code>、<code>wait_flag</code>、<code>pipe_barrier</code> 等操作。其 Auto-Sync 文档明确区分默认的 GraphSyncSolver 系列与可回退的 InjectSync 系列。本次冻结版本中，图求解器分析冲突、选择同步位置、分配 event/flag ID 并生成同步 IR；EventIdSolver 中能直接看到冲突关系、可着色性检查和对已用／保留 ID 的排除。这里验证到的是<strong>公开源码结构</strong>，没有运行该编译器或证明它对所有程序正确。</p>\n<p>直接相关论文是李帅江等的《面向昇腾处理器的高性能同步原语自动插入方法》，发表于<strong>《计算机研究与发展》2025 年</strong>，作者单位包括中科院计算所与华为。它先用虚拟同步资源处理依赖与控制流，再清理／合并同步，最后映射到有限物理 ID，并在 910A 上评估。它是高度相关的期刊论文，不能写成 ISCA/MICRO 论文；其算法与今天开源图求解器也不能仅凭相似阶段就认定完全一致。</p>\n<p>这揭示了一个重要区别：<strong>昇腾编译器可以先为逻辑事件起不同名字，再处理名字能否同时驻留；Zeus 不能靠给每条边换一个硬件 ID 解决匿名同通道的先后错配。</strong>但两者都必须处理分支路径、循环首尾、重复使用的缓冲区和冗余同步，而非“昇腾只做简单插 barrier”。</p>\n<details class=\"pe-deep-dive\"><summary>阅读论文时的一条证据警惕</summary><p>论文根据观察到的生成代码 ID 范围讨论四个物理 ID。仅凭编译器未使用更大编号，并不足以独立证明硬件没有更多资源；应以具体产品文档交叉核对。本文因此引用官方分产品 ID 范围，不把论文中的推断升级成全系列硬件事实。</p></details>\n<p class=\"source-note\">依据：<a href=\"https://github.com/Ascend/AscendNPU-IR/blob/255344be91f234b622c16290f14b8638ac894001/docs/source/en/developer_guide/features/auto_sync.md\">H5 · AscendNPU-IR Auto-Sync</a>；<a href=\"https://github.com/Ascend/AscendNPU-IR/blob/255344be91f234b622c16290f14b8638ac894001/bishengir/include/bishengir/Dialect/HIVM/IR/HIVMSynchronizationOps.td\">H6 · HIVM 同步操作定义</a>；<a href=\"https://github.com/Ascend/AscendNPU-IR/blob/255344be91f234b622c16290f14b8638ac894001/bishengir/lib/Dialect/HIVM/Transforms/GraphSyncSolver/EventIdSolver.cpp\">H7 · EventIdSolver</a>；<a href=\"https://crad.ict.ac.cn/cn/article/pdf/preview/10.7544/issn1000-1239.202440093.pdf\">H8 · 面向昇腾处理器的高性能同步原语自动插入方法</a>。</p>"
+      },
+      {
+        "id": "cambricon-2016",
+        "title": "先分代：2016 年 Cambricon ISA 原型做了什么",
+        "html": "\n<p><strong>Cambricon: An Instruction Set Architecture for Neural Networks</strong>发表于 ISCA 2016。论文讨论标量、向量、矩阵、访存和控制指令，并给出一个原型微架构。在 §IV 的原型中，指令顺序发射，地址生成后进入顺序内存队列，硬件检查与先前指令是否发生地址区域重叠且至少一方写入；不同延迟执行结果通过 ROB 处理顺序提交。</p>\n<p>所以，这个原型不是“软件为每条内存依赖显式发 mailbox”的例子，也不能仅凭有顺序发射就认为不需要依赖管理。<strong>它把一部分依赖识别责任放在硬件的地址区域检查上。</strong>本段只描述这篇论文的原型，不能据此断言现代 MLU 仍然为所有异步搬运自动发现并解决内存冲突。</p>\n<p>研究时应把两条线分开：一条是公开 ISA 论文解释的设计思想；另一条是今天能获取的 BANG C 合同和 MLU-OPS 实际代码。论文存在不等于商业产品的全部指令编码已经开源；开源算子也不能替代未公开的微架构说明。</p>\n<p class=\"source-note\">依据：<a href=\"https://reconfigdeeplearning.wordpress.com/wp-content/uploads/2017/02/2016-isca_cambricon-an-instruction-set-architecture-for-neural-networks_cyj.pdf\">C1 · Cambricon: An Instruction Set Architecture for Neural Networks</a>；<a href=\"https://github.com/Cambricon/mlu-ops/blob/8c428bfca7fd20cdbbdd4396cff20c017302dbca/docs/BANG-C-OPS-Develop-Guide.md\">C2 · BANG C OPS 开发指南</a>。</p>"
+      },
+      {
+        "id": "cambricon-modern",
+        "title": "现代 MLU：硬件处理一部分依赖，异步内存交接仍需同步",
+        "html": "\n<p>MLU-OPS 开发指南以 MLUv03 为例，区分 ALU、VFU、TFU、IO-DMA 和 Move-DMA 等执行流水线。可把 ALU 理解为标量工作，VFU/TFU 为不同计算通路，IO-DMA 与 Move-DMA 为不同搬运通路；但后面的同步 API 又以 IO、Move、Compute 三组描述，这两套分组不能机械地一一对应成同样数量的“指令队列”。</p>\n<p>指南说明，某些通用寄存器上的依赖由硬件依赖处理与寄存器重命名等机制管理；而异步搬运与计算对 NRAM/WRAM 等片上存储的交接，需要显式同步。NRAM 可理解为计算侧使用的本地存储，WRAM 用于相应权重路径，SRAM 可用于 cluster 内共享的数据暂存；每种存储的路径与参与者仍由目标架构决定。</p>\n<p>例如，异步 load 写 NRAM 后立即启动消费它的计算，或计算尚未写完就异步 store，不能只依靠 C 语句的先后顺序。MLU-OPS 的三阶段模板直接出现异步拷贝、计算与内联 <code>sync;</code>；五阶段模板还组合了 <code>__sync_cluster()</code>、<code>__sync_move()</code> 和 <code>__sync_compute()</code>。这些代码说明同步是真实程序的一部分，同时也说明 barrier 与流水化重叠并不矛盾。</p>\n<p>这里不能误读“寄存器重命名”：它可消除名字复用引起的部分假依赖，真正的 RAW 仍需要数据就绪保证。也不能把指令流水线名字的数量，直接拿来与 Zeus 九个 mailbox 端点比较硬件并行度。</p>\n<p class=\"source-note\">依据：<a href=\"https://github.com/Cambricon/mlu-ops/blob/8c428bfca7fd20cdbbdd4396cff20c017302dbca/docs/BANG-C-OPS-Develop-Guide.md\">C2 · BANG C OPS 开发指南</a>；<a href=\"https://github.com/Cambricon/mlu-ops/blob/8c428bfca7fd20cdbbdd4396cff20c017302dbca/kernels/unary_op/unary_op_3pipeline.h\">C5 · MLU-OPS 三阶段流水模板</a>；<a href=\"https://github.com/Cambricon/mlu-ops/blob/8c428bfca7fd20cdbbdd4396cff20c017302dbca/kernels/unary_op/unary_op_5pipeline.h\">C6 · MLU-OPS 五阶段流水模板</a>。</p>"
+      },
+      {
+        "id": "cambricon-local",
+        "title": "关键接口：生产者与消费者可分别选择",
+        "html": "\n<p>BANG C 4.7.2 的核内同步接口给出了非常清楚的合同。下表中的“之前／之后”都相对本次同步操作的位置；除最后一行的总体同步外，所列消费集合按文档中的 IO/Move/Compute 三组描述，不能擅自增加 Scalar 保证。</p>\n<div class=\"table-wrap\"><table><thead><tr><th>接口</th><th>等待完成的前方工作</th><th>受约束的后方工作</th></tr></thead><tbody><tr><td><code>__sync()</code></td><td>本核此前全部相关指令</td><td>后续 IO、Move、Compute、Scalar</td></tr><tr><td><code>__sync_compute()</code></td><td>此前 Compute</td><td>后续 IO、Move、Compute</td></tr><tr><td><code>__sync_io()</code></td><td>此前 IO</td><td>后续 IO、Move、Compute</td></tr><tr><td><code>__sync_move()</code></td><td>此前 Move</td><td>后续 IO、Move、Compute</td></tr><tr><td><code>__sync_io_move_compute(...)</code></td><td>producer 参数选中的集合</td><td>consumer 参数选中的集合</td></tr></tbody></table></div>\n<p>最后一个接口有六个布尔参数：前三个选择 IO、Move、Compute 哪些是 producer；后三个选择哪些是 consumer。两边各至少选一个，默认都是 true。下面的实际 API 调用形式表达“此前 IO 完成后，后面的 Compute 才可以继续”：</p>\n<pre><code>__sync_io_move_compute(\n    true, false, false,  // Producers: IO only.\n    false, false, true   // Consumers: Compute only.\n);</code></pre>\n<figure class=\"diagram\"><svg viewBox=\"0 0 800 348\" role=\"img\" aria-label=\"寒武纪可选择生产和消费流水线的同步截面\" xmlns=\"http://www.w3.org/2000/svg\"><title>寒武纪可选择生产和消费流水线的同步截面</title><desc>图 3 · BANG C 4.7.2 六参数同步接口的原创语义图。斜箭头是唯一展示的新增依赖；灰色表示没有由本次调用新增依赖，不代表能绕过其他数据、资源或实现约束。不是硬件门电路图。</desc><defs><marker id=\"chip-arrow-cam\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto-start-reverse\"><path d=\"M0 0 L10 5 L0 10 Z\" fill=\"#356a70\"/></marker></defs><g font-family=\"system-ui, sans-serif\"><text x=\"400\" y=\"27\" font-size=\"20\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"400\" dy=\"0\">一个程序截面，分别选择 producer 集合与 consumer 集合</tspan></text><path d=\"M400 45 L400 292\" stroke=\"#be8552\" stroke-width=\"3\" stroke-dasharray=\"7 5\"/><text x=\"100\" y=\"74\" font-size=\"16\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"100\" dy=\"0\">截面之前</tspan></text><text x=\"690\" y=\"74\" font-size=\"16\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"690\" dy=\"0\">截面之后</tspan></text><text x=\"16\" y=\"124\" font-size=\"17\" text-anchor=\"start\" fill=\"#203a40\"><tspan x=\"16\" dy=\"0\">IO</tspan></text><rect x=\"120\" y=\"100\" width=\"205\" height=\"48\" rx=\"10\" fill=\"#d7e8df\" stroke=\"#8aa6a0\"/><text x=\"222.5\" y=\"130\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"222.5\" dy=\"0\">已发出的工作</tspan></text><rect x=\"505\" y=\"100\" width=\"260\" height=\"48\" rx=\"10\" fill=\"#f1f1ec\" stroke=\"#8aa6a0\"/><text x=\"635\" y=\"130\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"635\" dy=\"0\">此接口未添加等待</tspan></text><text x=\"16\" y=\"196\" font-size=\"17\" text-anchor=\"start\" fill=\"#203a40\"><tspan x=\"16\" dy=\"0\">Move</tspan></text><rect x=\"120\" y=\"172\" width=\"205\" height=\"48\" rx=\"10\" fill=\"#f1f1ec\" stroke=\"#8aa6a0\"/><text x=\"222.5\" y=\"202\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"222.5\" dy=\"0\">已发出的工作</tspan></text><rect x=\"505\" y=\"172\" width=\"260\" height=\"48\" rx=\"10\" fill=\"#f1f1ec\" stroke=\"#8aa6a0\"/><text x=\"635\" y=\"202\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"635\" dy=\"0\">此接口未添加等待</tspan></text><text x=\"16\" y=\"268\" font-size=\"17\" text-anchor=\"start\" fill=\"#203a40\"><tspan x=\"16\" dy=\"0\">Compute</tspan></text><rect x=\"120\" y=\"244\" width=\"205\" height=\"48\" rx=\"10\" fill=\"#f1f1ec\" stroke=\"#8aa6a0\"/><text x=\"222.5\" y=\"274\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"222.5\" dy=\"0\">已发出的工作</tspan></text><rect x=\"505\" y=\"244\" width=\"260\" height=\"48\" rx=\"10\" fill=\"#d7e8df\" stroke=\"#8aa6a0\"/><text x=\"635\" y=\"274\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"635\" dy=\"0\">后续计算必须等前方 IO</tspan></text><path d=\"M327 124 L370 124 L465 268 L502 268\" fill=\"none\" stroke=\"#356a70\" stroke-width=\"2.6\" marker-end=\"url(#chip-arrow-cam)\"/><text x=\"400\" y=\"324\" font-size=\"17\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"400\" dy=\"0\">示例：producer = {IO}，consumer = {Compute}</tspan></text></g></svg><figcaption>图 3 · BANG C 4.7.2 六参数同步接口的原创语义图。斜箭头是唯一展示的新增依赖；灰色表示没有由本次调用新增依赖，不代表能绕过其他数据、资源或实现约束。不是硬件门电路图。</figcaption></figure>\n<p>因此，<strong>寒武纪有能够表达定向流水线依赖的同步接口</strong>。但该接口的可见合同以一个程序截面为中心：选中生产集合的前缀，约束选中消费集合的后缀。它没有在这个调用中暴露一个可单独放到更早生产位置的 event ID，也没有暴露按第 k 枚 token 消费的通道。</p>\n<p>必须把“保证”和“未保证”分开：这个调用没有为未选中的消费流水线添加上述等待，并不代表实现不会因前端、共享资源或其他依赖产生间接阻塞。本次未从现代完整 ISA 或 RTL 验证其内部实现，也不据此断言 CNCC 一定发出哪种编码。实际使用还需满足该版本列出的 BANG 架构和 CNCC 版本条件。</p>\n<p class=\"source-note\">依据：<a href=\"https://www.cambricon.com/docs/sdk_1.15.0/cntoolkit_3.7.2/cambricon_bang_c_4.7.2/2Builtin-Functions/Intra-Core%20Synchronization%20Functions.html\">C3 · BANG C 核内同步 API</a>。</p>"
+      },
+      {
+        "id": "cambricon-inter",
+        "title": "跨核 barrier 与 split-phase：另一种范围、另一种状态",
+        "html": "\n<p><code>__sync_cluster()</code>面向本 cluster 的参与核；本次 SDK 文档采用 4 个 MLU 核加 1 个 MPU 核的配置。<code>__sync_all()</code>覆盖本 kernel 运行的 cluster 参与集合，数量与 UNION 任务类型相关。这里的 all 不意味着设备上所有其他 kernel、所有上下文或 Host 都参与。</p>\n<p>更值得注意的是 <code>__sync_cluster_arrive(id, count)</code> 与 <code>__sync_cluster_wait(id, count)</code>，以及对应的跨 cluster 版本。arrive 发送非阻塞到达信号；wait 等待相同 ID 累计到足够的到达／等待信号。这样，参与者可以先表明到达，再在真正需要结果的位置等待。这就是分离到达与等待的同步形式，足以反驳“所有 barrier 都只能立刻停在同一堵墙前”的说法。</p>\n<p>但这不是九个执行单元之间的匿名完成 token：<strong>参与者是核，条件是同一 barrier ID 的参与计数</strong>。文档还限制 barrier 的交叉使用顺序，并给出目标架构限制，例如该版 arrive/wait 要求 <code>__BANG_ARCH__ &gt;= 372</code> 且排除 520。ID 参数范围到 32767，也不能推导为可同时驻留 32768 个物理 barrier。</p>\n<p>这些核间接口的可见性与完成条件要按其合同使用；不要把一次核间到达自动视作任意先前异步 DMA 的完成证明。研究核内命令依赖时，应先把层级固定，再讨论如何与核间同步组合。</p>\n<p class=\"source-note\">依据：<a href=\"https://www.cambricon.com/docs/sdk_1.15.0/cntoolkit_3.7.2/cambricon_bang_c_4.7.2/2Builtin-Functions/Inter-Core%20Synchronization%20Functions.html\">C4 · BANG C 核间同步 API</a>。</p>"
+      },
+      {
+        "id": "zeus-endpoints",
+        "title": "Zeus 的“九条队列”需要怎样精确定义",
+        "html": "\n<p>在本次核对的顶层 RTL 中，同步位从高到低对应 <strong>CT、LD、LW、SI、ST、SO、PE、DT、VP</strong>。更精确的说法是<strong>九个逻辑同步端点</strong>：八类后端命令通过各自队列与发射条件推进，CT 则与统一前端控制紧密耦合。把它说成九个完全独立的程序计数器，会漏掉一个关键限制：CT 等待会阻止尚未分派的后续命令继续进入后端。</p>\n<figure class=\"diagram\"><svg viewBox=\"0 0 800 395\" role=\"img\" aria-label=\"Zeus 九个逻辑同步端点与前端\" xmlns=\"http://www.w3.org/2000/svg\"><title>Zeus 九个逻辑同步端点与前端</title><desc>图 4 · Zeus 静态 RTL 参考模型的原创结构图。箭头表示结构上的处理关系，不是数据总线或完整连线。九个端点包含 CT；八个后端名称按顶层位映射列出，不能把“九端点”直接说成九个独立线程。</desc><defs><marker id=\"chip-arrow-zeus\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto-start-reverse\"><path d=\"M0 0 L10 5 L0 10 Z\" fill=\"#356a70\"/></marker></defs><g font-family=\"system-ui, sans-serif\"><rect x=\"30\" y=\"30\" width=\"220\" height=\"64\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"140\" y=\"56\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"140\" dy=\"0\">统一指令流</tspan><tspan x=\"140\" dy=\"25\">分派与描述符处理</tspan></text><rect x=\"310\" y=\"30\" width=\"460\" height=\"64\" rx=\"10\" fill=\"#f3e8d5\" stroke=\"#8aa6a0\"/><text x=\"540\" y=\"56\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"540\" dy=\"0\">CT：前端内联执行的同步端点</tspan><tspan x=\"540\" dy=\"25\">CT 等待会阻止后续指令继续分派</tspan></text><path d=\"M252 62 L307 62\" fill=\"none\" stroke=\"#356a70\" stroke-width=\"2.4\"  marker-end=\"url(#chip-arrow-zeus)\"/><path d=\"M140 95 L140 147\" fill=\"none\" stroke=\"#356a70\" stroke-width=\"2.4\"  marker-end=\"url(#chip-arrow-zeus)\"/><rect x=\"30\" y=\"150\" width=\"740\" height=\"78\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"400\" y=\"183\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"400\" dy=\"0\">后端逻辑端点：LD · LW · SI · ST · SO · PE · DT · VP</tspan><tspan x=\"400\" dy=\"25\">各自的队列 / 发射条件；不是九套完全对称的独立 PC</tspan></text><path d=\"M400 230 L400 268\" fill=\"none\" stroke=\"#356a70\" stroke-width=\"2.4\"  marker-end=\"url(#chip-arrow-zeus)\"/><rect x=\"30\" y=\"272\" width=\"350\" height=\"75\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"205\" y=\"303.5\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"205\" dy=\"0\">接收侧 inbox</tspan><tspan x=\"205\" dy=\"25\">按发送端累计匿名 token</tspan></text><rect x=\"420\" y=\"272\" width=\"350\" height=\"75\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"595\" y=\"303.5\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"595\" dy=\"0\">发送侧 outbox</tspan><tspan x=\"595\" dy=\"25\">按顺序退休并释放通知</tspan></text><text x=\"400\" y=\"377\" font-size=\"17\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"400\" dy=\"0\">VP / DT 的内部子通路共享各自的逻辑 mailbox 身份</tspan></text></g></svg><figcaption>图 4 · Zeus 静态 RTL 参考模型的原创结构图。箭头表示结构上的处理关系，不是数据总线或完整连线。九个端点包含 CT；八个后端名称按顶层位映射列出，不能把“九端点”直接说成九个独立线程。</figcaption></figure>\n<p>已经分派到其他后端的工作可以继续推进，但未分派的“未来 producer”不能凭空越过 CT。如果 CT 等待的通知只能由一条尚在它后面的命令产生，就有前端闭环等待风险。这与普通后端队头因 recv 不就绪而等待的影响范围不同。</p>\n<p>VP 与 DT 内部还有子通路，实际完成可来自不同 lane；观察到的 outbox 按头部记录选择对应 lane 的完成标志后才退休。因此，<strong>内部并行 lane 数、逻辑同步端点数、队列数、独立控制流数</strong>必须分开计数。九端点本身既不能证明并行度恰为九，也不能证明一定高于其他架构。</p>\n<p>依据来自当前编译器端点表和 RTL 顶层连线。部分子模块默认参数与顶层覆盖后的位号不同；本文采用顶层实例化后的语义，避免直接抄子模块默认值造成端点错位。</p>\n<p class=\"source-note\">依据：<a href=\"https://github.com/Xuanwen-Wang/interview/blob/main/evidence/domestic-chip-dependencies.md\">E1 · 本文证据与验证边界</a>；<a href=\"https://github.com/Xuanwen-Wang/interview/blob/main/evidence/domestic-chip-dependency-sources.json\">E2 · 可复核来源清单</a>。</p>"
+      },
+      {
+        "id": "zeus-protocol",
+        "title": "从收信、发射到完成通知：五个时刻不能合并",
+        "html": "\n<p>把一个后端命令的关键路径写出来：</p>\n<pre><code>front-end dispatch / descriptor capture\n    -> queue head\n    -> all requested inbox counters are ready\n    -> instruction issue, consume selected incoming tokens\n    -> execution completes\n    -> ordered outbox retirement, release selected outgoing tokens</code></pre>\n<p>对源端点 p、目标端点 q，定义 <code>m[p,q]</code> 为 q 的 inbox 中来自 p 的未消费通知数。某条命令的 recv 掩码选中多个源时，要求这些计数都大于零；实际发射／checkout 时，每个被选中源减一。它表达的是 AND 汇合：等每个源各一枚通知，而不是“任意一个源来了即可”。尚未真正发射时不会先把部分源的 token 提前吃掉。</p>\n<p>带 send 掩码的正常后端命令，其执行完成还不等于通知已发出：它必须等自己的 outbox 条目按序到头，并且所选目的通道都有容量。某一目的通道满，可能把同一通知条目向其他目的端的释放一起挡住；更晚的通知也可能被队头挡住。独立 MAIL 操作则提供单独的收发位置，用于表达或合并同步前沿；这里的描述是语义概括，不是每种 opcode 的位编码清单。</p>\n<p>接收计数器没有 event ID、地址或资源名。发送方和接收方的身份确定通道，通道内只累计“有几次完成许可还没消费”。因此<strong>普通命令自带掩码减少了独立同步指令的需要，却没有消除同步状态，也没有免费解决依赖匹配</strong>。</p>\n<p>同单元也可能存在内部并行或读写重叠；顺序发射并不总能证明所需完成顺序。是否需要 self-mail，要依据该指令族实际保证；不能一律删除同端点依赖。类似地，recv 在后端发射时生效，不能替代已经发生在前端的描述符采样顺序。</p>\n<p class=\"source-note\">依据：<a href=\"https://github.com/Xuanwen-Wang/interview/blob/main/evidence/domestic-chip-dependencies.md\">E1 · 本文证据与验证边界</a>。</p>"
+      },
+      {
+        "id": "zeus-ordinal",
+        "title": "匿名匹配的反例：两个 send、两个 recv 仍会错",
+        "html": "\n<p>考虑同一 P→C 通道。P1 写 A，P2 写 B，生产通知按 P1、P2 顺序释放；C1 先读 B，C2 后读 A。若天真地“每条依赖各加一个 send 和 recv”，C1 将消耗通道中的第一枚 token。这枚 token 只说明 P1 已完成，不能证明它需要的 B 已由 P2 写好。</p>\n<figure class=\"diagram\"><svg viewBox=\"0 0 800 385\" role=\"img\" aria-label=\"匿名 mailbox 错配反例及安全修复\" xmlns=\"http://www.w3.org/2000/svg\"><title>匿名 mailbox 错配反例及安全修复</title><desc>图 5 · 原创反例。A、B 是不同资源，P/C 各保持所画顺序；箭头按顺序或 token 消耗含义标注。故障来自匿名通道不携带 A/B 身份。修复依赖 P2 通知退休蕴含 P1 已完成，不是所有程序都能照搬。</desc><defs><marker id=\"chip-arrow-mail\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto-start-reverse\"><path d=\"M0 0 L10 5 L0 10 Z\" fill=\"#356a70\"/></marker></defs><g font-family=\"system-ui, sans-serif\"><text x=\"400\" y=\"27\" font-size=\"20\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"400\" dy=\"0\">同一 P → C 通道：计数相等，不代表资源对应正确</tspan></text><text x=\"20\" y=\"83\" font-size=\"18\" text-anchor=\"start\" fill=\"#203a40\"><tspan x=\"20\" dy=\"0\">P</tspan></text><rect x=\"90\" y=\"53\" width=\"240\" height=\"56\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"210\" y=\"87\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"210\" dy=\"0\">P1：写 A；send</tspan></text><rect x=\"465\" y=\"53\" width=\"245\" height=\"56\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"587.5\" y=\"87\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"587.5\" dy=\"0\">P2：写 B；send</tspan></text><path d=\"M332 81 L462 81\" fill=\"none\" stroke=\"#356a70\" stroke-width=\"2.4\"  marker-end=\"url(#chip-arrow-mail)\"/><text x=\"20\" y=\"208\" font-size=\"18\" text-anchor=\"start\" fill=\"#203a40\"><tspan x=\"20\" dy=\"0\">C</tspan></text><rect x=\"90\" y=\"178\" width=\"240\" height=\"56\" rx=\"10\" fill=\"#f5dfd7\" stroke=\"#8aa6a0\"/><text x=\"210\" y=\"212\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"210\" dy=\"0\">C1：recv；读 B</tspan></text><rect x=\"465\" y=\"178\" width=\"245\" height=\"56\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"587.5\" y=\"212\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"587.5\" dy=\"0\">C2：recv；读 A</tspan></text><path d=\"M332 206 L462 206\" fill=\"none\" stroke=\"#356a70\" stroke-width=\"2.4\"  marker-end=\"url(#chip-arrow-mail)\"/><path d=\"M210 110 L210 174\" fill=\"none\" stroke=\"#356a70\" stroke-width=\"2.4\"  marker-end=\"url(#chip-arrow-mail)\"/><text x=\"228\" y=\"146\" font-size=\"16\" text-anchor=\"start\" fill=\"#203a40\"><tspan x=\"228\" dy=\"0\">第一枚 token 被 C1 消耗</tspan></text><text x=\"400\" y=\"267\" font-size=\"17\" text-anchor=\"middle\" fill=\"#8a3f2f\"><tspan x=\"400\" dy=\"0\">失败执行：P1 已通知，P2 尚未写完，C1 却获得许可</tspan></text><rect x=\"60\" y=\"298\" width=\"680\" height=\"60\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"400\" y=\"322\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"400\" dy=\"0\">一种安全修复：在 P2 完成后只发一枚合并通知</tspan><tspan x=\"400\" dy=\"25\">C1 等待它；本例中 C2 复用这个已建立的完成前沿</tspan></text></g></svg><figcaption>图 5 · 原创反例。A、B 是不同资源，P/C 各保持所画顺序；箭头按顺序或 token 消耗含义标注。故障来自匿名通道不携带 A/B 身份。修复依赖 P2 通知退休蕴含 P1 已完成，不是所有程序都能照搬。</figcaption></figure>\n<p>硬件计数器并不存储 token 的队列内容。我们说“第 k 枚 send 对应第 k 次 recv”，是<strong>用序号追踪匿名通知的逻辑分析方法</strong>，不是说硬件真的保存 k 或资源标签。在可执行顺序中，这种序号对应必须由编译器保证。</p>\n<p>本例的安全方案之一，是将两个依赖合并成 P2 完成后的一个发送前沿，在 C1 前接收一次。由于 P 的通知退休有序，跨过 P2 前沿意味着 P1 也已完成；C2 不再需要第二次等待。代价和收益取决于原始调度：可能减少同步，也可能把某些更早可运行的消费者拖到更晚。</p>\n<p>有名事件可令 C1 等 B、C2 等 A，保持显式身份。但 C1 位于队头时仍会挡住 C2，所以这个反例证明的是<strong>无标签通道的匹配义务</strong>，不证明有名事件在所有调度上更快，也不证明每条逻辑边都必须对应一个物理 token。</p>\n<p class=\"source-note\">依据：<a href=\"https://github.com/Xuanwen-Wang/interview/blob/main/evidence/domestic-chip-dependencies.md\">E1 · 本文证据与验证边界</a>。</p>"
+      },
+      {
+        "id": "zeus-control",
+        "title": "分支与循环：守恒、顺序、种子和排空",
+        "html": "\n<p>令 <code>S[p,q](π)</code> 和 <code>R[p,q](π)</code> 分别为某一实际执行前缀 π 中，已释放到通道 p→q 的通知数和已成功消费的次数。给定初始计数 m₀，可写成：</p>\n<div class=\"formula\">m[p,q](π) = m₀[p,q] + S[p,q](π) − R[p,q](π)</div>\n<p>这是通道守恒式。它至少要求每个可达执行前缀不凭空消费通知，并符合容量限制；若协议约定结束时回到空状态，还需最终收发平衡。<strong>最终总数相同远远不够</strong>：上一节反例总数就相同；也可能所有 recv 都在各自 send 之前卡住，最终平衡只是一个永远到不了的理想账本。</p>\n<div class=\"table-wrap\"><table><thead><tr><th>结构</th><th>典型风险</th><th>必须处理的义务</th></tr></thead><tbody><tr><td>if / else</td><td>只有 then 分支发送，合流后无条件接收</td><td>按真实可达路径对齐通知合同；可移动、合并或补偿，但补偿 token 也必须代表合法完成前沿</td></tr><tr><td>循环</td><td>旧迭代剩余 token 被新迭代当成数据已就绪</td><td>区分迭代间依赖和初始状态；维护稳定的消费次序</td></tr><tr><td>循环首轮</td><td>等待 free token，但此前没有消费者可归还</td><td>由协议明确初始化可用槽的种子，或把首轮等待移出；不能盲目删除等待</td></tr><tr><td>零次循环 / 尾轮</td><td>种子没有被消费，或尾部留有额外发送</td><td>单独处理零次路径、退出边与排空，避免污染后续阶段</td></tr><tr><td>CFG 合流</td><td>不同前驱的 token 数一样，但含义不同</td><td>比较来源与完成前沿，不能只比较一个整数计数</td></tr></tbody></table></div>\n<p>Zeus 当前 Staircase 实现中能看到通道规划、控制流处理、物理发送／接收安排、ledger 与验证相关代码。它们说明工程上确实要管理这些义务；本文未执行该 pass 的完整测试，也不将存在验证器当作对任意 CFG 的形式化正确性证明。</p>\n<p class=\"source-note\">依据：<a href=\"https://github.com/Xuanwen-Wang/interview/blob/main/evidence/domestic-chip-dependencies.md\">E1 · 本文证据与验证边界</a>。</p>"
+      },
+      {
+        "id": "zeus-capacity",
+        "title": "有限容量会把“能表示”变成“能否前进”",
+        "html": "\n<p>所查 RTL 的邮箱计数器宽度为 6 bit，发送路径在目的通道计数达到 <strong>63</strong> 时阻止新的通知退休。63 是这份参考实现的计数上限，不是本次测出的性能值，也不是说每条程序都能安全积累到这个上限。</p>\n<p>当前 Staircase 规划代码采用 <code>kOutstandingBudget = kMailboxCounterCapacity - 1</code>，即以 <strong>62</strong> 为规划预算，结合合并前沿等方法控制未消费通知。源码注释把这个保守预算与有界通道、反向等待关系及多源同时接收的风险联系起来。62 是编译器规划约束，63 是所查硬件计数边界；不应混写为“硬件只有 62 格”，也不能仅凭这行常量声称所有动态执行状态都已证明安全。</p>\n<p>一个不使用真实容量数值的教学反例更容易理解：设 P→C 通道容量为 B。P 的 outbox 前面安排 B+1 次向 C 发送，后面才向另一个端点 R 发送；R 收到 P 的通知后才能通知 C；C 又要先收到 R 的通知，才开始消费 P→C。于是 P 在第 B+1 次发送处卡住，R 等 P，C 等 R。依赖的数据本身可以全部正确，系统仍可能因为满通道和有序 outbox 形成环。这说明容量是<strong>活性约束</strong>，不只是“计数器溢出时多等几拍”。</p>\n<p>需要在等待图里同时画出数据依赖、队头顺序、前端 CT 阻塞以及通道满产生的反向边。只证明原始数据 DAG 无环，不能证明实现后的有界协议无死锁。</p>\n<p class=\"source-note\">依据：<a href=\"https://github.com/Xuanwen-Wang/interview/blob/main/evidence/domestic-chip-dependencies.md\">E1 · 本文证据与验证边界</a>；<a href=\"https://github.com/Xuanwen-Wang/interview/blob/main/evidence/domestic-chip-dependency-sources.json\">E2 · 可复核来源清单</a>。</p>"
+      },
+      {
+        "id": "comparison",
+        "title": "把三种机制放到同一张对照表",
+        "html": "\n<p>下面只比较<strong>核内异步执行流之间</strong>的主要可见合同。寒武纪 cluster barrier、昇腾跨核同步和 Zeus 跨核通知都属于另一个层级，不能混入同一栏争论“谁更细”。表中成本均为机制上需要考虑的项目，不是芯片实测开销。</p>\n<div class=\"table-wrap\"><table><thead><tr><th>维度</th><th>昇腾 Set / Wait</th><th>MLU 核内选择性同步</th><th>Zeus mailbox</th></tr></thead><tbody><tr><td>匹配身份</td><td>源流水线、目标流水线、event ID</td><td>同步所在截面与 producer / consumer 集合</td><td>源端点、目标端点；通道内匿名计数</td></tr><tr><td>同步位置</td><td>Set 与 Wait 分开</td><td>一个程序截面</td><td>send / recv 可附着在不同命令；也可单独 MAIL</td></tr><tr><td>硬件可见状态</td><td>此接口表现为待消费标志位</td><td>API 不公开内部状态表示</td><td>每源计数、接收掩码与有序 outbox</td></tr><tr><td>多个在途关系</td><td>使用不同 ID；安全时复用</td><td>用不同截面组织阶段</td><td>累积多个 token；序号含义由软件维持</td></tr><tr><td>编译器核心压力</td><td>事件生命周期、ID 分配与位置优化</td><td>截面位置、选择集合与调度优化</td><td>匿名序列匹配、路径守恒、容量与前沿合并</td></tr><tr><td>主要额外约束</td><td>有限 ID、wait 队头、过早 Set / 过晚 Wait</td><td>截面覆盖的前缀／后缀可能较宽</td><td>outbox 队头、满通道、CT 前端阻塞</td></tr><tr><td>更细资源机制</td><td>特定路径上的 UnitFlag 等</td><td>本次材料不足以列出全部硬件原语</td><td>所查协议以命令通知为主；不能排除其他专用机制</td></tr></tbody></table></div>\n<p>三者都能建立“生产工作完成后消费工作才开始”的偏序。差别不是谁有依赖、谁没有依赖，而是<strong>选择依赖所用的身份、位置与资源状态不同</strong>。同样不能从代码表面判断同步指令开销：Ascend C 或 BANG C 的一个调用可能经编译发生多种展开，Zeus 一条普通指令也可能携带额外依赖信息。</p>\n<p>从硬件状态规模看，按有序端点对组织通道在全连接设计中具有端点数平方级的潜在连接关系；但具体芯片会裁剪、不对称连接、复用逻辑或改变位宽。本文不把 9×9×6 这样的简单乘法当成真实面积，更不拿它与厂商未公开状态阵列直接比较。</p>\n<p class=\"source-note\">依据：<a href=\"https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/82RC1/API/ascendcopapi/atlasascendc_api_07_0181.html\">H2 · SetFlag / WaitFlag</a>；<a href=\"https://www.cambricon.com/docs/sdk_1.15.0/cntoolkit_3.7.2/cambricon_bang_c_4.7.2/2Builtin-Functions/Intra-Core%20Synchronization%20Functions.html\">C3 · BANG C 核内同步 API</a>；<a href=\"https://github.com/Xuanwen-Wang/interview/blob/main/evidence/domestic-chip-dependencies.md\">E1 · 本文证据与验证边界</a>。</p>"
+      },
+      {
+        "id": "frontiers",
+        "title": "单截面与分离前沿：一个更准确的区别",
+        "html": "\n<p>为了隔离接口表达方式，固定如下全局分派顺序：<code>P1(A), P2(independent), C0(independent), C1(A)</code>。P1 与 P2 属于生产流水线，C0 与 C1 属于消费流水线；只需保证 P1 写完 A 后 C1 才读 A，其他两项与 A 无关。这是<strong>本文人为固定的调度模型</strong>，不是某个真实 kernel 的汇编。</p>\n<figure class=\"diagram\"><svg viewBox=\"0 0 800 345\" role=\"img\" aria-label=\"单截面与两个同步位置的区别\" xmlns=\"http://www.w3.org/2000/svg\"><title>单截面与两个同步位置的区别</title><desc>图 6 · 原创固定调度模型。P1、P2 属于生产流水线，C0、C1 属于消费流水线；横向是程序分派顺序。比较一个 producer/consumer 截面与两个可独立放置的位置，不模拟任何产品的周期、阻塞范围或编译器最终调度。</desc><defs><marker id=\"chip-arrow-front\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto-start-reverse\"><path d=\"M0 0 L10 5 L0 10 Z\" fill=\"#356a70\"/></marker></defs><g font-family=\"system-ui, sans-serif\"><text x=\"400\" y=\"27\" font-size=\"20\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"400\" dy=\"0\">固定全局分派顺序，仅要求 P1 完成 → C1 开始</tspan></text><rect x=\"20\" y=\"65\" width=\"170\" height=\"60\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"105\" y=\"101\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"105\" dy=\"0\">P1：生产 A</tspan></text><rect x=\"215\" y=\"65\" width=\"170\" height=\"60\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"300\" y=\"101\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"300\" dy=\"0\">P2：独立工作</tspan></text><rect x=\"410\" y=\"65\" width=\"170\" height=\"60\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"495\" y=\"101\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"495\" dy=\"0\">C0：独立工作</tspan></text><rect x=\"605\" y=\"65\" width=\"175\" height=\"60\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"692.5\" y=\"101\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"692.5\" dy=\"0\">C1：消费 A</tspan></text><path d=\"M192 95 L212 95\" fill=\"none\" stroke=\"#356a70\" stroke-width=\"2.4\"  marker-end=\"url(#chip-arrow-front)\"/><path d=\"M387 95 L407 95\" fill=\"none\" stroke=\"#356a70\" stroke-width=\"2.4\"  marker-end=\"url(#chip-arrow-front)\"/><path d=\"M582 95 L602 95\" fill=\"none\" stroke=\"#356a70\" stroke-width=\"2.4\"  marker-end=\"url(#chip-arrow-front)\"/><text x=\"205\" y=\"165\" font-size=\"16\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"205\" dy=\"0\">早放截面</tspan><tspan x=\"205\" dy=\"25\">会让 C0 也等 P1</tspan></text><text x=\"593\" y=\"165\" font-size=\"16\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"593\" dy=\"0\">晚放截面</tspan><tspan x=\"593\" dy=\"25\">会让 C1 也等 P2</tspan></text><path d=\"M105 127 L105 228 L692 228 L692 128\" fill=\"none\" stroke=\"#356a70\" stroke-width=\"2.5\" marker-end=\"url(#chip-arrow-front)\"/><text x=\"400\" y=\"214\" font-size=\"17\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"400\" dy=\"0\">Set / send 取 P1 前沿，Wait / recv 取 C1 前沿</tspan></text><rect x=\"65\" y=\"265\" width=\"670\" height=\"56\" rx=\"10\" fill=\"#f3e8d5\" stroke=\"#8aa6a0\"/><text x=\"400\" y=\"299\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"400\" dy=\"0\">允许重排后，单截面也可能消除额外约束；这里没有性能结论</tspan></text></g></svg><figcaption>图 6 · 原创固定调度模型。P1、P2 属于生产流水线，C0、C1 属于消费流水线；横向是程序分派顺序。比较一个 producer/consumer 截面与两个可独立放置的位置，不模拟任何产品的周期、阻塞范围或编译器最终调度。</figcaption></figure>\n<p>如果只用一个“生产集合 P → 消费集合 C”的截面，放在 P1 后、P2 前，会让后面的 C0 也等 P1；放在 C0 后、C1 前，又会把 P2 包进要等待的生产前缀。位于 P2 和 C0 之间则同时带上这两种额外限制。分离的 Set/Wait，或附着在 P1 和 C1 上的 send/recv，可以分别选择两个前沿。</p>\n<p>这个例子解释了<strong>位置自由度</strong>。它没有证明某芯片更慢：编译器可能合法重排 P2 或 C0；一条无关工作可能本来就不在关键路径；硬件也可能有本次未覆盖的其他机制。只有在相同硬件资源、相同工作负载、明确调度约束和完整实现下测量，才能把额外依赖边转化成性能差异。</p>\n<p>对于 Zeus，分离前沿也不是免费任意放置：同一匿名通道中多个前沿仍必须按可匹配的顺序合成。对于昇腾，前沿表达完成后还要分配有限 ID。对比应从这些各自的约束出发，而不是把一个最弱 barrier 基线当作整家厂商的能力。</p>"
+      },
+      {
+        "id": "double-buffer",
+        "title": "把同一个双缓冲例子映射到三种合同",
+        "html": "\n<p>设输入有两个地址槽 <code>X[0]</code>、<code>X[1]</code>，第 i 个 tile 使用 <code>X[i mod 2]</code>。这里的 tile 只是任意数据块，未设置时延和 shape。每个槽需要两类信息：ready 表示生产者写完，free 表示最后一个消费者读完、可被覆盖。两个名字描述的是逻辑事实，不要求硬件真的使用名为 ready/free 的寄存器。</p>\n<figure class=\"diagram\"><svg viewBox=\"0 0 800 320\" role=\"img\" aria-label=\"双缓冲必须同时维护数据就绪与空间可复用\" xmlns=\"http://www.w3.org/2000/svg\"><title>双缓冲必须同时维护数据就绪与空间可复用</title><desc>图 7 · 原创双缓冲生命周期图，两行对应两个地址槽，横向仅表示该槽的使用顺序。tile 是任意数据块；图中未设时延、shape 或真实重叠率。完整算子还需对输出槽建立同样的归还边。</desc><defs><marker id=\"chip-arrow-buf\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto-start-reverse\"><path d=\"M0 0 L10 5 L0 10 Z\" fill=\"#356a70\"/></marker></defs><g font-family=\"system-ui, sans-serif\"><text x=\"400\" y=\"27\" font-size=\"20\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"400\" dy=\"0\">两块输入缓冲：地址轮换不能替代依赖协议</tspan></text><rect x=\"20\" y=\"67\" width=\"225\" height=\"65\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"132.5\" y=\"93.5\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"132.5\" dy=\"0\">槽 0：Load tile 0</tspan><tspan x=\"132.5\" dy=\"25\">写入 X[0]</tspan></text><rect x=\"285\" y=\"67\" width=\"225\" height=\"65\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"397.5\" y=\"93.5\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"397.5\" dy=\"0\">Compute tile 0</tspan><tspan x=\"397.5\" dy=\"25\">读 X[0]</tspan></text><rect x=\"550\" y=\"67\" width=\"230\" height=\"65\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"665\" y=\"93.5\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"665\" dy=\"0\">Load tile 2</tspan><tspan x=\"665\" dy=\"25\">重新覆盖 X[0]</tspan></text><path d=\"M247 99 L282 99\" fill=\"none\" stroke=\"#356a70\" stroke-width=\"2.4\"  marker-end=\"url(#chip-arrow-buf)\"/><path d=\"M512 99 L547 99\" fill=\"none\" stroke=\"#356a70\" stroke-width=\"2.4\"  marker-end=\"url(#chip-arrow-buf)\"/><text x=\"267\" y=\"158\" font-size=\"16\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"267\" dy=\"0\">ready</tspan></text><text x=\"532\" y=\"158\" font-size=\"16\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"532\" dy=\"0\">free</tspan></text><rect x=\"20\" y=\"190\" width=\"225\" height=\"65\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"132.5\" y=\"216.5\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"132.5\" dy=\"0\">槽 1：Load tile 1</tspan><tspan x=\"132.5\" dy=\"25\">写入 X[1]</tspan></text><rect x=\"285\" y=\"190\" width=\"225\" height=\"65\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"397.5\" y=\"216.5\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"397.5\" dy=\"0\">Compute tile 1</tspan><tspan x=\"397.5\" dy=\"25\">读 X[1]</tspan></text><rect x=\"550\" y=\"190\" width=\"230\" height=\"65\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"665\" y=\"216.5\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"665\" dy=\"0\">Load tile 3</tspan><tspan x=\"665\" dy=\"25\">重新覆盖 X[1]</tspan></text><path d=\"M247 223 L282 223\" fill=\"none\" stroke=\"#356a70\" stroke-width=\"2.4\"  marker-end=\"url(#chip-arrow-buf)\"/><path d=\"M512 223 L547 223\" fill=\"none\" stroke=\"#356a70\" stroke-width=\"2.4\"  marker-end=\"url(#chip-arrow-buf)\"/><text x=\"400\" y=\"292\" font-size=\"17\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"400\" dy=\"0\">ready：写完成 → 可读；free：最后一次读完成 → 可覆盖</tspan></text></g></svg><figcaption>图 7 · 原创双缓冲生命周期图，两行对应两个地址槽，横向仅表示该槽的使用顺序。tile 是任意数据块；图中未设时延、shape 或真实重叠率。完整算子还需对输出槽建立同样的归还边。</figcaption></figure>\n<div class=\"table-wrap\"><table><thead><tr><th>机制</th><th>表达 ready / free 的方法</th><th>实现时必须补上的条件</th></tr></thead><tbody><tr><td>昇腾事件</td><td>搬入→计算使用一个方向的事件；计算→搬入用反方向事件；按在途生命周期分配 ID</td><td>同一 ID 不能在旧轮仍活跃时误复用；方向参与身份；若只支持整命令完成，保守等待到完成</td></tr><tr><td>MLU 同步截面</td><td>在第一次消费前插入所需生产集合→消费集合的同步；覆盖旧槽前同步相应旧消费者</td><td>同一 producer 集合可能包含另一槽的无关工作；应结合调度优化；cluster 共享数据另需核间合同</td></tr><tr><td>Zeus token</td><td>搬入端向计算端发 ready；计算端向搬入端发 free；通过消费顺序代表槽和迭代</td><td>token 自身不包含槽号；预取深度、分支及尾部必须维持序号对应；并非每轮都需要独立 token</td></tr></tbody></table></div>\n<p>初始化时，两个槽逻辑上空闲，但这不自动意味着硬件已有两枚 free token。程序可以特殊处理前两次搬入，也可以在合法位置建立协议种子；两种方法都要处理零次循环和结束排空。把图中的所有箭头机械翻译成通知，有可能重复同步或制造循环等待。编译器应先利用已有顺序和可合并前沿，再决定最少且安全的物理同步。</p>"
+      },
+      {
+        "id": "prior-art",
+        "title": "VTA：为什么“匿名 token + 指令依赖位”不能单独作为创新点",
+        "html": "\n<p>VTA 是一个重要的公开参照。其硬件文档描述 load、compute、store 三段解耦执行，使用依赖 FIFO 传递<strong>不携带数据身份的 token</strong>，依赖各模块的顺序行为保持对应。指令定义公开了对前后相邻阶段的 push/pop 依赖位。这里已经出现“依赖位附着于工作指令”“工作完成后推送通知”“开始前等待通知”的组合思想。</p>\n<p>因此，“我们用 mailbox，别人都用 barrier”不是稳健的相关工作结论；“我们不是显式单独 sync 指令，而是工作指令自带依赖位”也不足以单独支撑首创。VTA 的公开设计是直接反例，虽然它的默认拓扑、阶段数量与数据通路显著不同于 Zeus。</p>\n<p>更有价值的差异在于：Zeus 有更多且不完全对称的同步端点，多来源 AND 接收、目的端满导致的通知反压，以及需要覆盖复杂 CFG 的编译协议。<strong>差异不自动构成论文贡献</strong>：还需要清楚定义此前算法在哪些合法程序上失效、过度同步或无法处理容量，给出新的方法或保证，并用公平基线验证。</p>\n<p class=\"source-note\">依据：<a href=\"https://github.com/apache/tvm/blob/97c5de63ba6baa148fdf0c545ded2cd01d7838d1/docs/topic/vta/dev/hardware.rst\">V1 · VTA 数据流与依赖队列</a>；<a href=\"https://github.com/apache/tvm-vta/blob/d4a15f627d5cc9762a82270d1be60a136e6af9c2/include/vta/hw_spec.h\">V2 · VTA 指令依赖位</a>。</p>"
+      },
+      {
+        "id": "compiler-problem",
+        "title": "从体系结构到编译器：共同目标与不同难点",
+        "html": "\n<figure class=\"diagram\"><svg viewBox=\"0 0 800 365\" role=\"img\" aria-label=\"同步编译的共同输入与不同资源约束\" xmlns=\"http://www.w3.org/2000/svg\"><title>同步编译的共同输入与不同资源约束</title><desc>图 8 · 原创编译器问题分解。昇腾部分有公开实现和论文支持；MLU 部分是从公开接口推导的编译任务，不是对闭源 CNCC 算法的断言；Zeus 部分对应本次静态源码核对。</desc><defs><marker id=\"chip-arrow-comp\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto-start-reverse\"><path d=\"M0 0 L10 5 L0 10 Z\" fill=\"#356a70\"/></marker></defs><g font-family=\"system-ui, sans-serif\"><rect x=\"70\" y=\"22\" width=\"660\" height=\"64\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"400\" y=\"48\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"400\" dy=\"0\">共同输入：控制流 + 访存别名 + 读写完成合同</tspan><tspan x=\"400\" dy=\"25\">先产生必要依赖，再利用硬件已有顺序删去冗余边</tspan></text><path d=\"M400 88 L400 128\" fill=\"none\" stroke=\"#356a70\" stroke-width=\"2.4\"  marker-end=\"url(#chip-arrow-comp)\"/><rect x=\"20\" y=\"134\" width=\"245\" height=\"105\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"142.5\" y=\"168.5\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"142.5\" dy=\"0\">昇腾 event</tspan><tspan x=\"142.5\" dy=\"25\">选择 Set / Wait 位置</tspan><tspan x=\"142.5\" dy=\"25\">分配与复用有限 ID</tspan></text><rect x=\"278\" y=\"134\" width=\"245\" height=\"105\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"400.5\" y=\"168.5\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"400.5\" dy=\"0\">MLU 同步截面</tspan><tspan x=\"400.5\" dy=\"25\">选择程序位置</tspan><tspan x=\"400.5\" dy=\"25\">选择源 / 目标流水线</tspan></text><rect x=\"536\" y=\"134\" width=\"245\" height=\"105\" rx=\"10\" fill=\"#e2eee8\" stroke=\"#8aa6a0\"/><text x=\"658.5\" y=\"168.5\" font-size=\"18\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"658.5\" dy=\"0\">Zeus mailbox</tspan><tspan x=\"658.5\" dy=\"25\">合成通道 token 序列</tspan><tspan x=\"658.5\" dy=\"25\">维护匹配、路径、容量</tspan></text><text x=\"400\" y=\"279\" font-size=\"20\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"400\" dy=\"0\">优化目标不能只有“同步条数少”</tspan></text><text x=\"400\" y=\"312\" font-size=\"17\" text-anchor=\"middle\" fill=\"#203a40\"><tspan x=\"400\" dy=\"0\">还要考虑额外等待、前端停顿、队头阻塞、状态占用与死锁</tspan><tspan x=\"400\" dy=\"25\">此图是分析框架，不宣称三家编译器内部实现完全如此</tspan></text></g></svg><figcaption>图 8 · 原创编译器问题分解。昇腾部分有公开实现和论文支持；MLU 部分是从公开接口推导的编译任务，不是对闭源 CNCC 算法的断言；Zeus 部分对应本次静态源码核对。</figcaption></figure>\n<p>一个可比较的自动同步流程应先恢复资源身份与别名关系，确定每个操作的读写及完成合同，再建立必要顺序。接着利用硬件已有保证做传递消除，选择可实施的同步位置，处理控制流，最后落实有限状态资源。它们是共同问题，不应把其中任一厂家描绘成只会在相邻语句间插一条屏障。</p>\n<p>区别出现在最后两步：昇腾需要把逻辑事件映射到有限 ID，并维护正确复用；从 MLU 公布接口推导的任务是为所选源／目标流水线找合适截面，尽量不覆盖无关工作；Zeus 则要把逻辑依赖压成匿名通道的发送／接收序列，使每次消费都代表足够新的完成前沿，并控制在途数量。</p>\n<p>其中，对 MLU 的表述是<strong>接口所要求的编译问题</strong>，不等于已经读到 CNCC 内部实现。对昇腾可以用公开 EventIdSolver 和论文作代码级讨论；对 Zeus 可检查当前 pass 和 RTL；证据透明度不一样，不应把材料多的一方写得更复杂、材料少的一方写得更简单。</p>\n<p class=\"source-note\">依据：<a href=\"https://github.com/Ascend/AscendNPU-IR/blob/255344be91f234b622c16290f14b8638ac894001/docs/source/en/developer_guide/features/auto_sync.md\">H5 · AscendNPU-IR Auto-Sync</a>；<a href=\"https://github.com/Ascend/AscendNPU-IR/blob/255344be91f234b622c16290f14b8638ac894001/bishengir/lib/Dialect/HIVM/Transforms/GraphSyncSolver/EventIdSolver.cpp\">H7 · EventIdSolver</a>；<a href=\"https://www.cambricon.com/docs/sdk_1.15.0/cntoolkit_3.7.2/cambricon_bang_c_4.7.2/2Builtin-Functions/Intra-Core%20Synchronization%20Functions.html\">C3 · BANG C 核内同步 API</a>；<a href=\"https://github.com/Xuanwen-Wang/interview/blob/main/evidence/domestic-chip-dependencies.md\">E1 · 本文证据与验证边界</a>。</p>"
+      },
+      {
+        "id": "research-position",
+        "title": "如果要发展成论文，应当怎样定位",
+        "html": "\n<p>一个更可辩护的研究问题是：<strong>面向多执行流、匿名有界通知通道的自动依赖协议合成</strong>。输入不是一串笼统的“依赖指令”，而是带读写区域、完成语义和控制流的程序；输出是实际可发射的收发掩码、MAIL 位置和必要的调度约束。</p>\n<div class=\"table-wrap\"><table><thead><tr><th>可能的研究主张</th><th>需要真正证明或展示什么</th><th>不足以成立的表述</th></tr></thead><tbody><tr><td>正确性</td><td>每条可达路径上，消费许可蕴含所需生产事件已发生；覆盖 RAW/WAR/WAW 与配置采样</td><td>所有 send / recv 总数相等</td></tr><tr><td>活性与容量</td><td>在明确的公平性和硬件完成假设下，协议不会因有界通道、AND 接收和队头顺序死锁</td><td>原始数据依赖图无环</td></tr><tr><td>优化方法</td><td>前沿合并、协议变换或调度选择减少开销，且保持合同</td><td>同步条数更少就一定更快</td></tr><tr><td>工程可扩展性</td><td>处理多端点、分支、循环、预取和尾部，说明不能处理的情况与 fallback</td><td>九个端点比三个端点更先进</td></tr><tr><td>可验证产物</td><td>给出可复查的协议证据或检查器，证明范围与实现一致</td><td>代码里有 Verification 类即已形式化验证</td></tr></tbody></table></div>\n<p>候选贡献可以是：把匿名通道的序号来源与依赖前沿联系起来的统一模型；同时处理控制流守恒和有限容量的合成算法；或能检查已生成协议的独立验证方法。<strong>这些只是研究方向，不是本文已证明的新算法。</strong>是否具有新颖性还要扩展到更广的解耦执行、数据流 token、GPU 异步屏障与相关编译工作，不能仅用本次两家厂商调研完成全面首创检索。</p>\n<p>叙事上，宜把 Zeus 作为具体约束充分、可核验的研究载体。昇腾事件与 MLU 截面用于说明不同硬件合同把难题放在何处；VTA 用于诚实定位已有 token 思想。这样既能突出我们体系的真实问题，也不会靠弱化对手来制造差异。</p>"
+      },
+      {
+        "id": "evaluation",
+        "title": "怎样设计足以支撑结论的实验",
+        "html": "\n<p>如果继续做实验，先在<strong>同一个执行模型或同一台目标硬件</strong>上比较同步策略。跨厂商运行时间混入算力、存储带宽、指令能力和编译成熟度，不能直接归因到 mailbox 或 barrier。</p>\n<div class=\"table-wrap\"><table><thead><tr><th>实验组</th><th>控制条件与观测</th><th>要排除的错误解释</th></tr></thead><tbody><tr><td>直线 producer–consumer</td><td>单依赖、独立工作穿插、扇入、扇出、同端点依赖；冻结指令与资源</td><td>减少独立同步编码不一定减少关键路径等待</td></tr><tr><td>循环与控制流</td><td>零次、一次、多次循环；动态分支；不对齐尾块；不同预取深度</td><td>平均 case 正确不能代替所有合法路径正确</td></tr><tr><td>匿名错配反例</td><td>同通道生产／消费资源顺序不同，检查消费者实际读取版本</td><td>总数平衡不能作为唯一 oracle</td></tr><tr><td>容量与前端压力</td><td>逐步逼近 B 上限、AND 接收、有序 outbox、CT 等待未来 producer</td><td>把通道满造成的闭环误当成普通长延迟</td></tr><tr><td>真实 kernel</td><td>固定 shape、dtype、布局、输入与数值判据；覆盖搬运／计算比例不同的算子</td><td>只选有利于某种同步方式的算例</td></tr><tr><td>编译器消融</td><td>逐项关闭前沿合并、冗余消除、容量处理；记录合法 fallback</td><td>对照必须语义正确，不能用故意缺同步的程序当速度基线</td></tr></tbody></table></div>\n<p>建议同时报告：正确性反例覆盖率、协议验证时间、编译时间、独立同步指令数、携带依赖位的命令数、最大在途 token／event 使用量、通知队头等待、接收等待、前端阻塞，以及整个 kernel 的完成时间。若画关键路径，说明起点、终点和多执行流如何聚合；各流水线时间之和不是总时间。</p>\n<p>对比基线至少包括：保守但正确的全阶段同步、经过优化的选择性截面、显式事件的受限资源模型，以及当前 Zeus 生成策略。若在模拟器中实现其他合同，要标为<strong>反事实机制模型</strong>，不能把它叫“测得昇腾／寒武纪性能”。当前编译器源码、静态检查、CycleSim、RTL 仿真、板上 kernel 和端到端模型结果应分别出具证据。</p>"
+      },
+      {
+        "id": "boundaries",
+        "title": "已确认、合理推导与仍待补证的边界",
+        "html": "\n<div class=\"table-wrap\"><table><thead><tr><th>状态</th><th>本次内容</th></tr></thead><tbody><tr><td>已由原始资料确认</td><td>昇腾 Set/Wait 和有限 ID；公开同步 IR 与分配实现；MLU 六参数选择性同步与跨核 arrive/wait；2016 原型的内存依赖检查；VTA 匿名 token</td></tr><tr><td>已由本地静态源码确认</td><td>Zeus 顶层九端点、inbox AND 接收与扣减、有序 outbox、满通道判断、CT 参与前端 ready、规划代码中的 62 预算</td></tr><tr><td>本文推导</td><td>匿名错配反例；固定顺序下单截面可能增加假依赖；有界通道引入活性义务；研究定位与实验方案</td></tr><tr><td>未执行</td><td>Ascend / MLU SDK 编译与机器码反汇编；Zeus pass 完整回归；CycleSim / VCS / FPGA / 硅上功能与性能实验</td></tr><tr><td>未公开或未取得</td><td>现代 MLU 完整指令编码与同步微架构；各代昇腾所有隐藏状态；参考 RTL 与实际量产配置的一致性认证</td></tr></tbody></table></div>\n<p>文中的匿名错配、固定顺序下的单截面，以及有界通道闭环，已通过小型状态枚举检查预期反例与对照方案。检查脚本公开在证据记录中；这只验证给定有限教学模型，不验证厂商实现或当前 Zeus pass 的所有行为。</p><p>后续最值得补齐的三个材料是：目标代际的精确同步 ISA 合同；相同小程序在三种工具链上的实际 lowering／反汇编；能够观察命令完成、通知释放、队列阻塞的时序证据。它们决定本文的接口分析能进一步推进到什么层级。</p>\n<p>阅读这份报告后，可以比较确定地说：<strong>Zeus 的特殊之处在匿名通道协议及其组合约束，不能仅归因于“别人是 barrier，我们是 mailbox”。</strong>至于这种合同在哪些工作负载上更优，需要按上节的实验条件验证。</p>"
+      },
+      {
+        "id": "source-reading",
+        "title": "原始资料阅读顺序与检索说明",
+        "html": "\n<p>建议先读 H2 和 C3，把两家的实际同步合同放在一起；再读 H5/H7 与 C5/C6，把接口接到编译器或算子代码；随后看 H8 和 C1，理解研究对象与历史背景；最后读 V1/V2，校准匿名 token 的相关工作定位。</p>\n<div class=\"table-wrap\"><table><thead><tr><th>资料</th><th>最值得检查的位置</th><th>使用限制</th></tr></thead><tbody><tr><td>H2 · SetFlag / WaitFlag</td><td>标志置位、等待清零、产品 ID 范围</td><td>不要混用不同版本保留 ID 规则</td></tr><tr><td>C3 · Intra-Core Synchronization</td><td>§3.19.4 六参数；§3.19.2 后续消费集合</td><td>不要把 __sync_compute 缩写为只挡 Compute</td></tr><tr><td>C4 · Inter-Core Synchronization</td><td>arrive / wait、参与计数、交叉限制与 Requirements</td><td>跨核合同不直接等于核内 DMA 完成合同</td></tr><tr><td>H5 / H7 · AscendNPU-IR</td><td>默认与 fallback；EventIdSolver 的冲突和分配</td><td>IR 不是机器编码；源码阅读不是编译实验</td></tr><tr><td>H8 · 2025 同步插入论文</td><td>虚拟同步资源、CFG、资源合并与物理分配</td><td>期刊论文，910A 评估；不能外推所有代际</td></tr><tr><td>C1 · ISCA 2016</td><td>§IV 原型，p.398 的内存队列与 ROB</td><td>与现代 MLU API 分代阅读；原文链接是镜像</td></tr><tr><td>E1 / E2 · 证据记录</td><td>版本身份、相关文件摘要、结论到位置的映射</td><td>本地 RTL 非 Git，摘要固定读取内容，不证明原始 release 身份</td></tr></tbody></table></div>\n<p>检索路径覆盖厂商官方 API、厂商公开 Git 仓库、直接相关论文原文与已有 token 体系。部分官方页面由脚本动态装载正文，采集时读取了对应官方正文资源；部分论文站点浏览器访问受限，取得 PDF 后核对了关键页面。引用保留原始入口和版本，不依赖搜索摘要立论。未获得的材料明确列为未知，不以“没搜到”断言不存在。</p>\n<p class=\"source-note\">依据：<a href=\"https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/82RC1/API/ascendcopapi/atlasascendc_api_07_0181.html\">H2 · SetFlag / WaitFlag</a>；<a href=\"https://www.cambricon.com/docs/sdk_1.15.0/cntoolkit_3.7.2/cambricon_bang_c_4.7.2/2Builtin-Functions/Intra-Core%20Synchronization%20Functions.html\">C3 · BANG C 核内同步 API</a>；<a href=\"https://github.com/Ascend/AscendNPU-IR/blob/255344be91f234b622c16290f14b8638ac894001/docs/source/en/developer_guide/features/auto_sync.md\">H5 · AscendNPU-IR Auto-Sync</a>；<a href=\"https://crad.ict.ac.cn/cn/article/pdf/preview/10.7544/issn1000-1239.202440093.pdf\">H8 · 面向昇腾处理器的高性能同步原语自动插入方法</a>；<a href=\"https://reconfigdeeplearning.wordpress.com/wp-content/uploads/2017/02/2016-isca_cambricon-an-instruction-set-architecture-for-neural-networks_cyj.pdf\">C1 · Cambricon: An Instruction Set Architecture for Neural Networks</a>；<a href=\"https://github.com/apache/tvm/blob/97c5de63ba6baa148fdf0c545ded2cd01d7838d1/docs/topic/vta/dev/hardware.rst\">V1 · VTA 数据流与依赖队列</a>；<a href=\"https://github.com/Xuanwen-Wang/interview/blob/main/evidence/domestic-chip-dependencies.md\">E1 · 本文证据与验证边界</a>。</p>"
+      }
+    ],
+    "readingStages": [
+      {
+        "id": "chip-stage-overview",
+        "title": "调研结论与范围",
+        "summary": "先确定比较对象、版本和能够回答的问题。",
+        "sections": [
+          "findings",
+          "scope",
+          "reading-route"
+        ]
+      },
+      {
+        "id": "chip-stage-semantics",
+        "title": "共同问题与同步语义",
+        "summary": "从缓冲区寿命走到事件、范围和状态。",
+        "sections": [
+          "hazards",
+          "events",
+          "taxonomy"
+        ]
+      },
+      {
+        "id": "chip-stage-ascend",
+        "title": "昇腾：事件、屏障与同步编译",
+        "summary": "区分 Set/Wait、PipeBarrier、UnitFlag 和有限 ID 分配。",
+        "sections": [
+          "ascend-pipelines",
+          "ascend-events",
+          "ascend-barrier",
+          "ascend-compiler"
+        ]
+      },
+      {
+        "id": "chip-stage-cambricon",
+        "title": "寒武纪：原型、现代 MLU 与选择性同步",
+        "summary": "分清代际，再读六参数核内同步和跨核 arrive/wait。",
+        "sections": [
+          "cambricon-2016",
+          "cambricon-modern",
+          "cambricon-local",
+          "cambricon-inter"
+        ]
+      },
+      {
+        "id": "chip-stage-zeus",
+        "title": "Zeus：匿名通道及其编译义务",
+        "summary": "九端点、消费序号、控制流、容量和前端闭环。",
+        "sections": [
+          "zeus-endpoints",
+          "zeus-protocol",
+          "zeus-ordinal",
+          "zeus-control",
+          "zeus-capacity"
+        ]
+      },
+      {
+        "id": "chip-stage-compare",
+        "title": "在相同抽象下对照",
+        "summary": "用固定调度与双缓冲例子比较，再检查已有 token 体系。",
+        "sections": [
+          "comparison",
+          "frontiers",
+          "double-buffer",
+          "prior-art",
+          "compiler-problem"
+        ]
+      },
+      {
+        "id": "chip-stage-research",
+        "title": "研究定位、实验与原始资料",
+        "summary": "把可证实的差异转化为研究问题，保留证据边界。",
+        "sections": [
+          "research-position",
+          "evaluation",
+          "boundaries",
+          "source-reading"
+        ]
+      }
+    ],
+    "questions": [
+      {
+        "id": "chip-mail-vs-barrier",
+        "q": "能否用“厂商用 barrier，我们用 mailbox”解释架构差异？",
+        "a": "不能。昇腾提供定向且有 event ID 的 SetFlag/WaitFlag；MLU 可独立选择 producer 与 consumer 流水线，也有跨核分离 arrive/wait。应比较范围、身份、位置、状态与完成粒度。Zeus 的重点是九个逻辑端点之间的匿名有界计数协议。",
+        "followup": "一个选择性 barrier 与分离的 Set/Wait，在固定程序顺序下分别能选择哪些前沿？"
+      },
+      {
+        "id": "chip-ordinal-proof",
+        "q": "为什么 send 和 recv 数量完全相等，匿名 mailbox 仍会同步错误？",
+        "a": "计数只证明数量，不证明 token 代表的生产完成事件。若生产顺序是 A、B，消费顺序是 B、A，同通道第一次 recv 可能消耗来自 A 的 token，却放行 B 的读取。需要维护序号来源，或把依赖合并成足够晚的生产前沿，并另外验证容量和活性。",
+        "followup": "加入动态分支、零次循环和双缓冲后，还缺哪些证明义务？"
+      },
+      {
+        "id": "chip-nine-endpoints",
+        "q": "九个同步端点为什么不能直接说成九个完全独立的执行线程？",
+        "a": "CT 与统一前端 ready 耦合，等待会阻止后续命令分派；VP/DT 的内部 lane 又共享逻辑同步身份。端点、队列、执行通路和独立控制流不是同一个计数口径。通知还受有序 outbox 与目的容量影响。",
+        "followup": "构造一个 CT 等待未来 producer 的闭环，并区分已经分派与尚未分派的命令。"
+      },
+      {
+        "id": "chip-paper-position",
+        "q": "怎样把这个调研变成可发表的研究问题？",
+        "a": "定义面向多执行流匿名有界通道的协议合成问题，给出匹配正确性、控制流守恒、容量与活性条件，提出能验证或优化这些条件的方法。用正确且有竞争力的基线比较，并将 VTA 等已有 token 设计纳入相关工作。",
+        "followup": "如果同步条数减少但 kernel 更慢，应检查哪些等待和资源指标？"
+      }
+    ],
+    "sources": [
+      {
+        "id": "chip-h-overview",
+        "label": "H1 · 昇腾 AI Core 同步控制概览",
+        "url": "https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/API/ascendcopapi/atlasascendc_api_07_0179.html",
+        "note": "CANN 8.5.0，流水线、同流水线与跨流水线同步；不同代际需分别核对。",
+        "kind": "官方文档"
+      },
+      {
+        "id": "chip-h-flags",
+        "label": "H2 · SetFlag / WaitFlag",
+        "url": "https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/82RC1/API/ascendcopapi/atlasascendc_api_07_0181.html",
+        "note": "CANN 8.2.RC1；置位、等待后清零及分产品 event ID 范围。",
+        "kind": "官方文档"
+      },
+      {
+        "id": "chip-h-barrier",
+        "label": "H3 · PipeBarrier（开发版）",
+        "url": "https://asc.gitcode.com/api/SIMD-API/basic_api/sync_control/intra_core_sync/PipeBarrier_ISASI.html",
+        "note": "开发版 master 页面，标示提交 d433ffc4f752、构建于 2026-11-14 且包含未提交修改；正文 SHA256 已记录，不视为统一量产合同。",
+        "kind": "官方文档"
+      },
+      {
+        "id": "chip-h-unit",
+        "label": "H4 · UnitFlag 与 Mmad / Fixpipe 优化",
+        "url": "https://www.hiascend.com/document/detail/en/CANNCommunityEdition/900/programug/Ascendcopdevg/atlas_ascendc_best_practices_10_10003.html",
+        "note": "CANN 9.0.0，Matmul High-Level API Enabling UnitFlag；L0C 上 MMAD 与 FIXPIPE 按内存块同步。",
+        "kind": "官方文档"
+      },
+      {
+        "id": "chip-h-auto",
+        "label": "H5 · AscendNPU-IR Auto-Sync",
+        "url": "https://github.com/Ascend/AscendNPU-IR/blob/255344be91f234b622c16290f14b8638ac894001/docs/source/en/developer_guide/features/auto_sync.md",
+        "note": "冻结到 255344be91f2；默认图求解路径和 InjectSync fallback；文档描述的是 MLIR 同步操作。",
+        "kind": "开源实现"
+      },
+      {
+        "id": "chip-h-ir",
+        "label": "H6 · HIVM 同步操作定义",
+        "url": "https://github.com/Ascend/AscendNPU-IR/blob/255344be91f234b622c16290f14b8638ac894001/bishengir/include/bishengir/Dialect/HIVM/IR/HIVMSynchronizationOps.td",
+        "note": "SetFlagOp、WaitFlagOp、PipeBarrierOp；不是硬件二进制编码手册。",
+        "kind": "开源实现"
+      },
+      {
+        "id": "chip-h-alloc",
+        "label": "H7 · EventIdSolver",
+        "url": "https://github.com/Ascend/AscendNPU-IR/blob/255344be91f234b622c16290f14b8638ac894001/bishengir/lib/Dialect/HIVM/Transforms/GraphSyncSolver/EventIdSolver.cpp",
+        "note": "冲突关系、可着色性、保留 ID 与 event ID 分配。",
+        "kind": "开源实现"
+      },
+      {
+        "id": "chip-h-paper",
+        "label": "H8 · 面向昇腾处理器的高性能同步原语自动插入方法",
+        "url": "https://crad.ict.ac.cn/cn/article/pdf/preview/10.7544/issn1000-1239.202440093.pdf",
+        "note": "李帅江等，《计算机研究与发展》2025，62(8):1962–1978，DOI 10.7544/issn1000-1239.202440093；评估对象为昇腾 910A。",
+        "kind": "论文"
+      },
+      {
+        "id": "chip-h-pto",
+        "label": "H9 · PTO virtual ISA",
+        "url": "https://github.com/hw-native-sys/pto-isa/tree/71ce9dd4e850e0fc04e9d9acdfdf8b8f52839d0c",
+        "note": "公开的 Parallel Tile Operation 虚拟 ISA 与实现，不能等同于完整机器 ISA 编码公开。",
+        "kind": "开源实现"
+      },
+      {
+        "id": "chip-c-paper",
+        "label": "C1 · Cambricon: An Instruction Set Architecture for Neural Networks",
+        "url": "https://reconfigdeeplearning.wordpress.com/wp-content/uploads/2017/02/2016-isca_cambricon-an-instruction-set-architecture-for-neural-networks_cyj.pdf",
+        "note": "Liu et al., ISCA 2016:393–405，DOI 10.1109/ISCA.2016.42。原文镜像；重点阅读 §IV、p.398 原型微架构。",
+        "kind": "论文"
+      },
+      {
+        "id": "chip-c-guide",
+        "label": "C2 · BANG C OPS 开发指南",
+        "url": "https://github.com/Cambricon/mlu-ops/blob/8c428bfca7fd20cdbbdd4396cff20c017302dbca/docs/BANG-C-OPS-Develop-Guide.md",
+        "note": "冻结到 8c428bfca7fd；MLUv03 示例中的多流水线、寄存器依赖和异步内存同步，§3.1.4。",
+        "kind": "开源文档"
+      },
+      {
+        "id": "chip-c-intra",
+        "label": "C3 · BANG C 核内同步 API",
+        "url": "https://www.cambricon.com/docs/sdk_1.15.0/cntoolkit_3.7.2/cambricon_bang_c_4.7.2/2Builtin-Functions/Intra-Core%20Synchronization%20Functions.html",
+        "note": "SDK 1.15.0 / CNToolkit 3.7.2 / BANG C 4.7.2，§3.19；核对六个 producer/consumer 参数。",
+        "kind": "官方文档"
+      },
+      {
+        "id": "chip-c-inter",
+        "label": "C4 · BANG C 核间同步 API",
+        "url": "https://www.cambricon.com/docs/sdk_1.15.0/cntoolkit_3.7.2/cambricon_bang_c_4.7.2/2Builtin-Functions/Inter-Core%20Synchronization%20Functions.html",
+        "note": "同版 §3.18；cluster / kernel UNION 范围、arrive/wait、目标架构限制。",
+        "kind": "官方文档"
+      },
+      {
+        "id": "chip-c-three",
+        "label": "C5 · MLU-OPS 三阶段流水模板",
+        "url": "https://github.com/Cambricon/mlu-ops/blob/8c428bfca7fd20cdbbdd4396cff20c017302dbca/kernels/unary_op/unary_op_3pipeline.h",
+        "note": "async copy、计算与内联 sync 汇编；源码只能证明该模板的同步安排。",
+        "kind": "开源实现"
+      },
+      {
+        "id": "chip-c-five",
+        "label": "C6 · MLU-OPS 五阶段流水模板",
+        "url": "https://github.com/Cambricon/mlu-ops/blob/8c428bfca7fd20cdbbdd4396cff20c017302dbca/kernels/unary_op/unary_op_5pipeline.h",
+        "note": "__sync_cluster、__sync_move、__sync_compute 与异步搬运组合。",
+        "kind": "开源实现"
+      },
+      {
+        "id": "chip-vta",
+        "label": "V1 · VTA 数据流与依赖队列",
+        "url": "https://github.com/apache/tvm/blob/97c5de63ba6baa148fdf0c545ded2cd01d7838d1/docs/topic/vta/dev/hardware.rst",
+        "note": "TVM v0.13.0 对应提交；load / compute / store，information-less dependency tokens 与 FIFO 顺序。",
+        "kind": "开源文档"
+      },
+      {
+        "id": "chip-vta-isa",
+        "label": "V2 · VTA 指令依赖位",
+        "url": "https://github.com/apache/tvm-vta/blob/d4a15f627d5cc9762a82270d1be60a136e6af9c2/include/vta/hw_spec.h",
+        "note": "VTA 指令中的 pop_prev_dep、pop_next_dep、push_prev_dep、push_next_dep。",
+        "kind": "开源实现"
+      },
+      {
+        "id": "chip-evidence",
+        "label": "E1 · 本文证据与验证边界",
+        "url": "./evidence/domestic-chip-dependencies.md",
+        "note": "采集日 2026-11-15；来源版本、Zeus 静态源码位置、文件摘要与未验证范围。",
+        "kind": "证据记录"
+      },
+      {
+        "id": "chip-manifest",
+        "label": "E2 · 可复核来源清单",
+        "url": "./evidence/domestic-chip-dependency-sources.json",
+        "note": "外部文件和 RTL 参考文件 SHA256；不上传原始论文、内部源码或本机信息。",
+        "kind": "证据记录"
+      }
+    ],
+    "takeaways": [
+      "用作用范围、匹配身份、同步位置、状态容量和完成粒度描述同步原语。",
+      "区分昇腾 Set/Wait、PipeBarrier 与 UnitFlag，以及有限 event ID 带来的编译约束。",
+      "正确解读寒武纪六参数选择性同步，并分开 2016 原型与现代 MLU。",
+      "解释 Zeus 九逻辑端点、匿名 token、AND 接收、有序 outbox 和 CT 前端限制。",
+      "用错配、控制流和容量反例说明计数平衡不足以证明正确或无死锁。",
+      "以可验证的协议合成问题定位研究，不以未测性能或 mailbox 首创叙事作结论。"
+    ]
+  }
+]

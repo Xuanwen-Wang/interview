@@ -129,6 +129,28 @@
       ]
     },
     {
+      "id": "domestic-chips",
+      "title": "国产芯片调研",
+      "number": "CN",
+      "description": "从公开论文、官方文档与实际源码出发，研究国产 AI 芯片的指令、存储和执行机制。首篇比较昇腾、寒武纪与 Zeus 的指令依赖和同步合同。",
+      "readingCollection": true,
+      "collectionLabel": "国产芯片 · ARCHITECTURE RESEARCH",
+      "groups": [
+        {
+          "id": "instruction-dependencies",
+          "title": "指令依赖与同步机制",
+          "chapters": ["domestic-chip-dependency"]
+        }
+      ],
+      "learningPath": [
+        {
+          "title": "从依赖问题到硬件合同",
+          "description": "事件、选择性屏障、匿名 mailbox 与编译器责任",
+          "chapter": "domestic-chip-dependency"
+        }
+      ]
+    },
+    {
       "id": "glm53-flash",
       "title": "GLM-5.3-Flash 部署",
       "number": "03",

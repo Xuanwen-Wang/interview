@@ -1,0 +1,238 @@
+{
+  "collected": "2026-11-15",
+  "article": "domestic-chip-dependency",
+  "evidence_level": "documents, papers and static source inspection; no SDK, simulator, RTL or hardware execution",
+  "compiler_tracked_files_dirty": false,
+  "compiler_untracked_files": "Unrelated untracked files present; not used or copied.",
+  "rtl_provenance": "Reference README describes a partial copy of tag_PN100_R1_20250928, copied 2026-07-03, with known local differences. Tag authenticity and production equivalence are not independently verified.",
+  "records": [
+    {
+      "kind": "AscendNPU-IR",
+      "path": "docs/source/en/developer_guide/features/auto_sync.md",
+      "sha256": "a5817f92e0d75a39f09b0971a2c5bd464d6b99f7f7277f2941f64a84e2d20559",
+      "bytes": 14019,
+      "revision": "255344be91f234b622c16290f14b8638ac894001",
+      "url": "https://github.com/Ascend/AscendNPU-IR/blob/255344be91f234b622c16290f14b8638ac894001/docs/source/en/developer_guide/features/auto_sync.md"
+    },
+    {
+      "kind": "AscendNPU-IR",
+      "path": "bishengir/include/bishengir/Dialect/HIVM/IR/HIVMSynchronizationOps.td",
+      "sha256": "cb6da05c3978795c7dd3396c2a8b830801314cc42c930ca315d9e90f1c9feeb3",
+      "bytes": 18466,
+      "revision": "255344be91f234b622c16290f14b8638ac894001",
+      "url": "https://github.com/Ascend/AscendNPU-IR/blob/255344be91f234b622c16290f14b8638ac894001/bishengir/include/bishengir/Dialect/HIVM/IR/HIVMSynchronizationOps.td"
+    },
+    {
+      "kind": "AscendNPU-IR",
+      "path": "bishengir/lib/Dialect/HIVM/Transforms/GraphSyncSolver/EventIdSolver.cpp",
+      "sha256": "0a6d7c75c1d63e375897db8204532957e82c97cfc612ff35f61581cdef508534",
+      "bytes": 18631,
+      "revision": "255344be91f234b622c16290f14b8638ac894001",
+      "url": "https://github.com/Ascend/AscendNPU-IR/blob/255344be91f234b622c16290f14b8638ac894001/bishengir/lib/Dialect/HIVM/Transforms/GraphSyncSolver/EventIdSolver.cpp"
+    },
+    {
+      "kind": "AscendNPU-IR",
+      "path": "bishengir/lib/Dialect/HIVM/Transforms/InjectSync/SyncEventIdAllocation.cpp",
+      "sha256": "9a640e26d7611c6b6b5a5073875b702de09be53e95fb89c9a8eb1306405e5388",
+      "bytes": 34114,
+      "revision": "255344be91f234b622c16290f14b8638ac894001",
+      "url": "https://github.com/Ascend/AscendNPU-IR/blob/255344be91f234b622c16290f14b8638ac894001/bishengir/lib/Dialect/HIVM/Transforms/InjectSync/SyncEventIdAllocation.cpp"
+    },
+    {
+      "kind": "AscendNPU-IR",
+      "path": "bishengir/lib/Dialect/HIVM/Transforms/InjectSync/SyncCodegen.cpp",
+      "sha256": "fdada092aa5a1bb20a4d4b2f1c71d65a5f5de72aaf92b20fdbd8a065b06380dc",
+      "bytes": 27964,
+      "revision": "255344be91f234b622c16290f14b8638ac894001",
+      "url": "https://github.com/Ascend/AscendNPU-IR/blob/255344be91f234b622c16290f14b8638ac894001/bishengir/lib/Dialect/HIVM/Transforms/InjectSync/SyncCodegen.cpp"
+    },
+    {
+      "kind": "MLU-OPS",
+      "path": "mlu-develop-guide.md",
+      "sha256": "2817238bb8a97db78a8c2e638d1cec36db115363303340f12389e95df8f4a729",
+      "bytes": 140813,
+      "revision": "8c428bfca7fd20cdbbdd4396cff20c017302dbca",
+      "url": "https://github.com/Cambricon/mlu-ops/blob/8c428bfca7fd20cdbbdd4396cff20c017302dbca/docs/BANG-C-OPS-Develop-Guide.md"
+    },
+    {
+      "kind": "MLU-OPS",
+      "path": "kernels/unary_op/unary_op_3pipeline.h",
+      "sha256": "accf1c7dc0de026e53e18a23b5495dcfc34585b1c8c1afd13369e8adb30aae4c",
+      "bytes": 17603,
+      "revision": "8c428bfca7fd20cdbbdd4396cff20c017302dbca",
+      "url": "https://github.com/Cambricon/mlu-ops/blob/8c428bfca7fd20cdbbdd4396cff20c017302dbca/kernels/unary_op/unary_op_3pipeline.h"
+    },
+    {
+      "kind": "MLU-OPS",
+      "path": "kernels/unary_op/unary_op_5pipeline.h",
+      "sha256": "fb7edea7926647c25bc20f556623c5d6593fe522780d3e6e947ef1108c50d982",
+      "bytes": 15610,
+      "revision": "8c428bfca7fd20cdbbdd4396cff20c017302dbca",
+      "url": "https://github.com/Cambricon/mlu-ops/blob/8c428bfca7fd20cdbbdd4396cff20c017302dbca/kernels/unary_op/unary_op_5pipeline.h"
+    },
+    {
+      "kind": "publication-or-document",
+      "path": "huawei-flags-stable.html",
+      "sha256": "522306b9462999fe8c5b12d7fbcb88508809e9e50025183180f245de08ec4512",
+      "bytes": 14071,
+      "url": "https://www.hiascend.com/doc_center/source/zh/CANNCommunityEdition/82RC1/API/ascendcopapi/atlasascendc_api_07_0181.html"
+    },
+    {
+      "kind": "publication-or-document",
+      "path": "huawei-overview-stable.html",
+      "sha256": "be6455d1a406b17b44a7d68a7782962e2886fb0d8719b95b9f6b8cf1177ca710",
+      "bytes": 17415,
+      "url": "https://www.hiascend.com/doc_center/source/en/CANNCommunityEdition/850/API/ascendcopapi/atlasascendc_api_07_0179.html"
+    },
+    {
+      "kind": "publication-or-document",
+      "path": "huawei-pipebarrier-preview.html",
+      "sha256": "f6928b69e0f58c90c5d8d560654143503670b5d6032fe63a119d13509fe2770f",
+      "bytes": 24232,
+      "url": "https://asc.gitcode.com/api/SIMD-API/basic_api/sync_control/intra_core_sync/PipeBarrier_ISASI.html"
+    },
+    {
+      "kind": "publication-or-document",
+      "path": "huawei-unitflag-900.html",
+      "sha256": "33322c94fbb814c66412d3f042484bbe162b29f0895a91485a0a66223d3d866f",
+      "bytes": 21898,
+      "url": "https://www.hiascend.com/doc_center/source/en/CANNCommunityEdition/900/programug/Ascendcopdevg/atlas_ascendc_best_practices_10_10003.html"
+    },
+    {
+      "kind": "publication-or-document",
+      "path": "cambricon-intra-sync.html",
+      "sha256": "0bf172b80acbf19a609b828fb0ddf82776b2dcb4f80916a591490bb37740dd17",
+      "bytes": 248317,
+      "url": "https://www.cambricon.com/docs/sdk_1.15.0/cntoolkit_3.7.2/cambricon_bang_c_4.7.2/2Builtin-Functions/Intra-Core%20Synchronization%20Functions.html"
+    },
+    {
+      "kind": "publication-or-document",
+      "path": "cambricon-inter-sync.html",
+      "sha256": "168c26ceb62a7b94132d650656a1c7f8910b66aca7a488b095ed30f5f6c330f8",
+      "bytes": 263772,
+      "url": "https://www.cambricon.com/docs/sdk_1.15.0/cntoolkit_3.7.2/cambricon_bang_c_4.7.2/2Builtin-Functions/Inter-Core%20Synchronization%20Functions.html"
+    },
+    {
+      "kind": "publication-or-document",
+      "path": "ascend-auto-sync-paper.pdf",
+      "sha256": "020d9092eeb48c754a8dcf0f619891d58ec5f9f47a82f0d0475eee7a8df0eaa9",
+      "bytes": 2284749,
+      "url": "https://crad.ict.ac.cn/cn/article/pdf/preview/10.7544/issn1000-1239.202440093.pdf"
+    },
+    {
+      "kind": "publication-or-document",
+      "path": "cambricon-isca2016.pdf",
+      "sha256": "879d4e2b0f582de85b2b60f6dd57dea87dcad39b768d3410f6299b79ca2b89b5",
+      "bytes": 810916,
+      "url": "https://reconfigdeeplearning.wordpress.com/wp-content/uploads/2017/02/2016-isca_cambricon-an-instruction-set-architecture-for-neural-networks_cyj.pdf"
+    },
+    {
+      "kind": "public-source",
+      "path": "vta-hardware.rst",
+      "sha256": "456df45a5cdc73bef367438b13c339a99d1dd9bacabea5d4ac1d67f29d6eb6a0",
+      "bytes": 17954,
+      "revision": "97c5de63ba6baa148fdf0c545ded2cd01d7838d1",
+      "url": "https://github.com/apache/tvm/blob/97c5de63ba6baa148fdf0c545ded2cd01d7838d1/docs/topic/vta/dev/hardware.rst"
+    },
+    {
+      "kind": "public-source",
+      "path": "vta-hw-spec.h",
+      "sha256": "f21aa4988aa1fb92e63cd04b5dda5d9b30e4f4e789239398c4754b814116c2a5",
+      "bytes": 11281,
+      "revision": "d4a15f627d5cc9762a82270d1be60a136e6af9c2",
+      "url": "https://github.com/apache/tvm-vta/blob/d4a15f627d5cc9762a82270d1be60a136e6af9c2/include/vta/hw_spec.h"
+    },
+    {
+      "kind": "public-source",
+      "path": "pto-isa-readme.md",
+      "sha256": "0fa1aa9b0b471c2c98b148989ccedcc8ede45a366c8872e9866809637b9d8cb5",
+      "bytes": 14644,
+      "revision": "71ce9dd4e850e0fc04e9d9acdfdf8b8f52839d0c",
+      "url": "https://github.com/hw-native-sys/pto-isa/blob/71ce9dd4e850e0fc04e9d9acdfdf8b8f52839d0c/README.md"
+    },
+    {
+      "kind": "triton_shared-static-reference",
+      "path": "lib/Target/ZeusV3/AsmParser.cpp",
+      "sha256": "555d9a7c9edc4881ebbfa08fc2452920be605b96af9756c746a34761eac1621a",
+      "bytes": 15841,
+      "revision": "a6161ef94b1941f786ce05d4e31104ec91ea22d4"
+    },
+    {
+      "kind": "triton_shared-static-reference",
+      "path": "lib/Dialect/ZeusLow/Transforms/InjectSync/Staircase/StaircasePlanning.cpp",
+      "sha256": "d3fcf7c51e2625327b93f07b2f9a70192b6f240d8581785a9f68fd843520da7a",
+      "bytes": 61319,
+      "revision": "a6161ef94b1941f786ce05d4e31104ec91ea22d4"
+    },
+    {
+      "kind": "triton_shared-static-reference",
+      "path": "lib/Dialect/ZeusLow/Transforms/InjectSync/Ledger.cpp",
+      "sha256": "19e67429db53786c062b76f329e787c8e15994dca913970171c2c96b34f5768d",
+      "bytes": 35499,
+      "revision": "a6161ef94b1941f786ce05d4e31104ec91ea22d4"
+    },
+    {
+      "kind": "triton_shared-static-reference",
+      "path": "lib/Dialect/ZeusLow/Transforms/InjectSync/Verification.cpp",
+      "sha256": "550473244a907069b71142758f7e56d430e01c29ca537d160b3975a6ecd68f03",
+      "bytes": 385716,
+      "revision": "a6161ef94b1941f786ce05d4e31104ec91ea22d4"
+    },
+    {
+      "kind": "triton_shared-static-reference",
+      "path": "docs/vcs_debug/rtl-instruction-dependency-model.md",
+      "sha256": "1658b2cc611ec12fc93131ce0cc269fb7312e404bed48855a046189a3e2e7517",
+      "bytes": 117340,
+      "revision": "a6161ef94b1941f786ce05d4e31104ec91ea22d4"
+    },
+    {
+      "kind": "rtl-static-reference",
+      "path": "rtl/zeus518/inst_ctrl/zeus518_inst_ctrl.v",
+      "sha256": "c5c0ea1b6ef8efd188338e7da3891fe6cf6a84ff8c63463bf50db656e9a0a4a4",
+      "bytes": 280887,
+      "revision": "unknown; non-Git reference copy"
+    },
+    {
+      "kind": "rtl-static-reference",
+      "path": "rtl/zeus518/inst_ctrl/inst518_queue_inbox.v",
+      "sha256": "3cdea836a2ade09863782a75bcf5f8b0e227a772171ad0e7447bb29160047cce",
+      "bytes": 9242,
+      "revision": "unknown; non-Git reference copy"
+    },
+    {
+      "kind": "rtl-static-reference",
+      "path": "rtl/zeus518/inst_ctrl/inst518_queue_ld.v",
+      "sha256": "7f1dfd227e09df7e0704ac5d5d181427b865364a737029ccf7dbdd2c8cf4a6db",
+      "bytes": 30199,
+      "revision": "unknown; non-Git reference copy"
+    },
+    {
+      "kind": "rtl-static-reference",
+      "path": "rtl/zeus518/inst_ctrl/inst518_queue_vp.v",
+      "sha256": "0f8cf7f494fe60e3d0343fb6d480f1b6b62109830f53ee46bce52b54c390169d",
+      "bytes": 82395,
+      "revision": "unknown; non-Git reference copy"
+    },
+    {
+      "kind": "rtl-static-reference",
+      "path": "rtl/zeus518/inst_ctrl/inst518_queue_dt.v",
+      "sha256": "e223f3c9fc5b5504d90e515d5d0cde9f3a9dd28cafa778e28bbc79d5ed701fb9",
+      "bytes": 64430,
+      "revision": "unknown; non-Git reference copy"
+    },
+    {
+      "kind": "rtl-static-reference",
+      "path": "rtl/zeus518/inst_ctrl/inst518_inst_dispatch.v",
+      "sha256": "a46d7b9fd67befd37d32ef42f1f6d33dc50e977c720985c256655aab5d224abb",
+      "bytes": 41366,
+      "revision": "unknown; non-Git reference copy"
+    },
+    {
+      "kind": "rtl-static-reference",
+      "path": "rtl/zeus518/inst_ctrl/inst518_ct_unit.v",
+      "sha256": "d1232dd174c166acbabbe57c3e162432ec3a4a39735641dc265436c255ad60e8",
+      "bytes": 222267,
+      "revision": "unknown; non-Git reference copy"
+    }
+  ]
+}
