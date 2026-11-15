@@ -105,6 +105,9 @@ function renderChapter(id, section) {
  initCudaExecutionLabs();
  initCommunicationLabs();
  initMathFoundations();
+ initVpArchitecture(c);
+ initVpCapacity(c);
+ initVpOperatorLabs(c);
  enableFigureZoom();
  initPEArchitecture();
  initInterviewQuestions();
@@ -179,9 +182,12 @@ function setMenu(open){
 function render(){
  const [route,id,section]=currentRoute();
  document.body.classList.toggle('pe-architecture-reading',route==='chapter'&&id==='hw-memory-hierarchy');
+ document.body.classList.toggle('vp-reading',route==='chapter'&&id==='hw-vp-architecture');
  const requested=location.hash.slice(1).split('/');
  if(route==='chapter'&&requested[0]==='chapter'&&(requested[1]!==id||requested[2]!==section))history.replaceState(null,'','#chapter/'+id+(section?'/'+section:''));
  if(route==='chapter'&&renderedChapterId===id){setMenu(false);scrollChapterAnchor(section);return;}
+ destroyVpArchitecture();
+ destroyVpOperatorLabs();
  renderedChapterId=null;clearInterval(practiceTimer);practiceTimer=null;sectionObserver?.disconnect();
  setMenu(false);
  renderNavigation(route,id);

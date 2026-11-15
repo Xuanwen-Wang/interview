@@ -292,7 +292,7 @@
         },
         {
           "id": "vp",
-          "title": "VP 架构：RTL 流水与实际算子",
+          "title": "VP 架构：数据通路、状态与算子执行",
           "chapters": [
             "hw-vp-architecture"
           ]

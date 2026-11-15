@@ -105,7 +105,7 @@ function openFigureDialog(svg, caption, namespace = 'figure') {
 }
 function enableFigureZoom() {
   $$('.article svg').forEach(svg=>{
-    if(svg.closest('svg')!==svg || svg.closest('.pe-explorer, .pe-memory-explorer, .pe-weight-layout, .performance-explorer, .attention-lab, .sync-explorer, .ds-lab, .comm-lab, .math-lab'))return;
+    if(svg.closest('svg')!==svg || svg.closest('.pe-explorer, .pe-memory-explorer, .pe-weight-layout, .performance-explorer, .attention-lab, .sync-explorer, .ds-lab, .comm-lab, .math-lab, .vp-operator-lab, .vp-capacity'))return;
     let fig=svg.closest('figure');
     if(!fig){fig=document.createElement('figure');svg.before(fig);fig.append(svg);}
     fig.classList.add('diagram');

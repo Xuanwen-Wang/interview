@@ -43,6 +43,8 @@
 - [sigmoid与RMSNorm](vp-rms-sigmoid-operators.md)：真实系数、accurate修正、tile归约次序与共享γ。
 - [CUDA固定实现对照](vp-cuda-operators.md)：PyTorch/vLLM源码与NVIDIA版本化文档，区分数学合同和执行组织。
 - [VP架构审查与验收](review-vp.md)：正文与图示的交叉核对、独立HTML入口及浏览器验收。
+- [VP 七部分重写](vp-architecture-rewrite.md)：2026-11-14 的源码更新、贯穿 shape、三组交互模型和适用范围；[文件摘要](vp-architecture-source-hashes-20261114.json)、[本地预览验收](review-vp-architecture-rewrite.md)。
+- [VP 深度复核](vp-rtl-depth-20261115.md)：2026-11-15 的四 DT/四 VP、接口、分组、FIFO、状态与完成；[算子与编译器映射](vp-operator-depth-20261115.md)、[吞吐条件模型](vp-throughput-model-20261115.md)、[最新深度改稿验收](review-vp-depth-20261115.md)。
 - [公司面经与题源](interview-sources.md)：身份、时间和来源局限。
 - [第二版审查与验收](review-v2.md)：目录重构、交叉审阅与新增Coding验证。
 - [第一版审查与验收](review-and-validation.md)：交叉审查、修正记录与网页验收。
