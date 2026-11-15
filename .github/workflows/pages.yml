@@ -48,6 +48,9 @@ jobs:
           node --check web/cuda-execution.js
           node --check web/communication-lab.js
           node --check web/math-foundations.js
+          node --check web/vp-architecture.js
+          node --check web/vp-capacity.js
+          node --check web/vp-operator-lab.js
           node scripts/check_pe_model.js
           node scripts/check_pe_memory_model.js
           node scripts/check_pe_weight_layout.js
@@ -65,6 +68,9 @@ jobs:
           python3 scripts/check_sm90_evidence.py
           node scripts/check_communication_model.js
           node scripts/check_math_foundations.js
+          node scripts/check_vp_model.js
+          node scripts/check_vp_capacity.js
+          node scripts/check_vp_operator_model.js
           python3 practice/communication/cpu_reference.py
       - name: Verify original coding references
         run: |

@@ -1,0 +1,111 @@
+{
+  "date": "2026-11-15",
+  "scope": "Read-only source analysis; numerical teaching model only; no compiler or device run.",
+  "files": [
+    {
+      "repository": "triton_shared",
+      "head": "a6161ef94b1941f786ce05d4e31104ec91ea22d4",
+      "path": "lib/Conversion/ZeusLinalgToZeusHigh/ZeusLinalgToZeusHigh.cpp",
+      "sha256": "5748636e96143a46af6fbd42f2848dd93b01965f9a4555966e57b4aa91d08135",
+      "matches_head": true
+    },
+    {
+      "repository": "triton_shared",
+      "head": "a6161ef94b1941f786ce05d4e31104ec91ea22d4",
+      "path": "lib/Dialect/ZeusHigh/IR/VPModuleDefs.cpp",
+      "sha256": "50fbb1342e76921ebf9dfadf524b93c8eb3e338d26616fceb75b243348c59127",
+      "matches_head": true
+    },
+    {
+      "repository": "triton_shared",
+      "head": "a6161ef94b1941f786ce05d4e31104ec91ea22d4",
+      "path": "lib/Dialect/ZeusHigh/Transforms/AddModuleListForVP.cpp",
+      "sha256": "640b467170337efa1ff4fd1aeb4a2d8144b54953fce5b37f5827620692afa191",
+      "matches_head": true
+    },
+    {
+      "repository": "triton_shared",
+      "head": "a6161ef94b1941f786ce05d4e31104ec91ea22d4",
+      "path": "lib/Dialect/ZeusHigh/Transforms/VPFeedback.cpp",
+      "sha256": "03a351c755ac7527678ce612bbf35fc47dc4ebcc0dace49017945c1929c924e1",
+      "matches_head": true
+    },
+    {
+      "repository": "triton_shared",
+      "head": "a6161ef94b1941f786ce05d4e31104ec91ea22d4",
+      "path": "lib/Dialect/ZeusHigh/Transforms/ExpandTopK.cpp",
+      "sha256": "238b7f90b2d6ca85d8621c7e696d379e0ede9ec092e6b33c5ee3dcc701177605",
+      "matches_head": true
+    },
+    {
+      "repository": "triton_shared",
+      "head": "a6161ef94b1941f786ce05d4e31104ec91ea22d4",
+      "path": "lib/Dialect/ZeusHigh/Transforms/TopKContract.h",
+      "sha256": "ab45e3e6e3cb6eccbf035dc19b71ad8b8cdd82fb75330bdc10b1af231c7a2f48",
+      "matches_head": true
+    },
+    {
+      "repository": "triton_shared",
+      "head": "a6161ef94b1941f786ce05d4e31104ec91ea22d4",
+      "path": "lib/Dialect/ZeusHigh/Transforms/ParallelVPPlanning.cpp",
+      "sha256": "258c4a9a7926474b3ef81bcbc695e0e19d45392b31e857b0e774d1474e8fc187",
+      "matches_head": true
+    },
+    {
+      "repository": "triton_shared",
+      "head": "a6161ef94b1941f786ce05d4e31104ec91ea22d4",
+      "path": "lib/Dialect/ZeusHigh/Transforms/ParallelVPAnalysis.cpp",
+      "sha256": "d32e7f4ba964ab5e5933b8f24d10eab153a23cbfa460c1a260f19d691f2a0a96",
+      "matches_head": true
+    },
+    {
+      "repository": "triton_shared",
+      "head": "a6161ef94b1941f786ce05d4e31104ec91ea22d4",
+      "path": "lib/Dialect/ZeusHigh/Transforms/VPChaining/ModuleOrder.cpp",
+      "sha256": "b1e49b776abf70e10792f761bfe5895d6849a80e3ae60432627b9f57502e9088",
+      "matches_head": true
+    },
+    {
+      "repository": "triton_shared",
+      "head": "a6161ef94b1941f786ce05d4e31104ec91ea22d4",
+      "path": "lib/Dialect/ZeusHigh/Transforms/VPChaining/VPChainingLegality.cpp",
+      "sha256": "0756fcbaf3ab4e7716729926f450ac54f79601923ec460b54322c98f83a57d8f",
+      "matches_head": true
+    },
+    {
+      "repository": "triton_shared",
+      "head": "a6161ef94b1941f786ce05d4e31104ec91ea22d4",
+      "path": "lib/Dialect/ZeusHigh/Transforms/VPChaining/PostCalScalarChaining.cpp",
+      "sha256": "db04908c8f340f836002e59f2000db43812a57550978724d12dce43372fedb6a",
+      "matches_head": true
+    },
+    {
+      "repository": "triton_shared",
+      "head": "a6161ef94b1941f786ce05d4e31104ec91ea22d4",
+      "path": "docs/executor/multi/VP_Usage_Guide.md",
+      "sha256": "826cfa9536dbb9f00125a2e2b7e2b58138e33238c5070f55ed71f92000b1bc32",
+      "matches_head": true
+    },
+    {
+      "repository": "torch_zeus",
+      "head": "6ae99c68bc08476766b1d00e07b97b8df6a1ceeb",
+      "path": "sgl-kernel-zeus-triton/python/common/rmsnorm.py",
+      "sha256": "513a2b0384a665462cfdaccdaaccb0baa69f7e3a9bf9733015238f05faf6dffc",
+      "matches_head": true
+    },
+    {
+      "repository": "torch_zeus",
+      "head": "6ae99c68bc08476766b1d00e07b97b8df6a1ceeb",
+      "path": "sgl-kernel-zeus-triton/python/glm53_flash/moe/sgl_silu_and_mul.py",
+      "sha256": "cf980cabcb1cfa76eb939a55bdbfe2a9964c2a26d738bd4fb14ee44f46762e66",
+      "matches_head": true
+    },
+    {
+      "repository": "torch_zeus",
+      "head": "6ae99c68bc08476766b1d00e07b97b8df6a1ceeb",
+      "path": "sgl-kernel-zeus-triton/python/glm53_flash/moe/sgl_moe_router_linear_biased_topk.py",
+      "sha256": "2dcee605b27a052ea10c54c0d0bb5509e4b5f616b06facd58406051886afaf7d",
+      "matches_head": true
+    }
+  ]
+}
