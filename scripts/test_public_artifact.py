@@ -8,6 +8,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from build import interactive_readings
+
 from check_public_artifact import (
     ROOT, check_artifact, check_artifact_layout, expected_files, main, manifest_keys,
 )
@@ -38,6 +40,32 @@ class PublicArtifactTests(unittest.TestCase):
 
     def test_clean_synthetic_artifact(self):
         self.assertEqual(self.check(), [])
+
+    def test_interactive_readings_are_declared_and_scanned(self):
+        source = self.base / 'interactive-source'
+        (source / 'content').mkdir(parents=True)
+        chapter = {'id': 'example', 'interactiveReading': {
+            'file': 'npu-data-path.html', 'download': '518-npu.html', 'label': 'Download'}}
+        (source / 'content/example.json').write_text(json.dumps([chapter]))
+        declared = expected_files(source)
+        self.assertIn('npu-data-path.html', declared)
+        (self.directory / 'npu-data-path.html').write_text(
+            '<script>const D={"source":"synthetic.person@example.invalid"};</script>')
+        self.assertIn('email address', check_artifact(self.directory, self.expected | declared))
+
+    def test_interactive_readings_reject_unsafe_or_colliding_names(self):
+        def chapter(filename):
+            return {'id': 'example', 'interactiveReading': {
+                'file': filename, 'download': 'example.html', 'label': 'Download'}}
+        for filename in ['../escape.html', '/absolute.html', 'index.html', 'jobs.html', 'script.js']:
+            with self.subTest(filename=filename), self.assertRaises(AssertionError):
+                interactive_readings([chapter(filename)])
+        with self.assertRaises(AssertionError):
+            interactive_readings([chapter('example.html'), chapter('example.html')])
+        portable = {'id': 'portable', 'readingStages': [{'id': 'stage'}],
+                    'portableReading': {'file': 'example.html', 'download': 'example.html', 'label': 'Download'}}
+        with self.assertRaises(AssertionError):
+            interactive_readings([portable, chapter('example.html')])
 
     def test_clean_real_build(self):
         self.assertTrue((ROOT / 'dist/index.html').is_file(), 'Run scripts/build.py first')

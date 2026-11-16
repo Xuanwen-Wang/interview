@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from urllib.parse import urlsplit, unquote
 from html.parser import HTMLParser
-from build import portable_readings
+from build import interactive_readings, portable_readings
 
 ROOT = Path(__file__).resolve().parent.parent
 rows = [c for p in sorted((ROOT / 'content').glob('*.json')) for c in json.loads(p.read_text(encoding='utf-8'))]
@@ -114,6 +114,11 @@ def check_link(url, where):
             errors.append(f'{where}: unsupported route {url}')
         return
     path, _, anchor = url.partition('#')
+    if path in interactive_readings(rows):
+        target = ROOT / 'web' / path
+        if not target.is_file():
+            errors.append(f'{where}: missing interactive reading {url}')
+        return
     target = (ROOT / unquote(path)).resolve()
     if not target.is_relative_to(ROOT) or not target.is_file():
         errors.append(f'{where}: missing source {url}')
@@ -197,6 +202,9 @@ for filename, chapter_id in portable_readings(rows).items():
     body = f'<body data-default-route="chapter/{chapter_id}">'
     assert portable.count(body) == 1, f'Portable entry must open its own chapter: {filename}'
     assert portable.replace(body, '<body>') == html, f'Portable entry must contain the same reviewed application: {filename}'
+for filename in interactive_readings(rows):
+    standalone = (ROOT / 'dist' / filename).read_bytes()
+    assert standalone == (ROOT / 'web' / filename).read_bytes(), f'Standalone application differs from reviewed source: {filename}'
 job_html = (ROOT / 'dist/jobs.html').read_text(encoding='utf-8')
 assert job_html.count('<body data-default-route="jobs">') == 1
 assert job_html.replace('<body data-default-route="jobs">', '<body>') == html, 'Jobs entry must contain the same application'

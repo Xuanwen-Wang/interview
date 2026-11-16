@@ -105,6 +105,7 @@ function renderChapter(id, section) {
  initCudaExecutionLabs();
  initCommunicationLabs();
  initMathFoundations();
+ initInteractiveReading(c);
  initVpArchitecture(c);
  initVpCapacity(c);
  initVpOperatorLabs(c);

@@ -23,6 +23,23 @@ def portable_readings(chapters):
         entries[portable['file']] = chapter['id']
     return entries
 
+def interactive_readings(chapters):
+    """Declare reviewed standalone applications without globbing web assets."""
+    entries = {}
+    reserved = {'index.html', 'jobs.html', *portable_readings(chapters)}
+    for chapter in chapters:
+        interactive = chapter.get('interactiveReading')
+        if interactive is None:
+            continue
+        assert all(isinstance(interactive.get(key), str) and interactive[key]
+                   for key in ['file', 'download', 'label']), chapter['id']
+        filename = interactive['file']
+        assert re.fullmatch(r'[a-z0-9-]+\.html', filename), filename
+        assert re.fullmatch(r'[a-z0-9-]+\.html', interactive['download']), chapter['id']
+        assert filename not in reserved and filename not in entries, filename
+        entries[filename] = chapter['id']
+    return entries
+
 class ContentCheck(HTMLParser):
     def handle_starttag(self, tag, attrs):
         if tag in {'script', 'iframe', 'object', 'embed', 'form'}:
@@ -79,6 +96,10 @@ def build():
     (out / 'jobs.html').write_text(result.replace('<body>', '<body data-default-route="jobs">'), encoding='utf-8')
     for filename, chapter_id in portable_readings(chapters).items():
         (out / filename).write_text(result.replace('<body>', f'<body data-default-route="chapter/{chapter_id}">'), encoding='utf-8')
+    for filename in interactive_readings(chapters):
+        source = ROOT / 'web' / filename
+        assert source.is_file() and not source.is_symlink(), filename
+        (out / filename).write_bytes(source.read_bytes())
     (out / '.nojekyll').touch()
     manifest = {'modules': len(payload['CATALOG']['modules']), 'topics': sum(len(m['groups']) for m in payload['CATALOG']['modules']), 'companies': len(payload['COMPANIES']), 'reports': len(payload['REPORTS']), 'diagrams': sum(s['html'].count('<svg') for c in chapters for s in c['sections']), 'chapters': len(chapters), 'sections': sum(len(c['sections']) for c in chapters), 'questions': sum(len(c['questions']) for c in chapters), 'characters': sum(len(re.sub('<[^>]+>', '', s['html'])) for c in chapters for s in c['sections']), 'bytes': len(result.encode())}
     manifest['jobs'] = len(payload['JOBS'])

@@ -53,10 +53,11 @@ PATTERNS = {
 
 def expected_files(root=ROOT):
     """Use the same portable entry declarations as the build, not a glob."""
-    from build import portable_readings
+    from build import interactive_readings, portable_readings
     chapters = [chapter for path in sorted((root / 'content').glob('*.json'))
                 for chapter in json.loads(path.read_text(encoding='utf-8'))]
-    files = {'index.html', 'manifest.json', '.nojekyll', *portable_readings(chapters)}
+    files = {'index.html', 'manifest.json', '.nojekyll',
+             *portable_readings(chapters), *interactive_readings(chapters)}
     if (root / 'config/jobs.json').is_file():
         files.add('jobs.html')
     return files

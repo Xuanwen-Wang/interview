@@ -290,6 +290,13 @@
           "continuousReading": true
         },
         {
+          "id": "npu-data-path",
+          "title": "NPU 数据通路与带宽：交互架构图",
+          "chapters": [
+            "hw-npu-data-path"
+          ]
+        },
+        {
           "id": "backend",
           "title": "整体 Lowering：一条完整的编译路线",
           "chapters": [

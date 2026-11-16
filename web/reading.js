@@ -60,6 +60,12 @@ function chapterSectionsHTML(c) {
   const byId = new Map(numbered.map(entry=>[entry.section.id,entry]));
   return c.readingStages.map((stage,i)=>`<section class="chapter-stage" id="${stage.id}" data-reading-stage="${stage.id}"><header class="reading-stage-heading"><span>${esc(c.readingStageLabel || '阅读部分')}</span><h2><span class="sec-no">${sectionOrdinal(i+1)}、</span><span>${esc(stage.title)}</span></h2><p>${esc(stage.summary)}</p></header>${stage.sections.map(id=>sectionHTML(byId.get(id),'h3')).join('')}</section>`).join('');
 }
+function initInteractiveReading(c) {
+  const reading = c.interactiveReading;
+  const host = document.querySelector('[data-interactive-reading]');
+  if (!reading || !host) return;
+  host.innerHTML = `<div class="interactive-reading-actions"><a href="${esc(reading.file)}" target="_blank" rel="noopener">打开完整交互图 ↗</a><a href="${esc(reading.file)}" download="${esc(reading.download)}">${esc(reading.label)}</a></div><p class="small muted">下方可直接操作；展开复杂路径时，可在完整页面中阅读。下载的 HTML 包含全部图示与数据，可离线使用。</p><iframe class="interactive-reading-frame" title="${esc(c.title)}" src="${esc(reading.file)}" loading="lazy"></iframe><p class="interactive-reading-print">打印交互图时，请打开完整页面，再使用浏览器打印。</p>`;
+}
 function chapterTocHTML(c, selected) {
   const numbered = numberedSections(c);
   const link = ({section:s,number}) => `<a href="#chapter/${c.id}/${s.id}" data-toc="${s.id}"><span class="toc-no">${sectionNumberLabel(number)}</span><span>${esc(sectionTitle(s.title))}</span></a>`;
