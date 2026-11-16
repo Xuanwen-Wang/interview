@@ -69,9 +69,11 @@ python3 scripts/check_public_artifact.py
 python3 -m http.server 8768 --bind 127.0.0.1 --directory dist
 ```
 
-也可以直接打开 `dist/index.html`，或用 `dist/attention.html`、`dist/ffn.html`、`dist/moe.html`、`dist/pe.html`、`dist/vp.html` 从头到尾阅读对应长文。性能分析长文可直接打开 `dist/performance.html`。正文与应用可离线阅读，外部来源链接需要网络。笔记仅存在当前浏览器的 localStorage，不会上传；不同域名、设备之间需要手动导出导入。
+在线版本通过上面的本地 HTTP 服务阅读，或访问 GitHub Pages。`dist/index.html` 是轻量首页；`attention.html`、`ffn.html`、`moe.html`、`pe.html`、`vp.html` 等原有入口保持有效，进入时只加载对应章节，章内连续阅读与锚点保持不变。公共脚本、样式和目录使用带内容版本的独立资源，搜索索引在第一次搜索时加载。
 
-`dist/jobs.html` 可单独保存并离线查看岗位要求；岗位来源和状态边界见 [岗位核验记录](evidence/job-sources.md)。
+直接打开文件离线阅读时，使用 `dist/interview-offline.html`，或 `dist/attention-offline.html`、`dist/ffn-offline.html`、`dist/moe-offline.html` 等 `*-offline.html`。首页“下载完整离线版”和章节“保存完整 HTML”会下载这些自包含文件，正文、搜索与内嵌教学交互无需联网；独立 NPU 交互图需通过自身入口另存完整 HTML，外部来源链接需要网络。笔记仅存在当前浏览器的 localStorage，不会上传；不同域名、设备之间需要手动导出导入。
+
+`dist/jobs.html` 是在线岗位入口，`dist/jobs-offline.html` 可单独保存并离线查看岗位要求；岗位来源和状态边界见 [岗位核验记录](evidence/job-sources.md)。
 
 ## 维护
 
@@ -84,7 +86,7 @@ practice/            原创参考实现及验证
 docs/                扩展规范
 web/                 页面、样式、交互逻辑
 evidence/            固定版本来源、审查与验证记录
-scripts/build.py     生成单文件 HTML
+scripts/build.py     生成在线资源与完整离线 HTML
 scripts/check.py     检查内容与站内引用
 .github/workflows/   构建和 GitHub Pages 发布
 ```

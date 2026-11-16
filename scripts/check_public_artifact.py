@@ -20,7 +20,7 @@ MANIFEST_KEYS = {
     'sections', 'questions', 'characters', 'bytes', 'jobs',
 }
 PAYLOAD_DECLARATION = re.compile(
-    r'^\s*const\s+(?:CHAPTERS|CATALOG|REPORTS|COMPANIES|JOBS|CYCLESIM_CASES)\s*=\s*', re.M)
+    r'^\s*(?:const|let)\s+(?:CHAPTERS|CATALOG|REPORTS|COMPANIES|JOBS|CYCLESIM_CASES|SITE)\s*=\s*', re.M)
 PATTERNS = {
     'local filesystem path': re.compile(
         r'/(?:data/wangxw|home/wangxw)(?=/|[\s"\'<>]|$)', re.I),
@@ -60,6 +60,10 @@ def expected_files(root=ROOT):
              *portable_readings(chapters), *interactive_readings(chapters)}
     if (root / 'config/jobs.json').is_file():
         files.add('jobs.html')
+    if (root / 'web/runtime.js').is_file():
+        from build import offline_entries, online_filenames
+        files.update(online_filenames(chapters))
+        files.update(offline_entries(chapters))
     return files
 
 
@@ -133,6 +137,23 @@ class DocumentText(HTMLParser):
             self.scripts.append(data)
 
 
+def json_document_text(payload):
+    parts, pending = [], [payload]
+    while pending:
+        value = pending.pop()
+        if isinstance(value, dict):
+            pending.extend(value.keys())
+            pending.extend(value.values())
+        elif isinstance(value, list):
+            pending.extend(value)
+        elif isinstance(value, str) and '<' in value:
+            document = DocumentText()
+            document.feed(value)
+            document.close()
+            parts.append(''.join(document.parts))
+    return '\n'.join(parts)
+
+
 def payload_document_text(scripts):
     """Read only build.py's JSON declarations, never arbitrary JavaScript."""
     parts = []
@@ -142,18 +163,7 @@ def payload_document_text(scripts):
             payload, end = decoder.raw_decode(script, declaration.end())
             if not isinstance(payload, (dict, list)) or not script[end:].lstrip().startswith(';'):
                 raise ValueError('Unexpected inline payload format')
-            pending = [payload]
-            while pending:
-                value = pending.pop()
-                if isinstance(value, dict):
-                    pending.extend(value.values())
-                elif isinstance(value, list):
-                    pending.extend(value)
-                elif isinstance(value, str) and '<' in value:
-                    document = DocumentText()
-                    document.feed(value)
-                    document.close()
-                    parts.append(''.join(document.parts))
+            parts.append(json_document_text(payload))
     return '\n'.join(parts)
 
 
@@ -183,14 +193,23 @@ def check_artifact(directory, expected):
                 errors.append('unexpected manifest content')
             continue
         text = normalized_text(filename + '\n' + raw)
-        document = DocumentText()
-        document.feed(raw)
-        document.close()
-        document_text = normalized_text(''.join(document.parts))
+        document_text = ''
         try:
-            payload_text = normalized_text(payload_document_text(document.scripts))
+            if filename.endswith('.json'):
+                payload = json.loads(raw)
+                if not isinstance(payload, (dict, list)):
+                    raise ValueError('Unexpected JSON asset format')
+                payload_text = normalized_text(json_document_text(payload))
+            elif filename.endswith('.js'):
+                payload_text = normalized_text(payload_document_text([raw]))
+            else:
+                document = DocumentText()
+                document.feed(raw)
+                document.close()
+                document_text = normalized_text(''.join(document.parts))
+                payload_text = normalized_text(payload_document_text(document.scripts))
         except ValueError:
-            errors.append('invalid known inline payload')
+            errors.append('invalid JSON asset' if filename.endswith('.json') else 'invalid known inline payload')
             payload_text = ''
         if '\x00' in text:
             errors.append('binary content in generated HTML')

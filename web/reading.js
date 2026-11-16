@@ -50,7 +50,7 @@ function sectionBodyHTML(section, number, grouped) {
 function readingPathHTML(c) {
   if (!c.readingStages) return '';
   const portable = c.portableReading;
-  const download = portable ? `<a class="portable-reading" href="${esc(portable.file)}" download="${esc(portable.download)}">${esc(portable.label)}</a>` : '';
+  const download = portable ? `<a class="portable-reading" href="${esc(portable.offlineFile || portable.file)}" download="${esc(portable.download)}">${esc(portable.label)}</a>` : '';
   return `<nav class="reading-path" aria-label="本文阅读路径"><p>${esc(c.readingLabel || '从外到内，沿一条数据路径读完')}</p><ol>${c.readingStages.map((stage,i)=>`<li><a href="#chapter/${c.id}/${stage.id}"><small>${sectionOrdinal(i+1)}、</small><span>${esc(stage.title)}</span></a></li>`).join('')}</ol>${download}</nav>`;
 }
 function chapterSectionsHTML(c) {

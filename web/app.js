@@ -39,7 +39,7 @@ function readStorage(){
  }catch{return emptyState();}
 }
 let state=readStorage(), stateBase=JSON.parse(JSON.stringify(state));
-let toastTimer, sectionObserver, practiceTimer, elapsed = 0, renderedChapterId = null;
+let toastTimer, sectionObserver, practiceTimer, elapsed = 0, renderedChapterId = null, renderRequest = 0;
 function toast(message) { $('#toast').textContent = message; $('#toast').classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('#toast').classList.remove('visible'), 2200); }
 function mergePending(merged) {
   for(const id of CHAPTERS.map(c=>c.id))if(state.read.includes(id)!==stateBase.read.includes(id))merged.read=state.read.includes(id)?[...new Set([...merged.read,id])]:merged.read.filter(x=>x!==id);
@@ -54,9 +54,9 @@ function save() {
   localStorage.setItem(STORE_KEY,JSON.stringify(merged));state=merged;stateBase=JSON.parse(JSON.stringify(state));
  }catch{toast('浏览器未允许保存，请导出笔记备份。');}
 }
-const questions = CHAPTERS.flatMap(c => c.questions.map(q => ({...q, chapter: c.id, title: c.title, part: c.part, key: c.id + ':' + (q.id || q.q)})));
-const sources = CHAPTERS.flatMap(c => c.sources.map(s => ({...s, chapter: c.id, chapterTitle: c.title})));
-const searchIndex = CHAPTERS.flatMap(c => [{chapter: c.id, title: c.title, subtitle: c.part, body: c.lead + ' ' + c.tags.join(' '), link: '#chapter/' + c.id}, ...c.sections.flatMap(s => sectionSearchEntries(c,s)), ...c.questions.map(q => ({chapter:c.id,title:q.q,subtitle:'面试追问 · '+c.title,body:q.a+' '+q.followup,link:'#chapter/'+c.id+'/questions'}))]).concat(jobSearchEntries());
+let questions = CHAPTERS.flatMap(c => c.questions.map(q => ({...q, chapter: c.id, title: c.title, part: c.part, key: c.id + ':' + (q.id || q.q)})));
+let sources = CHAPTERS.flatMap(c => c.sources.map(s => ({...s, chapter: c.id, chapterTitle: c.title})));
+let searchIndex = null;
 function progress() {
  const n = CHAPTERS.filter(c => state.read.includes(c.id)).length;
  $('#progress-value').textContent = Math.round(n / CHAPTERS.length * 100) + '%';
@@ -180,7 +180,8 @@ function setMenu(open){
  document.body.classList.toggle('menu-open',open);$('#menu-toggle').setAttribute('aria-expanded',String(open));
  $('#sidebar').inert=document.body.classList.contains('chapter-reading')||(window.matchMedia('(max-width:700px)').matches&&!open);
 }
-function render(){
+async function render(){
+ const request = ++renderRequest;
  const [route,id,section]=currentRoute();
  document.body.classList.toggle('chapter-reading',route==='chapter'&&chapterMap.has(id));
  document.body.classList.toggle('pe-architecture-reading',route==='chapter'&&id==='hw-memory-hierarchy');
@@ -188,8 +189,8 @@ function render(){
  const requested=location.hash.slice(1).split('/');
  if(route==='chapter'&&requested[0]==='chapter'&&(requested[1]!==id||requested[2]!==section))history.replaceState(null,'','#chapter/'+id+(section?'/'+section:''));
  if(route==='chapter'&&renderedChapterId===id){setMenu(false);scrollChapterAnchor(section);return;}
- destroyVpArchitecture();
- destroyVpOperatorLabs();
+ if(typeof destroyVpArchitecture==='function')destroyVpArchitecture();
+ if(typeof destroyVpOperatorLabs==='function')destroyVpOperatorLabs();
  renderedChapterId=null;clearInterval(practiceTimer);practiceTimer=null;sectionObserver?.disconnect();
  setMenu(false);
  renderNavigation(route,id);
@@ -204,6 +205,19 @@ function render(){
  if(route==='job'){title=JOBS.find(job=>job.id===id)?.title||'岗位';trail+='<span>/</span><a href="#jobs">岗位收藏</a>';}
  $('#breadcrumb').innerHTML=trail+'<span>/</span>'+esc(title);
  document.title=title+' · AI Compiler Field Notes';
+ if(onlineSite){
+  $('#main').setAttribute('aria-busy','true');
+  $('#main').innerHTML=`<section class="content-loading" role="status"><h1 class="page-title">${esc(title)}</h1><p>正在加载，请稍候…</p></section>`;
+  try{await ensureRouteData(route,id);}catch{
+   if(request!==renderRequest)return;
+   $('#main').removeAttribute('aria-busy');
+   $('#main').innerHTML='<section role="alert"><h1 class="page-title">内容暂时没有加载成功</h1><p>请检查网络后重试，也可以保存完整 HTML，稍后离线阅读。</p><div class="hero-actions"><button class="primary" id="load-retry">重新加载</button><a href="interview-offline.html" download="interview-complete.html">下载完整离线版 ↓</a></div></section>';
+   $('#load-retry').onclick=render;
+   return;
+  }
+  if(request!==renderRequest)return;
+  $('#main').removeAttribute('aria-busy');
+ }
  if(route==='chapter')renderChapter(id,section);
  else if(route==='module')renderModule(id,section);
  else if(route==='company')renderCompanies(id);
@@ -212,10 +226,20 @@ function render(){
  if(!section)window.scrollTo({top:0,behavior:'instant'});
  $('#main').focus({preventScroll:true});
 }
-function search(){
+let searchRequest = 0;
+async function search(){
+ const request=++searchRequest;
  const q=$('#search-input').value.trim().toLowerCase();
  if(!q){$('#search-results').innerHTML='<div class="empty">搜索章节、正文、面试问答和岗位要求。支持多个关键词，例如“MLIR 编译器”。</div>';return;}
- const words=q.split(/\s+/);const results=searchIndex.map(x=>({...x,score:words.reduce((n,w)=>n+(x.title.toLowerCase().includes(w)?5:0)+(x.body.toLowerCase().includes(w)?1:0),0)})).filter(x=>words.every(w=>(x.title+' '+x.subtitle+' '+x.body).toLowerCase().includes(w))).sort((a,b)=>b.score-a.score).slice(0,30);
+ $('#search-results').innerHTML='<div class="empty" role="status">正在搜索…</div>';
+ let index;
+ try{index=await searchEntries();}catch{
+  if(request!==searchRequest)return;
+  $('#search-results').innerHTML='<div class="empty">搜索暂时不可用。<button id="search-retry">重试搜索</button></div>';
+  $('#search-retry').onclick=search;return;
+ }
+ if(request!==searchRequest||!$('#search-dialog').open)return;
+ const words=q.split(/\s+/);const results=index.map(x=>({...x,score:words.reduce((n,w)=>n+(x.title.toLowerCase().includes(w)?5:0)+(x.body.toLowerCase().includes(w)?1:0),0)})).filter(x=>words.every(w=>(x.title+' '+x.subtitle+' '+x.body).toLowerCase().includes(w))).sort((a,b)=>b.score-a.score).slice(0,30);
  $('#search-results').innerHTML=results.map(r=>{const at=r.body.toLowerCase().indexOf(words[0]);const excerpt=r.body.slice(Math.max(0,at-35),Math.max(0,at-35)+155);return `<a class="search-result" href="${esc(r.link)}"><small>${esc(r.subtitle)}</small><strong>${esc(r.title)}</strong><p>${esc(excerpt)}…</p></a>`;}).join('')||'<div class="empty">没有匹配内容。试试更短的术语，或它的英文名。</div>';
  $$('.search-result').forEach(a=>a.onclick=()=>$('#search-dialog').close());
 }
@@ -237,4 +261,4 @@ window.addEventListener('hashchange',render);
 window.addEventListener('storage',e=>{if(e.key!==STORE_KEY)return;const latest=readStorage();const base=JSON.parse(JSON.stringify(latest));state=mergePending(latest);stateBase=base;progress();const id=currentRoute()[1];if($('#read-toggle'))$('#read-toggle').textContent=state.read.includes(id)?'已完成 ✓':'标记已读';if($('#read-main'))$('#read-main').textContent=state.read.includes(id)?'已完成本章 ✓ · 取消标记':'标记本章已读 ✓';$$('[data-note]').forEach(el=>{if(el!==document.activeElement)el.value=state.notes[el.dataset.note]||'';});const note=$('#chapter-note');if(note&&note!==document.activeElement)note.value=state.notes[currentRoute()[1]]||'';});
 window.addEventListener('beforeprint',()=>{$$('.article details:not(.legacy-notes)').forEach(q=>{q.dataset.wasOpen=String(q.open);q.open=true;});});
 window.addEventListener('afterprint',()=>{$$('.article details:not(.legacy-notes)').forEach(q=>q.open=q.dataset.wasOpen==='true');});
-nav();render();
+installReadingLinks();nav();render();

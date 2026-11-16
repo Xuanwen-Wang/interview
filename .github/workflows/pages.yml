@@ -27,6 +27,7 @@ jobs:
           python3 scripts/check.py
           python3 scripts/check_glm53_model.py
           node --check web/app.js
+          node --check web/runtime.js
           node --check web/catalog.js
           node --check web/jobs.js
           node --check web/reading.js
@@ -80,7 +81,7 @@ jobs:
           "$RUNNER_TEMP/coding-check"
       - name: Verify public artifact boundary
         run: |
-          python3 -m unittest discover -s scripts -p 'test_public_artifact.py' -v
+          python3 -m unittest discover -s scripts -p 'test_*.py' -v
           python3 scripts/check_public_artifact.py
       - uses: actions/upload-pages-artifact@v3
         with:

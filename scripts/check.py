@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from urllib.parse import urlsplit, unquote
 from html.parser import HTMLParser
-from build import interactive_readings, portable_readings
+from build import interactive_readings, offline_entries, online_bundle, portable_readings, read_payload
 
 ROOT = Path(__file__).resolve().parent.parent
 rows = [c for p in sorted((ROOT / 'content').glob('*.json')) for c in json.loads(p.read_text(encoding='utf-8'))]
@@ -190,10 +190,12 @@ for c in rows:
         assert q['q'] and q['a'] and q['followup'], (c['id'], q)
 
 html = (ROOT / 'dist/index.html').read_text(encoding='utf-8')
-assert 'const CHAPTERS =' in html
-assert 'const JOBS =' in html
 assert not re.search(r'/\*\s*INLINE_\w+\s*\*/', html), 'Unexpanded inline template marker'
-assert not re.search(r'<script[^>]+src=', html), 'Standalone HTML must not need script downloads'
+assets, style, data, script = online_bundle(ROOT, read_payload())
+assert len(html.encode()) < 16000, 'Online shell must stay small'
+assert f'href="{style}"' in html and f'src="{data}"' in html and f'src="{script}"' in html
+for filename, content in assets.items():
+    assert (ROOT / 'dist' / filename).read_text(encoding='utf-8') == content, 'Generated asset differs from reviewed source'
 assert not re.search(r'https?://[^\s"\']+\.(?:woff|ttf|css)', html), 'External asset dependency'
 assert not re.search(r'(?:ghp_|github_pat_|sk-proj-)[A-Za-z0-9_]{15,}', html)
 assert not re.search(r'/data/wangxw/home|/home/wangxw|172\.16\.\d+\.\d+', html)
@@ -201,7 +203,14 @@ for filename, chapter_id in portable_readings(rows).items():
     portable = (ROOT / 'dist' / filename).read_text(encoding='utf-8')
     body = f'<body data-default-route="chapter/{chapter_id}">'
     assert portable.count(body) == 1, f'Portable entry must open its own chapter: {filename}'
-    assert portable.replace(body, '<body>') == html, f'Portable entry must contain the same reviewed application: {filename}'
+    assert portable.replace(body, '<body>') == html, f'Online entry must contain the same application shell: {filename}'
+offline = (ROOT / 'dist/interview-offline.html').read_text(encoding='utf-8')
+assert 'const CHAPTERS =' in offline and 'const JOBS =' in offline
+assert not re.search(r'<script[^>]+src=|<link[^>]+rel="stylesheet"', offline), 'Offline HTML must be self-contained'
+for filename, route in offline_entries(rows).items():
+    page = (ROOT / 'dist' / filename).read_text(encoding='utf-8')
+    body = f'<body data-default-route="{route}">'
+    assert (page.replace(body, '<body>') if route else page) == offline, 'Offline entry lost complete guide content'
 for filename in interactive_readings(rows):
     standalone = (ROOT / 'dist' / filename).read_bytes()
     assert standalone == (ROOT / 'web' / filename).read_bytes(), f'Standalone application differs from reviewed source: {filename}'

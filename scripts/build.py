@@ -2,12 +2,93 @@
 """Build a portable, dependency-free field guide from reviewed JSON content."""
 import base64
 import binascii
+import hashlib
 import json
 import re
 from pathlib import Path
 from html.parser import HTMLParser
 
 ROOT = Path(__file__).resolve().parent.parent
+
+STYLE_FILES = ['style.css', 'catalog.css', 'pe-explorer.css', 'pe-memory-explorer.css', 'pe-weight-layout.css', 'moe-explorer.css', 'performance-explorer.css', 'decode-explorer.css', 'attention-lab.css', 'lowering-explorer.css', 'sync-explorer.css', 'cyclesim-explorer.css', 'deepseek-architecture.css', 'cuda-guide.css', 'cuda-execution.css', 'reading.css', 'vp-architecture.css', 'vp-capacity.css', 'vp-operator-lab.css', 'jobs.css', 'communication-lab.css', 'math-foundations.css', 'pe-architecture.css']
+SCRIPT_FILES = ['runtime.js', 'catalog.js', 'reading.js', 'pe-model.js', 'pe-explorer.js', 'pe-memory-model.js', 'pe-memory-explorer.js', 'pe-weight-layout.js', 'pe-architecture.js', 'moe-explorer.js', 'performance-explorer.js', 'decode-explorer.js', 'attention-lab.js', 'lowering-explorer.js', 'sync-explorer.js', 'cyclesim-model.js', 'cyclesim-diagrams.js', 'cyclesim-explorer.js', 'deepseek-architecture.js', 'cuda-guide.js', 'cuda-execution.js', 'communication-lab.js', 'math-foundations.js', 'jobs.js', 'vp-architecture.js', 'vp-capacity.js', 'vp-operator-lab.js', 'app.js']
+CORE_STYLES = {'style.css', 'catalog.css', 'reading.css', 'jobs.css'}
+CORE_SCRIPTS = {'runtime.js', 'catalog.js', 'reading.js', 'jobs.js', 'app.js'}
+
+
+def json_text(value):
+    return json.dumps(value, ensure_ascii=False, separators=(',', ':')).replace('</', '<\\/')
+
+
+def declarations(payload):
+    return '\n'.join(('let' if name == 'CYCLESIM_CASES' else 'const') + ' ' + name + ' = ' + json_text(value) + ';'
+                     for name, value in payload.items())
+
+
+def read_payload(root=ROOT):
+    chapters = [chapter for path in sorted((root / 'content').glob('*.json'))
+                for chapter in json.loads(path.read_text(encoding='utf-8'))]
+    chapters.sort(key=lambda c: c['order'])
+    payload = {'CHAPTERS': chapters}
+    for name, filename in [('CATALOG', 'navigation'), ('REPORTS', 'interviews'), ('COMPANIES', 'companies'),
+                           ('JOBS', 'jobs'), ('CYCLESIM_CASES', 'cyclesim-cases')]:
+        payload[name] = json.loads((root / 'config' / (filename + '.json')).read_text(encoding='utf-8'))
+    return payload
+
+
+def offline_entries(chapters):
+    entries = {'interview-offline.html': None, 'jobs-offline.html': 'jobs'}
+    entries.update({filename.removesuffix('.html') + '-offline.html': 'chapter/' + chapter
+                    for filename, chapter in portable_readings(chapters).items()})
+    assert not set(entries) & (set(portable_readings(chapters)) | set(interactive_readings(chapters)))
+    return entries
+
+
+def online_filenames(chapters):
+    return {'asset-core.css', 'asset-core.js', 'asset-reading.css', 'asset-reading.js',
+            'asset-catalog.js', 'asset-search.json', 'asset-cases.json',
+            'asset-questions.json', 'asset-sources.json',
+            *('asset-chapter-' + chapter['id'] + '.json' for chapter in chapters)}
+
+
+def online_bundle(root, payload):
+    """Declare versioned public assets; never copy arbitrary files."""
+    from build_search import chapter_search
+    files = {}
+
+    def asset(label, suffix, text):
+        filename = 'asset-' + label + '.' + suffix
+        files[filename] = text
+        return filename + '?v=' + hashlib.sha256(text.encode()).hexdigest()[:16]
+
+    def bundle(names):
+        return '\n'.join((root / 'web' / name).read_text(encoding='utf-8') for name in names)
+
+    style = asset('core', 'css', bundle(n for n in STYLE_FILES if n in CORE_STYLES))
+    script = asset('core', 'js', bundle(n for n in SCRIPT_FILES if n in CORE_SCRIPTS))
+    site = {'online': True,
+            'chapterStyle': asset('reading', 'css', bundle(n for n in STYLE_FILES if n not in CORE_STYLES)),
+            'chapterScript': asset('reading', 'js', bundle(n for n in SCRIPT_FILES if n not in CORE_SCRIPTS)),
+            'chapters': {},
+            'search': asset('search', 'json', json_text(chapter_search(payload['CHAPTERS']))),
+            'cases': asset('cases', 'json', json_text(payload['CYCLESIM_CASES']))}
+    chapters = []
+    for original in payload['CHAPTERS']:
+        chapter = dict(original)
+        if 'portableReading' in chapter:
+            portable = chapter['portableReading']
+            chapter['portableReading'] = {**portable, 'offlineFile': portable['file'].removesuffix('.html') + '-offline.html'}
+        site['chapters'][chapter['id']] = asset('chapter-' + chapter['id'], 'json', json_text(chapter))
+        chapters.append({**chapter, 'sources': [], 'takeaways': [],
+                         'questions': [{k: v for k, v in q.items() if k in {'id', 'q', 'legacyKeys'}} for q in chapter['questions']],
+                         'sections': [{k: v for k, v in s.items() if k != 'html'} for s in chapter['sections']]})
+    questions = [{**q, 'chapter': c['id'], 'title': c['title'], 'part': c['part'], 'key': c['id'] + ':' + q.get('id', q['q'])}
+                 for c in payload['CHAPTERS'] for q in c['questions']]
+    sources = [{**s, 'chapter': c['id'], 'chapterTitle': c['title']} for c in payload['CHAPTERS'] for s in c['sources']]
+    site['questions'] = asset('questions', 'json', json_text(questions))
+    site['sources'] = asset('sources', 'json', json_text(sources))
+    data = asset('catalog', 'js', declarations({**payload, 'CHAPTERS': chapters, 'CYCLESIM_CASES': {}, 'SITE': site}))
+    return files, style, data, script
 
 def portable_readings(chapters):
     entries = {}
@@ -26,7 +107,9 @@ def portable_readings(chapters):
 def interactive_readings(chapters):
     """Declare reviewed standalone applications without globbing web assets."""
     entries = {}
-    reserved = {'index.html', 'jobs.html', *portable_readings(chapters)}
+    portable = portable_readings(chapters)
+    reserved = {'index.html', 'jobs.html', 'interview-offline.html', 'jobs-offline.html', *portable,
+                *(name.removesuffix('.html') + '-offline.html' for name in portable)}
     for chapter in chapters:
         interactive = chapter.get('interactiveReading')
         if interactive is None:
@@ -78,30 +161,38 @@ def build():
             ContentCheck().feed(section['html'])
         assert len(c['questions']) >= 3, c['id']
     template = (ROOT / 'web/index.html').read_text(encoding='utf-8')
-    payload = {'CHAPTERS': chapters, 'CATALOG': json.loads((ROOT / 'config/navigation.json').read_text(encoding='utf-8')), 'REPORTS': json.loads((ROOT / 'config/interviews.json').read_text(encoding='utf-8')), 'COMPANIES': json.loads((ROOT / 'config/companies.json').read_text(encoding='utf-8'))}
-    payload['JOBS'] = json.loads((ROOT / 'config/jobs.json').read_text(encoding='utf-8'))
-    payload['CYCLESIM_CASES'] = json.loads((ROOT / 'config/cyclesim-cases.json').read_text(encoding='utf-8'))
-    data = '\n'.join(f'const {name} = ' + json.dumps(value, ensure_ascii=False).replace('</', '<\\/') + ';' for name, value in payload.items())
-    result = template.replace('/* INLINE_STYLE */', '\n'.join((ROOT / 'web' / name).read_text(encoding='utf-8') for name in ['style.css', 'catalog.css', 'pe-explorer.css', 'pe-memory-explorer.css', 'pe-weight-layout.css', 'moe-explorer.css', 'performance-explorer.css', 'decode-explorer.css', 'attention-lab.css', 'lowering-explorer.css', 'sync-explorer.css', 'cyclesim-explorer.css', 'deepseek-architecture.css', 'cuda-guide.css', 'cuda-execution.css', 'reading.css', 'vp-architecture.css', 'vp-capacity.css', 'vp-operator-lab.css', 'jobs.css', 'communication-lab.css', 'math-foundations.css', 'pe-architecture.css']))
-    result = result.replace('/* INLINE_DATA */', data)
-    result = result.replace('/* INLINE_APP */', '\n'.join((ROOT / 'web' / name).read_text(encoding='utf-8') for name in ['catalog.js', 'reading.js', 'pe-model.js', 'pe-explorer.js', 'pe-memory-model.js', 'pe-memory-explorer.js', 'pe-weight-layout.js', 'pe-architecture.js', 'moe-explorer.js', 'performance-explorer.js', 'decode-explorer.js', 'attention-lab.js', 'lowering-explorer.js', 'sync-explorer.js', 'cyclesim-model.js', 'cyclesim-diagrams.js', 'cyclesim-explorer.js', 'deepseek-architecture.js', 'cuda-guide.js', 'cuda-execution.js', 'communication-lab.js', 'math-foundations.js', 'jobs.js', 'vp-architecture.js', 'vp-capacity.js', 'vp-operator-lab.js', 'app.js']))
-    assert not re.search(r'/\* INLINE_\w+ \*/', result)
+    payload = read_payload()
+    styles = '\n'.join((ROOT / 'web' / name).read_text(encoding='utf-8') for name in STYLE_FILES)
+    scripts = '\n'.join((ROOT / 'web' / name).read_text(encoding='utf-8') for name in SCRIPT_FILES)
+    result = template.replace('/* INLINE_STYLE */', styles).replace('/* INLINE_DATA */', declarations({**payload, 'SITE': {}}))
+    result = result.replace('/* INLINE_APP */', scripts)
+    assets, style, data, script = online_bundle(ROOT, payload)
+    online = template.replace('<style>/* INLINE_STYLE */</style>', f'<link rel="stylesheet" href="{style}">')
+    online = online.replace('<script>/* INLINE_DATA */</script>', f'<script defer src="{data}"></script>')
+    online = online.replace('<script>/* INLINE_APP */</script>', f'<script defer src="{script}"></script>')
+    assert not re.search(r'/\* INLINE_\w+ \*/', result + online)
     out = ROOT / 'dist'
     from check_public_artifact import check_artifact_layout, expected_files
     layout_errors = check_artifact_layout(out, expected_files(ROOT), allow_missing=True)
     if layout_errors:
         raise SystemExit('Refusing to overwrite dist: ' + '; '.join(sorted(set(layout_errors))))
     out.mkdir(exist_ok=True)
-    (out / 'index.html').write_text(result, encoding='utf-8')
-    (out / 'jobs.html').write_text(result.replace('<body>', '<body data-default-route="jobs">'), encoding='utf-8')
+    (out / 'index.html').write_text(online, encoding='utf-8')
+    (out / 'jobs.html').write_text(online.replace('<body>', '<body data-default-route="jobs">'), encoding='utf-8')
     for filename, chapter_id in portable_readings(chapters).items():
-        (out / filename).write_text(result.replace('<body>', f'<body data-default-route="chapter/{chapter_id}">'), encoding='utf-8')
+        (out / filename).write_text(online.replace('<body>', f'<body data-default-route="chapter/{chapter_id}">'), encoding='utf-8')
+    for filename, route in offline_entries(chapters).items():
+        page = result.replace('<body>', f'<body data-default-route="{route}">') if route else result
+        (out / filename).write_text(page, encoding='utf-8')
+    for filename, content in assets.items():
+        (out / filename).write_text(content, encoding='utf-8')
     for filename in interactive_readings(chapters):
         source = ROOT / 'web' / filename
         assert source.is_file() and not source.is_symlink(), filename
         (out / filename).write_bytes(source.read_bytes())
     (out / '.nojekyll').touch()
     manifest = {'modules': len(payload['CATALOG']['modules']), 'topics': sum(len(m['groups']) for m in payload['CATALOG']['modules']), 'companies': len(payload['COMPANIES']), 'reports': len(payload['REPORTS']), 'diagrams': sum(s['html'].count('<svg') for c in chapters for s in c['sections']), 'chapters': len(chapters), 'sections': sum(len(c['sections']) for c in chapters), 'questions': sum(len(c['questions']) for c in chapters), 'characters': sum(len(re.sub('<[^>]+>', '', s['html'])) for c in chapters for s in c['sections']), 'bytes': len(result.encode())}
+    manifest['bytes'] = len(online.encode())
     manifest['jobs'] = len(payload['JOBS'])
     (out / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
     print(json.dumps(manifest, ensure_ascii=False, indent=2))

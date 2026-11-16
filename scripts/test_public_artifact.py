@@ -31,6 +31,12 @@ class PublicArtifactTests(unittest.TestCase):
                 text = json.dumps(dict.fromkeys(manifest_keys(self.expected), 1))
             elif filename == '.nojekyll':
                 text = ''
+            elif filename.endswith('.json'):
+                text = '[]'
+            elif filename.endswith('.js'):
+                text = 'const example = [];'
+            elif filename.endswith('.css'):
+                text = '.example { color: green }'
             else:
                 text = '<!doctype html><title>Attention guide</title><p>Q × K</p>'
             (self.directory / filename).write_text(text, encoding='utf-8')
@@ -70,6 +76,31 @@ class PublicArtifactTests(unittest.TestCase):
     def test_clean_real_build(self):
         self.assertTrue((ROOT / 'dist/index.html').is_file(), 'Run scripts/build.py first')
         self.assertEqual(check_artifact(ROOT / 'dist', self.expected), [])
+
+    def test_lazy_assets_are_scanned_including_nested_html_and_keys(self):
+        examples = [
+            {'source': '/data/wangxw/synthetic/input.bin'},
+            {'nested': [{'html': '<p>synthetic.person<span>@</span>example.invalid</p>'}]},
+            {'<p>synthetic.person<span>@</span>example.invalid</p>': 'synthetic'},
+        ]
+        for suffix in ['json', 'js']:
+            filename = next(n for n in self.expected if n.startswith('asset-') and n.endswith('.' + suffix))
+            for example in examples:
+                with self.subTest(suffix=suffix, example=example):
+                    payload = json.dumps(example)
+                    text = payload if suffix == 'json' else 'const SITE = ' + payload + ';'
+                    path = self.directory / filename
+                    old = path.read_text()
+                    path.write_text(text)
+                    self.assertTrue(self.check())
+                    path.write_text(old)
+
+    def test_invalid_lazy_json_is_rejected(self):
+        filename = next(n for n in self.expected if n.startswith('asset-') and n.endswith('.json'))
+        for text in ['invalid', 'null', '42']:
+            with self.subTest(text=text):
+                (self.directory / filename).write_text(text)
+                self.assertIn('invalid JSON asset', self.check())
 
     def test_checkout_without_jobs_source_has_matching_artifact_contract(self):
         source = self.base / 'legacy-source'

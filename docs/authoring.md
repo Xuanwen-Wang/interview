@@ -76,7 +76,7 @@ Attention、FFN、PE、VP、MoE 部署与性能分析分别使用一个 chapter�
 
 之后再次合并章节时，已是 `readingVersion: 2` 的浏览器也必须把消失的旧 chapter 已读状态保留到 `legacyRead`。迁移依靠稳定 ID 和显式 `legacyKeys`，不能靠相同题目标题猜测对应关系；`scripts/check_moe_model.js` 同时检查这类再次迁移与同名锚点分流。
 
-长文章节使用 `portableReading` 指定独立入口，例如 `{"file":"vp.html","download":"518-vp.html","label":"保存完整 VP HTML ↓"}`。`scripts/build.py` 据此生成 `dist/attention.html`、`dist/ffn.html`、`dist/pe.html`、`dist/vp.html`、`dist/moe.html`；它们与 `dist/index.html` 内嵌同一份内容和应用，仅默认路由不同，可保存后独立离线阅读。文件名必须是唯一的英文小写 HTML 文件名，不能占用 `index.html`。下载链接使用当前章的元数据，不能写死为 PE。静态检查验证独立入口内容一致性；浏览器验收验证实际下载目标。它们在同一来源共享浏览器笔记，文件离线副本则需导出/导入来转移笔记。
+长文章节使用 `portableReading` 指定稳定的在线入口，例如 `{"file":"vp.html","download":"518-vp.html","label":"保存完整 VP HTML ↓"}`。构建会生成轻量在线入口与按章 JSON；进入章节后一次加载该章全文，章内锚点跳转不拆载、不重复初始化交互。`dist/vp-offline.html` 等 `*-offline.html` 和全站 `dist/interview-offline.html` 内嵌完整指南、脚本与样式，章节下载按钮指向离线版；线上文件名、下载文件名和旧深链接保持兼容。文件名必须是唯一的英文小写 HTML 文件名，不能占用保留入口。公共资源的内容版本用于浏览器缓存，全文搜索索引在构建时生成、第一次搜索时加载。静态检查核对在线资源与源码、离线内容一致性；浏览器验收覆盖按需请求、失败重试、快速切换、实际下载与断网打开。独立 NPU 交互图仍使用其自身的完整 HTML 下载入口，需单独保存。相同来源共享浏览器笔记，文件离线副本需导出/导入来转移笔记。
 
 ## 未来专题怎么放
 
