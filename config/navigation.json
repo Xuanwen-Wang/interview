@@ -250,7 +250,7 @@
     },
     {
       "id": "compiler",
-      "title": "LLVM / MLIR 与后端",
+      "title": "Triton / MLIR / LLVM",
       "number": "04",
       "description": "两篇完整教程：先掌握 IR、PassManager、Analysis 与改写机制，再沿一张总图走完 LLVM 后端下降。各模块有独立锚点和源码入口，可持续扩展调度、RA 等专题。",
       "groups": [
