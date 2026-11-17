@@ -277,9 +277,9 @@
     },
     {
       "id": "hardware",
-      "title": "518 硬件与后端",
+      "title": "518 硬件",
       "number": "05",
-      "description": "先建立单 rank 双 ZeusCore 的整体硬件视角，读懂存储、执行模型、ISA、算力与带宽，再深入 PE、VP、Lowering 和同步。",
+      "description": "先建立单 rank 双 ZeusCore 的整体硬件视角，读懂存储、执行模型、ISA、算力与带宽，再沿 NPU 数据通路深入 PE 与 VP。",
       "groups": [
         {
           "id": "zeuscore",
@@ -295,22 +295,6 @@
           "chapters": [
             "hw-npu-data-path"
           ]
-        },
-        {
-          "id": "backend",
-          "title": "整体 Lowering：一条完整的编译路线",
-          "chapters": [
-            "compiler-lowering"
-          ],
-          "continuousReading": true
-        },
-        {
-          "id": "synchronization",
-          "title": "依赖与同步：核心设计、Mailbox 与 CUDA 对照",
-          "chapters": [
-            "compiler-sync"
-          ],
-          "continuousReading": true
         },
         {
           "id": "pe",
@@ -339,16 +323,56 @@
           "chapter": "hw-memory-hierarchy"
         },
         {
-          "title": "接到编译与同步",
-          "description": "理解 tensor 程序如何落成有正确依赖的命令",
+          "title": "继续看 VP 数据通路",
+          "description": "沿寄存器、流水与状态理解向量算子执行",
+          "chapter": "hw-vp-architecture"
+        }
+      ],
+      "legacyGroups": {
+        "backend": {"module": "zeus-compiler", "group": "backend"},
+        "synchronization": {"module": "zeus-compiler", "group": "synchronization"}
+      }
+    },
+    {
+      "id": "zeus-compiler",
+      "title": "518 编译器",
+      "number": "06",
+      "description": "用一次真实 GEMM 走完从块指针、布局和描述符到 PE、VP 与汇编的 Lowering，再理解资源依赖如何变成可执行的 mailbox 同步协议。",
+      "groups": [
+        {
+          "id": "backend",
+          "title": "整体 Lowering：一条完整的编译路线",
+          "chapters": [
+            "compiler-lowering"
+          ],
+          "continuousReading": true
+        },
+        {
+          "id": "synchronization",
+          "title": "依赖与同步：核心设计、Mailbox 与 CUDA 对照",
+          "chapters": [
+            "compiler-sync"
+          ],
+          "continuousReading": true
+        }
+      ],
+      "learningPath": [
+        {
+          "title": "先走完一次真实 GEMM 的编译",
+          "description": "沿同一次编译的 IR 理解布局、地址与代码生成",
           "chapter": "compiler-lowering"
+        },
+        {
+          "title": "再理解自动同步",
+          "description": "从资源依赖、冲突与控制流走到 mailbox 协议",
+          "chapter": "compiler-sync"
         }
       ]
     },
     {
       "id": "systems",
       "title": "性能与推理系统",
-      "number": "06",
+      "number": "07",
       "description": "把单算子优化放回容量、并发、服务与端到端指标中。",
       "groups": [
         {
@@ -378,7 +402,7 @@
     {
       "id": "interviews",
       "title": "岗位与面试题",
-      "number": "07",
+      "number": "08",
       "description": "先看岗位要求，再按公司查阅面试题，或进入独立的模拟面试逐题练习。",
       "groups": [
         {
@@ -412,7 +436,7 @@
     {
       "id": "coding",
       "title": "Coding 实作",
-      "number": "08",
+      "number": "09",
       "description": "从题目合同、参考实现、边界反例走到编译器与 kernel 的动手能力。",
       "groups": [
         {

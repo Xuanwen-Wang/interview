@@ -70,7 +70,13 @@ for m in modules.values():
     assert len({g['id'] for g in m['groups']}) == len(m['groups']), m['id']
     group_ids = {g['id'] for g in m['groups']}
     assert set(m.get('legacyGroups', {})).isdisjoint(group_ids), m['id']
-    assert set(m.get('legacyGroups', {}).values()) <= group_ids, m['id']
+    for target in m.get('legacyGroups', {}).values():
+        if isinstance(target, str):
+            assert target in group_ids, (m['id'], target)
+        else:
+            assert isinstance(target, dict) and set(target) == {'module', 'group'}, (m['id'], target)
+            assert target['module'] in modules, (m['id'], target)
+            assert target['group'] in {g['id'] for g in modules[target['module']]['groups']}, (m['id'], target)
     for g in m['groups']:
         assert g['chapters'] and re.fullmatch(r'[a-z0-9-]+', g['id']), g
 for m in modules.values():

@@ -15,7 +15,9 @@ function currentRoute() {
   const [route, requested, section] = (location.hash.slice(1) || document.body.dataset.defaultRoute || 'home').split('/');
   if (route === 'module') {
     const module = CATALOG.modules.find(m => m.id === requested);
-    return [route, requested, module?.legacyGroups?.[section] || section];
+    const target = module?.legacyGroups?.[section];
+    if (target && typeof target === 'object') return [route, target.module, target.group];
+    return [route, requested, target || section];
   }
   const alias = route === 'chapter' && chapterAliases.get(requested);
   const moved = route === 'chapter' && chapterSectionAliases.get(requested + '/' + section);

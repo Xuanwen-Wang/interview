@@ -2,7 +2,7 @@
   {
     "id": "compiler-lowering",
     "title": "用一个真实 GEMM 讲透 518 Lowering：从块指针到 PE、VP 与汇编",
-    "part": "518 硬件与编译器",
+    "part": "518 编译器",
     "order": 30,
     "subtitle": "沿同一次编译的真实 IR，解释权重布局、描述符、尾块、控制流、同步与代码生成的选择和代价",
     "minutes": 110,

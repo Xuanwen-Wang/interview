@@ -2,7 +2,7 @@
   {
     "id": "compiler-sync",
     "title": "518 自动同步：从资源依赖到可执行的 mailbox 协议",
-    "part": "518 硬件与编译器",
+    "part": "518 编译器",
     "order": 34,
     "subtitle": "从三个面试主问题理解抽象、建模与硬件分工，再深入单调链、当前源码与 CUDA 异步依赖体系",
     "minutes": 210,
