@@ -456,6 +456,28 @@
           ]
         }
       ]
+    },
+    {
+      "id": "paper",
+      "title": "paper",
+      "number": "10",
+      "description": "AI 体系结构与 AI 编译器论文精读：保留原图，解释问题、方法、实验与设计思想，区分论文证据和教学推导。",
+      "readingCollection": true,
+      "collectionLabel": "paper · 论文精读",
+      "groups": [
+        {
+          "id": "llm-architecture",
+          "title": "LLM 推理系统与加速器",
+          "chapters": ["paper-bytedance-hpca2026"]
+        }
+      ],
+      "learningPath": [
+        {
+          "title": "HPCA 2026：字节云原生 LLM 推理",
+          "description": "从缓存、组批、调度与三级评测，走到 FA、向量单元和片上数据流",
+          "chapter": "paper-bytedance-hpca2026"
+        }
+      ]
     }
   ]
 }

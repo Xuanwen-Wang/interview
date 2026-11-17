@@ -10,7 +10,7 @@
 
 ## 内容与导航
 
-当前使用 **9 个知识域 → 24 个专题 → 28 章** 的目录结构。侧边栏只展开当前专题；全站目录支持主题、标题/标签与阅读状态筛选。已有章节链接、笔记和学习记录保留。
+采用 **知识域 → 专题 → 章节** 的目录结构，当前规模见站内目录。侧边栏只展开当前专题；全站目录支持主题、标题/标签与阅读状态筛选。已有章节链接、笔记和学习记录保留。
 
 | 知识域 | 内容 |
 | --- | --- |
@@ -23,9 +23,11 @@
 | 性能与推理系统 | Nsight / Profiler、算子画像、Roofline、通信分析、模型负载、并发与容量、服务与运行时 |
 | 岗位与面试题 | 两份完整 HTML：13 份岗位记录；43 个场次或材料组、328 个问题项；保留题源、重复题跳转与缺失题说明 |
 | Coding实作 | 算法、图/数据流、kernel、玩具pass；原创Python/C++参考与测试 |
+| [paper](https://xuanwen-wang.github.io/interview/#module/paper) | AI 体系结构与 AI 编译器论文精读；原图、问题背景、公式算例、实验解读与研究启发 |
 
-当前 **605 小节、290 道章节追问（另有 328 个场次题目项）、221 张正文 SVG**。附全文搜索、图示放大、3个通用交互实验、2个PE交互演示、1个MoE拓扑/容量交互、4个性能分析实验区和2个decode shape/字节交互、术语表、阅读进度及本地笔记导入导出。SVG、样式和内容均内嵌；网页不依赖CDN、外部字体或第三方脚本。
+当前 **805 小节、314 道章节追问（另有 328 个场次题目项）、352 张正文 SVG**（含内嵌论文原图）。附全文搜索、图示放大、3个通用交互实验、2个PE交互演示、1个MoE拓扑/容量交互、4个性能分析实验区和2个decode shape/字节交互、术语表、阅读进度及本地笔记导入导出。SVG、样式和内容均内嵌；网页不依赖CDN、外部字体或第三方脚本。
 
+- [HPCA 2026 · 字节云原生 LLM 推理论文精读](https://xuanwen-wang.github.io/interview/paper-bytedance-hpca2026.html)：26 节、6 个阅读阶段、6 张论文原图与表 I、8 道追问；贯通缓存、组批、调度、XPU-Perf、图 5 与架构/编译器设计。支持原图放大、全文搜索、打印和完整离线阅读；[来源与审查](evidence/paper-bytedance-hpca2026.md)。
 - [DeepSeek-V3 完整模型解析](https://xuanwen-wang.github.io/interview/deepseek-v3.html)：27 节、11 张原创图，走完主干、MLA 吸收、专家网络、MTP、FP8、DualPipe 与成本账；附交互缓存与计算路径。
 - [DeepSeek-V4 完整模型解析](https://xuanwen-wang.github.io/interview/deepseek-v4.html)：36 节、16 张原创图，展开 CSA/HCA、逐特征池化、mHC、专家网络、Muon、FP4 QAT、OPD 与异构缓存；附条目账和残差混合交互。
 - [DeepSeek 架构来源](evidence/deepseek-model-architecture-sources.md)：官方报告、配置与参考代码的固定版本及教学模型边界。
