@@ -98,6 +98,7 @@ function renderChapter(id, section) {
  initDecodeExplorers();
  initLoweringExplorers();
  initSyncExplorers();
+ initMailboxArchitectureLabs();
  initAttentionLabs();
  initCycleCasebooks();
  initDeepSeekArchitectureLabs();

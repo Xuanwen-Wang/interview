@@ -337,13 +337,21 @@
       "id": "zeus-compiler",
       "title": "518 编译器",
       "number": "06",
-      "description": "用一次真实 GEMM 走完从块指针、布局和描述符到 PE、VP 与汇编的 Lowering，再理解资源依赖如何变成可执行的 mailbox 同步协议。",
+      "description": "从真实 GEMM 的 Lowering 走到指令依赖架构：先用图解、FIFO 账本和循环实例理解 Mailbox 的完整设计，再深入同步实现与 CUDA 对照。",
       "groups": [
         {
           "id": "backend",
           "title": "整体 Lowering：一条完整的编译路线",
           "chapters": [
             "compiler-lowering"
+          ],
+          "continuousReading": true
+        },
+        {
+          "id": "instruction-architecture",
+          "title": "指令依赖架构：设计框架、原理与完整图解",
+          "chapters": [
+            "instruction-dependency-architecture"
           ],
           "continuousReading": true
         },
@@ -363,7 +371,12 @@
           "chapter": "compiler-lowering"
         },
         {
-          "title": "再理解自动同步",
+          "title": "建立指令依赖的完整架构",
+          "description": "从异步错读到单调链、循环信用、嵌套吸收与全局验证",
+          "chapter": "instruction-dependency-architecture"
+        },
+        {
+          "title": "再深入同步实现",
           "description": "从资源依赖、冲突与控制流走到 mailbox 协议",
           "chapter": "compiler-sync"
         }

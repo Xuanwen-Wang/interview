@@ -1,0 +1,178 @@
+{
+  "article": "instruction-dependency-architecture",
+  "collected": "2026-11-24",
+  "primary_source": "56-page PDF; companion model source supplies searchable formula/section locations",
+  "compiler_repository": "triton_shared",
+  "compiler_revision": "ba776e8bfd381b3760f1f030a11854c772c08528",
+  "compiler_tracked_tree_dirty": false,
+  "compiler_untracked_files": "Unrelated untracked files exist; not used, copied, changed or named in the article.",
+  "evidence_level": "PDF/model interpretation and read-only source inspection; new tests cover only the website teaching models.",
+  "pdf": {
+    "pages": 56,
+    "title": "无 tag Mailbox 上的同步综合：单调链模型",
+    "title_date": "2026-09-11",
+    "declared_cutoff": "2026-09-10",
+    "generated": "2026-09-14T15:59:56+08:00",
+    "rebuilt": false
+  },
+  "scope": {
+    "compiler_build": false,
+    "compiler_lit": false,
+    "cyclesim": false,
+    "vcs_rtl": false,
+    "silicon": false,
+    "full_model": false,
+    "historical_results_rerun": false
+  },
+  "publication": {
+    "original_pdf_embedded": false,
+    "local_paths_or_internal_hosts_in_article": false,
+    "document_source_embedded": false,
+    "provenance": "Repository aliases, revisions, hashes and relative source paths only."
+  },
+  "records": [
+    {
+      "path": "docs/mailbox-sync-chain-model/mailbox-sync-chain-model.pdf",
+      "sha256": "06394d9f0f09c133784942cf22d36e2ee4241182d9cf59d4bad21f72bc5a4247",
+      "bytes": 1148944,
+      "git_revision": "ba776e8bfd381b3760f1f030a11854c772c08528",
+      "tracked_file_dirty": false
+    },
+    {
+      "path": "docs/mailbox-sync-chain-model/mailbox-sync-chain-model.tex",
+      "sha256": "36b447ca0aa5d1b709bd044a0e7da0f00ea894ece536db9fc181d0b87966b462",
+      "bytes": 205084,
+      "git_revision": "ba776e8bfd381b3760f1f030a11854c772c08528",
+      "tracked_file_dirty": false
+    },
+    {
+      "path": "docs/mailbox-sync-chain-model/mailbox-sync-chain-model-check.py",
+      "sha256": "a26fd05a49055aba0d98ee596c30fb6cdd76878b28384869494b2c5c4e26baf7",
+      "bytes": 44183,
+      "git_revision": "ba776e8bfd381b3760f1f030a11854c772c08528",
+      "tracked_file_dirty": false
+    },
+    {
+      "path": "docs/ZeusLow_Inject_Sync_Pass.md",
+      "sha256": "ce21074f894d5a76d9a787faa01de3c745f370d7bafa462003059b5906c24d58",
+      "bytes": 324965,
+      "git_revision": "ba776e8bfd381b3760f1f030a11854c772c08528",
+      "tracked_file_dirty": false
+    },
+    {
+      "path": "docs/vcs_debug/inject-sync-debug-manual.md",
+      "sha256": "227c13de48376211ec437dc86b6ff6b06daf6b17711e644a062cd744af59bf6d",
+      "bytes": 78690,
+      "git_revision": "ba776e8bfd381b3760f1f030a11854c772c08528",
+      "tracked_file_dirty": false
+    },
+    {
+      "path": "docs/vcs_debug/rtl-instruction-dependency-model.md",
+      "sha256": "1658b2cc611ec12fc93131ce0cc269fb7312e404bed48855a046189a3e2e7517",
+      "bytes": 117340,
+      "git_revision": "ba776e8bfd381b3760f1f030a11854c772c08528",
+      "tracked_file_dirty": false
+    },
+    {
+      "path": "include/triton-shared/Dialect/ZeusLow/Transforms/Passes.td",
+      "sha256": "f2b9002b89fb432d43ddbafe6e47ef4738bd077cfc45717758b3205d0a9fbbb5",
+      "bytes": 22196,
+      "git_revision": "ba776e8bfd381b3760f1f030a11854c772c08528",
+      "tracked_file_dirty": false
+    },
+    {
+      "path": "lib/Dialect/ZeusLow/Transforms/InjectSyncPass.cpp",
+      "sha256": "81d5c8f142030a530cb98591182249106731a3741c56dc67823bd100e2112854",
+      "bytes": 19045,
+      "git_revision": "ba776e8bfd381b3760f1f030a11854c772c08528",
+      "tracked_file_dirty": false
+    },
+    {
+      "path": "lib/Dialect/ZeusLow/Transforms/InjectSync/Staircase/StaircasePlanning.cpp",
+      "sha256": "2c587d8652629b3b1c016903a7c42e10b3510266d6fcfb3ab7b5714c07798da0",
+      "bytes": 62820,
+      "git_revision": "ba776e8bfd381b3760f1f030a11854c772c08528",
+      "tracked_file_dirty": false
+    },
+    {
+      "path": "lib/Dialect/ZeusLow/Transforms/InjectSync/Staircase/StaircaseCreditPolicy.cpp",
+      "sha256": "16501d11ef98d5c56c09b9e58709ee2787dc19ddbb1c47638c1457afa1118c55",
+      "bytes": 17381,
+      "git_revision": "ba776e8bfd381b3760f1f030a11854c772c08528",
+      "tracked_file_dirty": false
+    },
+    {
+      "path": "lib/Dialect/ZeusLow/Transforms/InjectSync/Staircase/StaircaseVerification.cpp",
+      "sha256": "d4b72550f05326dfbb4a21b5b53bc152ac1692f0c66effaf3ce9c3cf3a643bd0",
+      "bytes": 18253,
+      "git_revision": "ba776e8bfd381b3760f1f030a11854c772c08528",
+      "tracked_file_dirty": false
+    },
+    {
+      "path": "lib/Dialect/ZeusLow/Transforms/InjectSync/Staircase/RegionTree.cpp",
+      "sha256": "9038b8939d1d47b70e0abc77f050e9d1812878a2be77f2c066b2cb40954bd8eb",
+      "bytes": 18778,
+      "git_revision": "ba776e8bfd381b3760f1f030a11854c772c08528",
+      "tracked_file_dirty": false
+    }
+  ],
+  "current_source_claims": [
+    {
+      "path": "include/triton-shared/Dialect/ZeusLow/Transforms/Passes.td",
+      "lines": [
+        113,
+        146
+      ],
+      "claim": "Default planner staircase; unsupported structures fail loud; legacy remains explicit."
+    },
+    {
+      "path": "lib/Dialect/ZeusLow/Transforms/InjectSyncPass.cpp",
+      "lines": [
+        210,
+        250
+      ],
+      "claim": "Parse planner choice and build dependency model."
+    },
+    {
+      "path": "lib/Dialect/ZeusLow/Transforms/InjectSyncPass.cpp",
+      "lines": [
+        362,
+        421
+      ],
+      "claim": "Frozen physical schedule materialization and final output/provenance/balance checks."
+    },
+    {
+      "path": "lib/Dialect/ZeusLow/Transforms/InjectSync/Staircase/StaircasePlanning.cpp",
+      "lines": [
+        678,
+        750
+      ],
+      "claim": "C-1 outstanding budget and conservative capacity coarsening guard."
+    },
+    {
+      "path": "lib/Dialect/ZeusLow/Transforms/InjectSync/Staircase/StaircaseCreditPolicy.cpp",
+      "lines": [
+        288,
+        357
+      ],
+      "claim": "Equalization drain, seed, absorption, sunk and same-token acceptance paths and limitations."
+    },
+    {
+      "path": "docs/mailbox-sync-chain-model/mailbox-sync-chain-model.tex",
+      "lines": [
+        1222,
+        1231
+      ],
+      "claim": "Bounded reuse of an existing parent acquire is a later companion-source supplement, not silently attributed to the PDF."
+    }
+  ],
+  "editorial_clarifications": [
+    "FIFO identities are explanatory ghost labels; hardware credits are untagged.",
+    "C1 and the capacity budget are conservative sufficient conditions, not a characterization of all hardware-legal schedules.",
+    "The hardware counter at time t is distinct from program-position potential Phi/Omega.",
+    "Same-unit WAW is exempt only under the stated lane/retirement contract; SI retirement does not establish remote payload validity.",
+    "The shared-counter handoff requires an execution-order guarantee, not disjoint source-code intervals.",
+    "A/B affine window separation includes the base offset and every relevant positive distance.",
+    "Historical cycles and pass counts are not current validation; open verifier and hardware assumptions remain visible."
+  ]
+}

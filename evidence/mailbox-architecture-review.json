@@ -1,0 +1,90 @@
+{
+  "reviewed": "2026-11-24",
+  "article": "instruction-dependency-architecture",
+  "guide_base_revision": "cb8af47c3c0997dcac18d3e815d1c15a2e5a5929",
+  "guide_changes": "Local review before publication; exact reviewed files are bound by SHA256 below. Release status is recorded separately in Git history and GitHub Actions.",
+  "compiler_revision": "ba776e8bfd381b3760f1f030a11854c772c08528",
+  "reviews": [
+    {
+      "dimension": "技术正确性",
+      "result": "完成文档与模型自审",
+      "evidence": "逐项映射原文 14 章与两个附录；176 个来源结构元素有对应入口。网页模型通过独立 FIFO 序号、零轮、吸收和反例检查；保留源码验证器与无丢失假设的未闭合项。"
+    },
+    {
+      "dimension": "初学者可理解性",
+      "result": "完成叙述结构自审",
+      "evidence": "15 部分、73 节，先用 A/B 两块 tile 的使用与复用建立直觉，再给公式、证明、历史案例和边界；正文与表格保留关键术语定义，证明可展开。"
+    },
+    {
+      "dimension": "视觉可用性",
+      "result": "桌面浏览器验收通过",
+      "evidence": "人工查看全部 32 张静态图截图；修正周期连线的歧义。1440×1000 下 SVG 文字均在 viewBox 内，页面无横向溢出；三组交互、放大、打印与离线入口通过。"
+    }
+  ],
+  "checks": [
+    {
+      "command": "python3 scripts/build.py",
+      "result": "PASS; 36 chapters, 878 sections, 384 static diagrams across the site"
+    },
+    {
+      "command": "python3 scripts/check.py",
+      "result": "PASS; catalog, stable routes, source anchors, SVG labels and portable HTML"
+    },
+    {
+      "command": "python3 scripts/check_public_artifact.py",
+      "result": "PASS; 106 allowed Pages files"
+    },
+    {
+      "command": "node scripts/check_sync_model.js",
+      "result": "PASS; 512 point sets x 20 strict chains"
+    },
+    {
+      "command": "node scripts/check_mailbox_architecture.js",
+      "result": "PASS; 56 periodic cases, 8 absorption cases and extra-seed counterexamples"
+    },
+    {
+      "command": "node scripts/check_reading_numbers.js",
+      "result": "PASS; 36 chapters / 878 sections"
+    },
+    {
+      "command": "git diff --check",
+      "result": "PASS"
+    },
+    {
+      "command": "HTML nesting inspection",
+      "result": "PASS; all 73 article sections, no unknown tags or unmatched nesting"
+    },
+    {
+      "command": "Playwright desktop interaction check",
+      "result": "PASS; 16 checks covering model steps, reset, parameter limits, zero-trip, negative case, zoom, module navigation, search and old/new deep links"
+    },
+    {
+      "command": "Playwright offline / print check",
+      "result": "PASS; 11 checks including actual download, file URL under offline network state, complete article, search, interaction, expanded proofs and diagram geometry"
+    },
+    {
+      "command": "Playwright console",
+      "result": "0 errors, 0 warnings"
+    }
+  ],
+  "desktop_only_by_project_policy": true,
+  "print": {
+    "pages": 75,
+    "format": "A4",
+    "review": "All expandable explanations included; rendered pages 19, 36 and 59 sampled for diagrams, inequalities and long tables."
+  },
+  "offline_download_matches_build": true,
+  "sha256": {
+    "content/38-instruction-dependency-architecture.json": "d05add988e93b944b62951396c30a4e3e1b40f841c4b1f6776fa6dc500aac49b",
+    "web/mailbox-architecture.js": "c19ebc2c61fae03b6033721c5b7e84d2c32946de3ffa0ee21a174cd5f2239439",
+    "web/mailbox-architecture.css": "34286d0946c1a369b08d8325abc1730d5a897eae7091e61699cd87d7947a141c",
+    "scripts/check_mailbox_architecture.js": "c1443b45353ee996c44d75289b4656cdf828fd122679aec0987d30168f82991a",
+    "dist/instruction-dependencies.html": "172f097b501b5b9095bd82a159f5e84072a507a2453c6d23551f3244ab3f004b",
+    "dist/instruction-dependencies-offline.html": "1329029f48ac1968eaeee86176531be2c891545c1f96bd9846448c5b0c0c4949"
+  },
+  "not_performed": [
+    "Compiler rebuild, lit/sweep, CycleSim, VCS/RTL, silicon and full-model execution",
+    "Commit, push, Pages deployment and live-site acceptance were outside this local review; publication is tracked separately in GitHub Actions."
+  ],
+  "existing_checkout": "Original guide checkout and its tracked working state left unchanged."
+}

@@ -1,0 +1,2065 @@
+{
+  "article": "instruction-dependency-architecture",
+  "collected": "2026-11-24",
+  "primary_pdf_sha256": "06394d9f0f09c133784942cf22d36e2ee4241182d9cf59d4bad21f72bc5a4247",
+  "companion_source_sha256": "36b447ca0aa5d1b709bd044a0e7da0f00ea894ece536db9fc181d0b87966b462",
+  "source_revision": "ba776e8bfd381b3760f1f030a11854c772c08528",
+  "reader_structure": {
+    "parts": 15,
+    "sections": 73,
+    "static_figures": 32,
+    "interactive_labs": 3
+  },
+  "coverage_scope": "All 14 numbered chapters, both appendices, every source subsection, named paragraph, proposition/lemma/theorem/corollary, algorithm and figure caption are mapped. Includes the complete historical scenario table and all unresolved assumptions.",
+  "exclusions": "Internal job endpoints, private hosts, local working directories and service-specific commands are not public operational links. Their technical purpose, observation and evidence boundary remain in the article.",
+  "source_supplement": {
+    "source_lines": [
+      1222,
+      1231
+    ],
+    "article_section": "candidate-placement",
+    "topic": "bounded parent-acquire reuse",
+    "in_primary_pdf": false
+  },
+  "article_sections": [
+    {
+      "section": "why-wait",
+      "title": "一条指令排在前面，为什么结果还不能用？",
+      "original": "§1、§4",
+      "pdfPages": "3–4、9"
+    },
+    {
+      "section": "running-tiles",
+      "title": "贯穿案例：A 用完就能复用，为什么还要等 B？",
+      "original": "§1、附录 A",
+      "pdfPages": "3、55"
+    },
+    {
+      "section": "system-contract",
+      "title": "完整架构：先找依赖，再规划通知，最后核对实际命令",
+      "original": "§4、§8.7、§12.1",
+      "pdfPages": "9、34–36、45"
+    },
+    {
+      "section": "units-counters",
+      "title": "九个执行单元怎样通过计数器连接？",
+      "original": "§2.1–2.2、§3",
+      "pdfPages": "4–7"
+    },
+    {
+      "section": "four-events",
+      "title": "一条指令至少有四个时间点：dispatch、issue、done、release",
+      "original": "§2、§3、§7.2",
+      "pdfPages": "4–8、16"
+    },
+    {
+      "section": "ordered-outbox",
+      "title": "最关键的性质：后面的通知，可以替前面的命令作证",
+      "original": "§2.2、§4",
+      "pdfPages": "5、9"
+    },
+    {
+      "section": "lanes",
+      "title": "四条 lane 不等于四套独立同步队列",
+      "original": "§2.3、§12.3",
+      "pdfPages": "6–7、46"
+    },
+    {
+      "section": "ct-global",
+      "title": "CT 等一封邮件，为什么可能让所有单元都等？",
+      "original": "§2.2、§7.3",
+      "pdfPages": "5–6、19–20"
+    },
+    {
+      "section": "diagonal-and-si",
+      "title": "哪些同单元依赖可以省掉？SI 的 done 又证明什么？",
+      "original": "§12.3、§2.3",
+      "pdfPages": "46、6–7"
+    },
+    {
+      "section": "hazards",
+      "title": "RAW、WAR、WAW 都变成“谁完成后谁才能开始”",
+      "original": "§3–4、§12.1",
+      "pdfPages": "7–9、45"
+    },
+    {
+      "section": "sites-and-coverage",
+      "title": "p/c 是义务，s/r 是站点：允许在哪里等？",
+      "original": "§3–5.1",
+      "pdfPages": "7–10"
+    },
+    {
+      "section": "untagged-counterexample",
+      "title": "为什么“每条边单独一对 send/recv”会出错？",
+      "original": "§4–5.2",
+      "pdfPages": "9–12"
+    },
+    {
+      "section": "dependency-plane",
+      "title": "把一条 channel 画成二维平面",
+      "original": "§5.1",
+      "pdfPages": "10"
+    },
+    {
+      "section": "staircase-handwork",
+      "title": "手算四个点：为什么要从右往左取最小 consumer？",
+      "original": "§5.2",
+      "pdfPages": "10–12"
+    },
+    {
+      "section": "staircase-optimality",
+      "title": "“最优”具体指什么？为什么下界用 release？",
+      "original": "§5.2、§8.7",
+      "pdfPages": "11–12、35–36"
+    },
+    {
+      "section": "coarsening",
+      "title": "合并通知：覆盖更强了，性能未必更好",
+      "original": "§5.3",
+      "pdfPages": "12–14"
+    },
+    {
+      "section": "staircase-interactive",
+      "title": "亲手切换输入：交叉、同序、逆序和重复站点",
+      "original": "§5、附录 B",
+      "pdfPages": "10–14、56"
+    },
+    {
+      "section": "epoch-owner",
+      "title": "d=1 是相邻两轮，必须先说明是哪一个循环",
+      "original": "§3、§6、§7.2",
+      "pdfPages": "7–8、14–16"
+    },
+    {
+      "section": "periodic-extension",
+      "title": "把循环摊成相邻两轮，就能复用直线段阶梯",
+      "original": "§6.2",
+      "pdfPages": "14–15"
+    },
+    {
+      "section": "seed-pairing",
+      "title": "三发三收、一个 seed：逐个编号就能看出配对",
+      "original": "§6.1",
+      "pdfPages": "14"
+    },
+    {
+      "section": "tile-staircase-complete",
+      "title": "回到 A/B：四条义务怎样变成两个跨轮 token？",
+      "original": "附录 A、§1",
+      "pdfPages": "55、3"
+    },
+    {
+      "section": "exit-balance",
+      "title": "提前退出：为什么一条出口要 drain，另一条不用？",
+      "original": "§6.2、§8.1、§8.6",
+      "pdfPages": "15、21–22、34"
+    },
+    {
+      "section": "event-graph",
+      "title": "把“谁要先发生”画成事件图，而不只画指令图",
+      "original": "§7.1–7.2",
+      "pdfPages": "15–17"
+    },
+    {
+      "section": "potential-vs-counter",
+      "title": "三本账：Φ、Ω 和真正的 counter",
+      "original": "§5.3、§8.1",
+      "pdfPages": "13–14、20–22"
+    },
+    {
+      "section": "capacity-budget",
+      "title": "为什么硬件容量是 63，规划预算却是 62？",
+      "original": "§5.3、§7.3、§14.3",
+      "pdfPages": "13–14、17–20、52–53"
+    },
+    {
+      "section": "deadlock-proof",
+      "title": "死锁证明的核心：沿等待链，位置必须严格变早",
+      "original": "§7.2–7.3",
+      "pdfPages": "16–20"
+    },
+    {
+      "section": "r1-boundary",
+      "title": "R1 为什么保留？区分抽象证明与未解释的硬件现象",
+      "original": "§7.3、§14",
+      "pdfPages": "19–20、50–54"
+    },
+    {
+      "section": "phi-pairing",
+      "title": "势能不仅记数量，还能定位实际配对的 send",
+      "original": "§8.1",
+      "pdfPages": "20–22"
+    },
+    {
+      "section": "three-conditions",
+      "title": "正确方案要同时过 C1、C2、C3",
+      "original": "§8.2、§12.2",
+      "pdfPages": "22–23、45–46"
+    },
+    {
+      "section": "region-tree",
+      "title": "区域树：把整段控制流先折叠成入口与出口",
+      "original": "§8.3、§12.2",
+      "pdfPages": "23–27、45–46"
+    },
+    {
+      "section": "boundary-projection",
+      "title": "跨两个子循环：为什么不能直接 p 发、c 收？",
+      "original": "§8.3",
+      "pdfPages": "23–27"
+    },
+    {
+      "section": "exclusive-arms",
+      "title": "then 与 else 互斥，不能画成先 A 后 B",
+      "original": "§8.3、§11",
+      "pdfPages": "26–27、41–42"
+    },
+    {
+      "section": "candidate-placement",
+      "title": "上投与下沉：移动同步，保持计算位置",
+      "original": "§8.3–8.4",
+      "pdfPages": "24–29"
+    },
+    {
+      "section": "loop-sinking-cost",
+      "title": "循环下沉：为什么“多发通知”反而可能更快？",
+      "original": "§8.4（另有源文件后续补充）",
+      "pdfPages": "27–29"
+    },
+    {
+      "section": "crossing-bug",
+      "title": "父子各自平衡，拼在一起仍然会错配",
+      "original": "§8.5",
+      "pdfPages": "29–30"
+    },
+    {
+      "section": "lift-or-absorb",
+      "title": "同一个例子，比较提升与吸收",
+      "original": "§8.5",
+      "pdfPages": "29–32"
+    },
+    {
+      "section": "multi-slot-absorption",
+      "title": "两个槽、一个父 credit：入口槽号与出口槽号不同",
+      "original": "§8.5",
+      "pdfPages": "31–33"
+    },
+    {
+      "section": "wrap-traversal",
+      "title": "绕回 token 先经过本轮后半段，再经过下一轮前半段",
+      "original": "§8.5",
+      "pdfPages": "30–33"
+    },
+    {
+      "section": "restair-settle",
+      "title": "为什么先提升、重跑阶梯、粗化，最后才数吸收槽？",
+      "original": "§8.5–8.7",
+      "pdfPages": "31–35"
+    },
+    {
+      "section": "absorption-transfer",
+      "title": "串过多个可零轮循环：来源不同，数量仍可以相同",
+      "original": "§8.5、§8.7、§10",
+      "pdfPages": "32–36、38–39"
+    },
+    {
+      "section": "core-sync",
+      "title": "core-sync：先把交换纳入同一条 FIFO，再谈屏障",
+      "original": "§8.5、§12.2",
+      "pdfPages": "30–31、45–46"
+    },
+    {
+      "section": "same-site-order",
+      "title": "同一程序点的顺序，也会改变正确性与重叠",
+      "original": "§8.5–8.6",
+      "pdfPages": "31–34"
+    },
+    {
+      "section": "equalization",
+      "title": "势能均衡：seed、drain、refill 是同一套边界账",
+      "original": "§8.6",
+      "pdfPages": "34"
+    },
+    {
+      "section": "zero-trip",
+      "title": "零轮循环：账面相等，不代表命令序列相同",
+      "original": "§8.5–8.6、§11",
+      "pdfPages": "32–34、41–42"
+    },
+    {
+      "section": "unified-pipeline",
+      "title": "完整构造算法：哪些步骤不能交换？",
+      "original": "§7.3、§8.7、§12",
+      "pdfPages": "20、34–36、45–46"
+    },
+    {
+      "section": "guarantee-scope",
+      "title": "这套方法保证什么，又没有声称什么？",
+      "original": "§5.2、§8.7、§10、§14.5",
+      "pdfPages": "11–12、35–39、54"
+    },
+    {
+      "section": "verification-layers",
+      "title": "四种验证不能互相代替",
+      "original": "§11.1、§12.1",
+      "pdfPages": "39–42、45"
+    },
+    {
+      "section": "credit-policy",
+      "title": "身份不同可以安全，身份相同也可能需要检查",
+      "original": "§11.1",
+      "pdfPages": "39–42"
+    },
+    {
+      "section": "epoch-validation",
+      "title": "epoch 校验：静态“在后面”不是动态“已经完成”",
+      "original": "§11.1、§8.5",
+      "pdfPages": "40–42、32–33"
+    },
+    {
+      "section": "verification-gaps",
+      "title": "原文首要缺口：有些循环接受路径还没有独立语义认证",
+      "original": "§11.1",
+      "pdfPages": "40–42"
+    },
+    {
+      "section": "independent-checks",
+      "title": "独立检查怎样避免“规划器自己给自己发证明”？",
+      "original": "§11.1",
+      "pdfPages": "39–42"
+    },
+    {
+      "section": "toy-and-coverage",
+      "title": "toy 检查器、真实编译输入和 VCS 各覆盖哪一层？",
+      "original": "§11、§14.4",
+      "pdfPages": "39–45、53–54"
+    },
+    {
+      "section": "three-optimizations",
+      "title": "三种办法：粗化、重排、双缓冲",
+      "original": "§9.1",
+      "pdfPages": "36–37"
+    },
+    {
+      "section": "reordering-example",
+      "title": "交换两个独立 consumer，怎样拿回早就绪的工作？",
+      "original": "§9.2",
+      "pdfPages": "37"
+    },
+    {
+      "section": "reordering-legality",
+      "title": "合法重排需要什么合同？就绪优先级如何选择？",
+      "original": "§9.3",
+      "pdfPages": "37–38"
+    },
+    {
+      "section": "multiple-channels",
+      "title": "每对单元给多个计数器：用链划分保留站点",
+      "original": "§13.1、附录 B",
+      "pdfPages": "47–48、56"
+    },
+    {
+      "section": "shared-counter",
+      "title": "接收方共享 counter：这次连 sender 身份也丢了",
+      "original": "§13.2",
+      "pdfPages": "48–50"
+    },
+    {
+      "section": "handoff-counterexample",
+      "title": "区间看起来不重叠，为什么仍不能复用同一个 counter？",
+      "original": "§13.2",
+      "pdfPages": "49–50"
+    },
+    {
+      "section": "counter-allocation",
+      "title": "建立交接后，才轮到计数器分配与其它硬件变体",
+      "original": "§13.2",
+      "pdfPages": "48–50"
+    },
+    {
+      "section": "implementation-map",
+      "title": "从模型概念找到代码对象",
+      "original": "§12.1–12.2",
+      "pdfPages": "45–46"
+    },
+    {
+      "section": "current-status",
+      "title": "设计、原文历史状态、当前静态核验，分别列明",
+      "original": "§12.2（补当前静态核验）",
+      "pdfPages": "45–46"
+    },
+    {
+      "section": "complexity",
+      "title": "局部线性不等于整个编译器线性",
+      "original": "§10",
+      "pdfPages": "38–39"
+    },
+    {
+      "section": "historical-cases",
+      "title": "历史场景索引：每种特殊形态在统一模型里落在哪里？",
+      "original": "§11.2",
+      "pdfPages": "42–45"
+    },
+    {
+      "section": "history-families",
+      "title": "统一模型能消掉哪些补丁？哪些事实永远需要补？",
+      "original": "§12.4、§14.4",
+      "pdfPages": "46–47、53–54"
+    },
+    {
+      "section": "dma-windows",
+      "title": "DMA 窗口太粗：最优同步也只能忠实执行多余义务",
+      "original": "§14.1",
+      "pdfPages": "50–51"
+    },
+    {
+      "section": "rtl-gaps",
+      "title": "静态 RTL 清单：等待边与丢事件不能用同一张图解释",
+      "original": "§14.2",
+      "pdfPages": "51–52"
+    },
+    {
+      "section": "historical-wave",
+      "title": "原文波形看到了什么？没有看到什么？",
+      "original": "§14.2–14.3",
+      "pdfPages": "51–53"
+    },
+    {
+      "section": "lossless-assumption",
+      "title": "“无丢失”是条件，不是由算法证明出来的硬件事实",
+      "original": "§14.3、§14.5",
+      "pdfPages": "52–54"
+    },
+    {
+      "section": "wave-checklist",
+      "title": "要闭合根因，下一次波形必须能回答哪些问题？",
+      "original": "§14.5",
+      "pdfPages": "54"
+    },
+    {
+      "section": "end-to-end-recap",
+      "title": "沿 A/B 再走一次：这套架构如何闭合？",
+      "original": "§1–14、附录 A",
+      "pdfPages": "3–55"
+    },
+    {
+      "section": "glossary",
+      "title": "术语速查：数量、身份、位置、时间分别叫什么？",
+      "original": "§3（并汇总后文定义）",
+      "pdfPages": "7–8"
+    },
+    {
+      "section": "pdf-coverage",
+      "title": "原 PDF 对照表：重排了节奏，保留全部主题",
+      "original": "完整目录与正文",
+      "pdfPages": "1–56"
+    },
+    {
+      "section": "source-snapshot",
+      "title": "来源版本与本次验证边界",
+      "original": "本文性质、§11–14",
+      "pdfPages": "1、39–54"
+    }
+  ],
+  "original_elements": [
+    {
+      "source_line": 82,
+      "source_element": "\\section{导读}",
+      "article_sections": [
+        "why-wait",
+        "running-tiles",
+        "system-contract"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 147,
+      "source_element": "\\captionof{figure}{两块数据的等待：统一通知会延迟 A，分别通知可保留两单元的执行重叠。}",
+      "article_sections": [
+        "why-wait",
+        "running-tiles",
+        "system-contract"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 153,
+      "source_element": "\\subsection{结论}",
+      "article_sections": [
+        "system-contract",
+        "guarantee-scope"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 168,
+      "source_element": "\\section{硬件抽象}",
+      "article_sections": [
+        "units-counters"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 176,
+      "source_element": "\\subsection{单元与 mailbox}",
+      "article_sections": [
+        "units-counters"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 198,
+      "source_element": "\\caption{9 个单元与 mailbox。每个有向单元对 $(U,V)$ 是一个 channel，含一个计数器。}",
+      "article_sections": [
+        "units-counters"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 205,
+      "source_element": "\\subsection{公理}",
+      "article_sections": [
+        "four-events",
+        "ordered-outbox"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 207,
+      "source_element": "\\paragraph{顺序保证。}",
+      "article_sections": [
+        "four-events",
+        "ordered-outbox"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 246,
+      "source_element": "\\paragraph{CT。}",
+      "article_sections": [
+        "ct-global"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 253,
+      "source_element": "\\subsection{VP 与 DT：一个队列、多条 lane}",
+      "article_sections": [
+        "lanes"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 255,
+      "source_element": "\\paragraph{队列与 lane。}一个执行单元内部仍可能有并行执行通道。",
+      "article_sections": [
+        "lanes"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 288,
+      "source_element": "\\caption{VP/DT：一个发射序、一个有序 outbox，lane 只是容量和完成序的归属。}",
+      "article_sections": [
+        "lanes"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 293,
+      "source_element": "\\paragraph{容量资源。}",
+      "article_sections": [
+        "lanes",
+        "event-graph"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 299,
+      "source_element": "\\section{术语与记号}",
+      "article_sections": [
+        "hazards",
+        "sites-and-coverage",
+        "glossary"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 301,
+      "source_element": "\\paragraph{依赖与同步。}点 $(p,c,d)$ 表示必须先完成 $p@i$，才能发射 $c@(i+d)$。",
+      "article_sections": [
+        "hazards",
+        "sites-and-coverage",
+        "glossary"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 328,
+      "source_element": "\\caption{点、token、站点、覆盖。}",
+      "article_sections": [
+        "hazards",
+        "sites-and-coverage",
+        "glossary"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 365,
+      "source_element": "\\paragraph{迭代距离与输入范围。}先为跨轮依赖指定负责计数的循环，称为该点的 \\textbf{owner 循环}，后文也称其迭代轴。",
+      "article_sections": [
+        "epoch-owner"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 371,
+      "source_element": "\\section{问题定义}",
+      "article_sections": [
+        "system-contract",
+        "hazards"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 376,
+      "source_element": "\\paragraph{依赖输入。}依赖分析层先收集指令对资源的读写，再结合 alias、CFG 和循环归属形成义务；规划器负责实现这些义务。",
+      "article_sections": [
+        "system-contract",
+        "hazards"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 381,
+      "source_element": "\\begin{lemma}[计数配对]",
+      "article_sections": [
+        "untagged-counterexample"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 393,
+      "source_element": "\\begin{theorem}[覆盖]",
+      "article_sections": [
+        "sites-and-coverage"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 400,
+      "source_element": "\\begin{definition}[合法]",
+      "article_sections": [
+        "sites-and-coverage"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 406,
+      "source_element": "\\section{单 channel、直线段：阶梯}",
+      "article_sections": [
+        "dependency-plane"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 411,
+      "source_element": "\\subsection{平面}",
+      "article_sections": [
+        "dependency-plane"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 429,
+      "source_element": "\\caption{平面与覆盖象限。}",
+      "article_sections": [
+        "dependency-plane"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 432,
+      "source_element": "\\begin{lemma}[链]",
+      "article_sections": [
+        "dependency-plane"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 444,
+      "source_element": "\\subsection{阶梯算法}",
+      "article_sections": [
+        "staircase-handwork",
+        "staircase-interactive"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 446,
+      "source_element": "\\paragraph{后缀最小值。}按 producer 从早到晚处理点时，recv 的顺序也必须保持 FIFO。",
+      "article_sections": [
+        "staircase-handwork",
+        "staircase-interactive"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 450,
+      "source_element": "\\begin{algorithm}[H]",
+      "article_sections": [
+        "staircase-handwork",
+        "staircase-interactive"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 451,
+      "source_element": "\\caption{阶梯（单 channel、直线段）}",
+      "article_sections": [
+        "staircase-handwork",
+        "staircase-interactive"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 498,
+      "source_element": "\\caption{阶梯（蓝色实线）：交叉点 $(p_2,c_2)$ 的 recv 被提前到 $c_3$ 之前。}",
+      "article_sections": [
+        "staircase-handwork",
+        "staircase-interactive"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 505,
+      "source_element": "\\begin{theorem}[覆盖 + 最优]",
+      "article_sections": [
+        "staircase-optimality"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 520,
+      "source_element": "\\begin{corollary}[交叉不强迫合并]",
+      "article_sections": [
+        "staircase-optimality"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 525,
+      "source_element": "\\subsection{粗化}",
+      "article_sections": [
+        "coarsening"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 527,
+      "source_element": "\\paragraph{等待精度。}原来两个 consumer 各等各自的 producer；合并后，较早的 consumer 也等较晚的 send。",
+      "article_sections": [
+        "coarsening"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 551,
+      "source_element": "\\caption{最细（阶梯）与最粗（frontier）。二者之间是所有支配合并的中间态。}",
+      "article_sections": [
+        "coarsening"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 554,
+      "source_element": "\\paragraph{粗化保持覆盖。}合并把多个 token 放进同一个计数器，于是一个 recv 弹出的 credit 可能由\\textbf{别的 token} 的 send 铸出。这仍然安全，理由与阶梯本身成立的理由是同一条：mailbox 计数器\\textbf{没有身份}，硬件只有一个计数；能否放行只取决于铸出该 credit 的 send 是否已经覆盖这个 recv 要等的全部 producer。由公理~\\ref{ax:outbox}（同单元后发者晚 release），只要 $s$ 在发送单元的序上位于每个 $p$ 之后，$s$ 的 release 就蕴含全部 $p$ 的 done——$s$ 属于哪个 token 无关。",
+      "article_sections": [
+        "coarsening"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 562,
+      "source_element": "\\paragraph{容量约束（必做的粗化）。}计数器满时，发送方 outbox 停弹（公理~\\ref{ax:counter}）。",
+      "article_sections": [
+        "capacity-budget"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 589,
+      "source_element": "\\paragraph{容量与预算。}\\textbf{硬件容量} $C=63$（计数器 6 位，发送方在 $=63$ 时停弹）；",
+      "article_sections": [
+        "capacity-budget"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 598,
+      "source_element": "\\section{循环：周期阶梯}",
+      "article_sections": [
+        "epoch-owner"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 600,
+      "source_element": "\\paragraph{循环展开。}同一条静态指令每轮产生一个新实例。",
+      "article_sections": [
+        "epoch-owner"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 603,
+      "source_element": "\\subsection{配对偏移}",
+      "article_sections": [
+        "seed-pairing"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 610,
+      "source_element": "\\begin{lemma}[偏移]",
+      "article_sections": [
+        "seed-pairing"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 636,
+      "source_element": "\\subsection{周期延拓}",
+      "article_sections": [
+        "periodic-extension"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 647,
+      "source_element": "\\begin{algorithm}[H]",
+      "article_sections": [
+        "periodic-extension"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 648,
+      "source_element": "\\caption{周期阶梯}",
+      "article_sections": [
+        "periodic-extension"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 679,
+      "source_element": "\\caption{周期延拓：绕回 token 的 recv 在下一迭代开头，先于该迭代所有 $d{=}0$ 的 recv。}",
+      "article_sections": [
+        "periodic-extension"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 682,
+      "source_element": "\\paragraph{出口、嵌套、在途。}",
+      "article_sections": [
+        "exit-balance"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 688,
+      "source_element": "\\section{多单元：全局事件图}",
+      "article_sections": [
+        "event-graph"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 690,
+      "source_element": "\\paragraph{全局等待。}一个 recv 会挡住接收单元后面的命令，而这些命令可能又是其他 channel 的 sender。",
+      "article_sections": [
+        "event-graph"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 694,
+      "source_element": "\\subsection{梯子系统}",
+      "article_sections": [
+        "event-graph"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 719,
+      "source_element": "\\caption{本文 kernel 一次迭代的梯子系统。红色横档是 token，橙色是单元内的容量边。}",
+      "article_sections": [
+        "event-graph"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 722,
+      "source_element": "\\subsection{事件图 $G$}",
+      "article_sections": [
+        "event-graph"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 724,
+      "source_element": "\\paragraph{事件先后关系。}例如 $\\release(s)\\to\\issue(r)$ 表示 r 必须等 send 生效；",
+      "article_sections": [
+        "event-graph"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 728,
+      "source_element": "\\begin{definition}[$G$]",
+      "article_sections": [
+        "event-graph"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 742,
+      "source_element": "\\begin{theorem}[传递覆盖]",
+      "article_sections": [
+        "event-graph"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 754,
+      "source_element": "\\subsection{无环}",
+      "article_sections": [
+        "deadlock-proof"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 756,
+      "source_element": "\\paragraph{证明思路。}先在模型完备、公平的前提下把死锁转成事件图的环；再说明除 mailbox 容量外的边为何向前；",
+      "article_sections": [
+        "deadlock-proof"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 760,
+      "source_element": "\\begin{theorem}[死锁]",
+      "article_sections": [
+        "deadlock-proof"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 767,
+      "source_element": "\\begin{lemma}[C1 下 $G$ 的边全部向前]",
+      "article_sections": [
+        "deadlock-proof"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 775,
+      "source_element": "\\begin{corollary}",
+      "article_sections": [
+        "deadlock-proof"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 785,
+      "source_element": "\\begin{lemma}[满计数器蕴含接收方落后]",
+      "article_sections": [
+        "capacity-budget",
+        "deadlock-proof"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 790,
+      "source_element": "\\paragraph{位置与进度。}结论只是 $x\\prec e$ 这个\\textbf{位置关系}，尚不是完整的不死锁结论。",
+      "article_sections": [
+        "capacity-budget",
+        "deadlock-proof"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 805,
+      "source_element": "\\paragraph{多源 recv 的余量。}x 可以因另一个发送方没有 credit 而停住，虽然当前讨论的 channel 已经满了。",
+      "article_sections": [
+        "capacity-budget",
+        "deadlock-proof"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 809,
+      "source_element": "\\begin{theorem}[容量约束下不死锁]",
+      "article_sections": [
+        "capacity-budget",
+        "deadlock-proof"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 812,
+      "source_element": "\\paragraph{等待边的定向。}引理给出满计数器等待时，被等待的命令位置更早；C1 对空计数器等待给出类似方向。",
+      "article_sections": [
+        "capacity-budget",
+        "deadlock-proof"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 836,
+      "source_element": "\\paragraph{论证依赖的四处细节。}",
+      "article_sections": [
+        "capacity-budget",
+        "deadlock-proof"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 846,
+      "source_element": "\\paragraph{对约束 R1 的影响。}只要粗化维持 $\\max\\Omega\\le C-\\mu$，它本身就不引入死锁，所以 R1 \\textbf{不是本抽象内死锁自由所必需}——",
+      "article_sections": [
+        "r1-boundary"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 862,
+      "source_element": "\\caption{mailbox 容量假设为 1 时的环：$\\release(s_2)\\leftarrow r_1\\leftarrow y\\leftarrow w\\leftarrow\\release(s_2)$。检查器报出这个环；容量取 63 时所有场景无环。}",
+      "article_sections": [
+        "r1-boundary"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 865,
+      "source_element": "\\paragraph{VP$\\to$CT loop-epoch WAR 与约束 R1。}RTL 文档 \\S 7.2.1 记录：VP 读 $X$、CT 下一迭代写 $X$ 的 WAR，若把 CT writer 前的 recv/drain 推迟到 latch，",
+      "article_sections": [
+        "r1-boundary"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 874,
+      "source_element": "\\begin{corollary}",
+      "article_sections": [
+        "r1-boundary"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 880,
+      "source_element": "\\paragraph{不可行判定。}最细阶梯尚未满足容量预算时，成环只否定当前 token 方案，不否定输入依赖有解；必须先考虑容量粗化。",
+      "article_sections": [
+        "r1-boundary",
+        "unified-pipeline"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 886,
+      "source_element": "\\begin{algorithm}[H]",
+      "article_sections": [
+        "r1-boundary",
+        "unified-pipeline"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 887,
+      "source_element": "\\caption{全局（直线段与规整循环）}",
+      "article_sections": [
+        "r1-boundary",
+        "unified-pipeline"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 897,
+      "source_element": "\\section{任意控制流：势能与区域树}",
+      "article_sections": [
+        "phi-pairing"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 905,
+      "source_element": "\\subsection{势能与配对}",
+      "article_sections": [
+        "phi-pairing"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 911,
+      "source_element": "\\paragraph{路径上的势能。}对每条可能路径分别定义 $\\Phi_\\pi$ 即可，不把未走的分支算进去。",
+      "article_sections": [
+        "phi-pairing"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 915,
+      "source_element": "\\paragraph{程序序与配对。}同一 channel 的 send 按有序 outbox 生效，recv 按接收单元的队列序 checkout。",
+      "article_sections": [
+        "phi-pairing"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 920,
+      "source_element": "\\begin{lemma}[配对由势能决定]",
+      "article_sections": [
+        "phi-pairing"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 952,
+      "source_element": "\\caption{FIFO 配对不变，实际计数随执行进度变化。}",
+      "article_sections": [
+        "phi-pairing"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 987,
+      "source_element": "\\caption{例~\\ref{ex:phitrace} 的 $\\Phi$ 轨迹。均衡 \\code{MAIL} 只出现在区域边界边上（虚线处）。}",
+      "article_sections": [
+        "phi-pairing"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 990,
+      "source_element": "\\subsection{完整刻画}",
+      "article_sections": [
+        "three-conditions"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 992,
+      "source_element": "\\paragraph{数量、覆盖与无环。}C1 检查数量与路径收支；C2 检查收到的 credit 能否证明所需 producer 完成；C3 检查等待能否形成环。",
+      "article_sections": [
+        "three-conditions"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1002,
+      "source_element": "\\begin{theorem}[充分性]",
+      "article_sections": [
+        "three-conditions"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1023,
+      "source_element": "\\subsection{区域树}",
+      "article_sections": [
+        "region-tree"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1033,
+      "source_element": "\\paragraph{区域折叠。}例如函数由 $P$、循环 $L$、$Q$ 组成，L 内又有分支 S。",
+      "article_sections": [
+        "region-tree"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1042,
+      "source_element": "\\paragraph{跨区域依赖怎样变成 token。}先看两个顺序经过的子循环 A、B：p 在 A 的 U 上，c 在 B 的 V 上，要求 A 中的生产者完成后 B 才使用结果。",
+      "article_sections": [
+        "boundary-projection"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1073,
+      "source_element": "\\caption{跨兄弟区域的边界投影。图示正常顺序经过 A、B 的路径：A 零轮仍在出口发通知，B 零轮仍在入口收通知；没有执行的指令不产生对应的数据依赖。}",
+      "article_sections": [
+        "boundary-projection"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1076,
+      "source_element": "\\paragraph{嵌得更深时逐层换端点。}图~\\ref{fig:cross-region-projection} 中，若 p 还在 A 内的可选臂 S 中，向父层投影时先用 \\code{S.exit} 代替 p，再用 \\code{A.exit} 代替它；c 则换成 \\code{B.entry}。",
+      "article_sections": [
+        "boundary-projection"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1080,
+      "source_element": "\\paragraph{区域如何变成单元序。}区域树描述共同的程序结构；规划某个 channel 时，还要从中取出发送单元和接收单元各自看到的位置。",
+      "article_sections": [
+        "boundary-projection"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1084,
+      "source_element": "\\paragraph{一端在可选臂内。}设 p 在分支之前，c 在臂 A 内，且 $d=0$。",
+      "article_sections": [
+        "candidate-placement"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1116,
+      "source_element": "\\caption{跨可选分支的两种配对。移动的是同步站点，p、c 的计算位置不变；U 即使在 A 内没有计算，也可以在该臂内放独立 MAIL。}",
+      "article_sections": [
+        "candidate-placement"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1122,
+      "source_element": "\\paragraph{入口一次，循环体每轮一次。}每次从父区域进入 L，经过一次 \\code{L.entry}；\\code{L.body} 只在实际开始一轮时经过。",
+      "article_sections": [
+        "loop-sinking-cost"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1126,
+      "source_element": "\\paragraph{循环外的 p 怎样保护每轮 c。}p 在 L 外，c 在 L 内，且 $d=0$ 时，也有两个候选。",
+      "article_sections": [
+        "loop-sinking-cost"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1158,
+      "source_element": "\\caption{循环外到循环内的依赖：通知一次或每轮重发。后一候选中，c 前无关的 V 指令不必在循环入口等 p，但通知次数可能增加。}",
+      "article_sections": [
+        "loop-sinking-cost"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1161,
+      "source_element": "\\paragraph{选好端点，还要检查经过的区域。}上面只展开一条依赖的候选；同 channel 的其他 token 不能忽略。",
+      "article_sections": [
+        "crossing-bug"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1169,
+      "source_element": "\\paragraph{互斥分支的边界。}entry/exit 是父层用于投影同步的抽象槽；A、B 实际仍然互斥。",
+      "article_sections": [
+        "exclusive-arms"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1188,
+      "source_element": "\\caption{互斥分支的共同边界与站点编号。}",
+      "article_sections": [
+        "exclusive-arms"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1195,
+      "source_element": "\\paragraph{把依赖放回树上看。}图~\\ref{fig:regiontree} 中，\\code{st} 在可选臂里，\\code{ct} 在内层循环里；两端要到 outer 层才同时可见。",
+      "article_sections": [
+        "region-tree",
+        "boundary-projection"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1217,
+      "source_element": "\\caption{区域树与单元序的折叠（历史条目 \\#135 的形态）。}",
+      "article_sections": [
+        "region-tree",
+        "boundary-projection"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1220,
+      "source_element": "\\subsection{候选区域与代价}",
+      "article_sections": [
+        "candidate-placement"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1222,
+      "source_element": "\\paragraph{已有 parent acquire 的有界复用。}",
+      "article_sections": [
+        "candidate-placement"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1233,
+      "source_element": "\\paragraph{频率与等待成本。}若 P 在循环外、C 在循环内，把 P 的 send 只发一次而让 C 每轮 recv，次数就不匹配。",
+      "article_sections": [
+        "loop-sinking-cost"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1294,
+      "source_element": "\\caption{\\#113 形态的两个合法候选。}",
+      "article_sections": [
+        "loop-sinking-cost"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1297,
+      "source_element": "\\subsection{穿越与吸收}",
+      "article_sections": [
+        "crossing-bug",
+        "lift-or-absorb"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1299,
+      "source_element": "\\paragraph{跨区域 FIFO 干扰。}硬件不识别“这个 credit 留给外层，那个给内层”。",
+      "article_sections": [
+        "crossing-bug",
+        "lift-or-absorb"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1374,
+      "source_element": "\\caption{同一单槽循环的三种处理。横向是展开后的程序位置，箭头是 FIFO 配对，不表示耗时；$A_i$、$B_i$ 表示第 $i$ 轮的 A、B。提升移动 recv，吸收保留数据 recv 站点并改变 credit 来源。}",
+      "article_sections": [
+        "crossing-bug",
+        "lift-or-absorb"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1384,
+      "source_element": "\\paragraph{绕回 token 的穿越次序。}绕回 token $(s,r\\wrap)$ 的在途区间跨过回边：本周期 $s$ 之后的子区域先被穿越，下一周期 $r$ 之前的子区域后被穿越。穿越处理必须按这个时间序检查子区域，而不是按区域内的排列序——否则排在前面、但要到下一周期才被穿越的子区域 $A$ 会先命中，recv 被提升到 \\code{A.entry} 后停止检查，本周期 $s$ 之后带流量的子区域 $C$ 被漏掉：$C$ 的 seed 与父 credit 同在 FIFO 里，$C$ 的绕回 recv 吃掉父 credit，$C$ 内的绕回依赖失去保护。",
+      "article_sections": [
+        "wrap-traversal"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1390,
+      "source_element": "\\paragraph{core-sync 交换就是普通点。}\\code{tl.zeus.barrier} 展开出的 core-sync 交换在每个 $U\\to$CT channel 上都是一次 send（$U$ 在 \\code{sync\\_send} 前）和一次 recv（CT 在 \\code{sync\\_send} 前一次 drain 掉全部八个）。把它建模成\\textbf{八个 $d{=}0$ 的点}（\\code{sync\\_send} 既是 $p$ 也是 $c$，靠 \\S\\ref{sec:regiontree} 的多单元指令定位）之后，穿越、$\\Phi$、容量都不必为它加规则：同 channel 上一个本来会跨过屏障的 token 与交换点\\textbf{共享 recv 时刻}，算法~\\ref{alg:stair} 的后缀最小值直接把两者合并成一个 token，比“提升到屏障之前”还少一条 MAIL；语义也对——CT 在屏障处等 $U$，这一次等待同时证明了 $U$ 上一迭代的读已退休。",
+      "article_sections": [
+        "core-sync"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1394,
+      "source_element": "\\paragraph{提升之后必须重新阶梯化。}定理~\\ref{thm:stair} 的配对论证要求同区域同 channel 的 token 集按 $(s,r)$ 严格单调；提升把若干 recv 移到同一个 \\code{S.entry}，单调性和唯一性都可能被破坏（一个提升到 \\code{S.entry} 的 $d{=}0$ token 与一个 recv 本来就在 \\code{S.entry} 的绕回 token 同点，第 0 次迭代 seed 会被前者错误消费）。所以穿越处理之后要把本区域该 channel 的 token 当作点集，再跑一遍算法~\\ref{alg:stair}/\\ref{alg:periodic}：同 recv 的合并为最晚 send 的一个，跨周期相等的并入下一迭代的实例。重跑只会把 recv 提前或合并，不产生新的穿越。",
+      "article_sections": [
+        "restair-settle"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1397,
+      "source_element": "\\paragraph{同点上 send 在 recv 之前。}循环入口同时落着本循环绕回 token 的 seed（send）和穿越 token 提升上来的 recv。recv 在队列头 checkout 时挡住本单元后面的一切，而 send 不挡；若 seed 排在提升 recv 之后，seed 要等那个 recv 放行才发出，下游收 seed 的单元跟着等——",
+      "article_sections": [
+        "same-site-order"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1401,
+      "source_element": "\\paragraph{吸收不变量。}",
+      "article_sections": [
+        "multi-slot-absorption"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1407,
+      "source_element": "\\begin{lemma}[吸收不变量]",
+      "article_sections": [
+        "multi-slot-absorption"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1436,
+      "source_element": "\\caption{吸收不能把入口槽号直接当成出口槽号。零轮时 FIFO 仍为 $[o_0,\\mathrm{seed}_1]$，drain 后留下 $\\mathrm{seed}_1$；它在 U 上晚于外层 producer，同样保护 $t_0$。}",
+      "article_sections": [
+        "multi-slot-absorption"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1439,
+      "source_element": "\\paragraph{吸收决定的时机。}吸收不改动任何站点，提升改 recv，穿越之后的重跑阶梯化（上一段）和容量粗化（\\S\\ref{sec:coarsen}）把 send 推后、recv 提前、把多个 token 合成一个。引理~\\ref{lem:absorb} 的前提“$t_i$ 的 send 在 $S$ 之前、recv 在 $S$ 之后（或绕回）”只对\\textbf{最终}的 token 成立，所以 $e$ 与槽位 $i$ 只能在位置定型之后结算：",
+      "article_sections": [
+        "restair-settle"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1442,
+      "source_element": "\\paragraph{两条不吸收的情形。}(i) 在途超过一个周期的绕回 token（$r+P>s+P$ 之外还跨过 $S$ 两次：本周期 $s$ 在 $S$ 之前、下一周期 $r$ 在 $S$ 之后）同一时刻在途两个 credit，本周期被 $S$ 吸收的那个再度进入 $S$ 时要占第二个槽；实现不做双槽，直接在本周期提升到 \\code{S.entry} 并去绕回，代价与“先吸收再在下一周期提升”相同。",
+      "article_sections": [
+        "wrap-traversal"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1445,
+      "source_element": "\\paragraph{按身份记账的 verifier 需要的转移登记。}verifier 逐 credit 追踪身份，接受“外来 credit 顶替 seed”只在登记过转移且 credit 未跨该循环回边时。登记要覆盖\\textbf{两个方向}。",
+      "article_sections": [
+        "absorption-transfer"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1459,
+      "source_element": "\\subsection{势能均衡}",
+      "article_sections": [
+        "equalization"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1461,
+      "source_element": "\\paragraph{边界流量。}前面的步骤已经决定主要站点与合法的 credit 替换，现在计算边界还缺多少 send/recv。",
+      "article_sections": [
+        "equalization"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1482,
+      "source_element": "\\paragraph{toy 与 C++ 在零次执行上的 schema 不同。}toy 只在 trip$\\ge1$ 时执行 seed 与正常 drain，C++ 则如上把 seed 放在进入 header 的边上、guard-false 也经过。两者的 $\\Phi$ 收支相同，但\\textbf{命令序列不同}：toy 的零次执行场景通过，不能直接认证 C++ 零次路径上的 credit 来源与入口阻塞关系。这是当前验证范围的一条明确边界（与 loop 下沉、同点排序并列）。",
+      "article_sections": [
+        "zero-trip"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1486,
+      "source_element": "\\subsection{统一算法}",
+      "article_sections": [
+        "unified-pipeline"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1501,
+      "source_element": "\\caption{同步构造与验证流程。}",
+      "article_sections": [
+        "unified-pipeline"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1504,
+      "source_element": "\\begin{algorithm}[H]",
+      "article_sections": [
+        "unified-pipeline"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1505,
+      "source_element": "\\caption{统一构造（任意可归约控制流）}",
+      "article_sections": [
+        "unified-pipeline"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1520,
+      "source_element": "\\begin{theorem}[路径无关的 FIFO 内容]",
+      "article_sections": [
+        "phi-pairing",
+        "absorption-transfer"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1528,
+      "source_element": "\\begin{theorem}[固定指派下的不劣性]",
+      "article_sections": [
+        "guarantee-scope"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1542,
+      "source_element": "\\section{重排}",
+      "article_sections": [
+        "three-optimizations"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1546,
+      "source_element": "\\subsection{改的是什么}",
+      "article_sections": [
+        "three-optimizations"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1565,
+      "source_element": "\\subsection{为什么能减少等待}",
+      "article_sections": [
+        "reordering-example"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1600,
+      "source_element": "\\caption{交换接收侧两条独立指令的顺序，把交叉变成链。}",
+      "article_sections": [
+        "reordering-example"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1605,
+      "source_element": "\\subsection{何时必要、合法性、算法}",
+      "article_sections": [
+        "reordering-legality"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1618,
+      "source_element": "\\begin{algorithm}[H]",
+      "article_sections": [
+        "reordering-legality"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1619,
+      "source_element": "\\caption{单元重排（一个单元 $U$，一遍）}",
+      "article_sections": [
+        "reordering-legality"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1633,
+      "source_element": "\\paragraph{放在哪一层；本 kernel 的空间。}",
+      "article_sections": [
+        "reordering-legality"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1642,
+      "source_element": "\\section{复杂度}",
+      "article_sections": [
+        "complexity"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1680,
+      "source_element": "\\section{验证}",
+      "article_sections": [
+        "verification-layers"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1684,
+      "source_element": "\\paragraph{三项检查。}",
+      "article_sections": [
+        "verification-layers"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1689,
+      "source_element": "\\subsection{编译器内的 verifier：按身份的 FIFO 回放}",
+      "article_sections": [
+        "credit-policy",
+        "epoch-validation"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1726,
+      "source_element": "\\paragraph{同 token 的配对也要过 policy。}引擎过去对“队头 credit 与 recv 属同一 token”直接放行——计数与身份由构造保证，看似无需再查。但那样一来，绕回 token 自己的 send/recv 对\\textbf{从未}被对照它所保护的 obligation 检查过。现在同 token 的配对也送进 credit policy 做 epoch 感知的核对，只问一个较弱的问题：$d{=}0$ 且未下沉的 obligation 必须满足序关系，loop-carried 的留作缺口（见下）。跨 token 的替代仍然全查。",
+      "article_sections": [
+        "verification-gaps"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1740,
+      "source_element": "\\paragraph{不经构造器的时序校验。}身份 FIFO 回放证明“弹出的 credit 能覆盖 recv 所属 token 的 obligation”，从头重建证明“schedule 没有被改坏”。",
+      "article_sections": [
+        "independent-checks"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1745,
+      "source_element": "\\paragraph{拒绝必须自报理由。}上面四条规则是\\emph{充分}判据的合取，任何一条不成立都以同一句 credit mismatch 收场，而该消息只列 credit 类号——两边相同时它读起来自相矛盾，看不出是哪条规则拒的。既然“拒绝”的含义只有两种（真的规划器错误，或某条规则缺一类合法形态），\\textbf{分辨二者的唯一信息就是哪条规则触发}。因此每条拒绝路径都带一个规则标签，与收发 token 号一起进诊断；标签为空说明归因本身有洞，而不是“没有理由”。",
+      "article_sections": [
+        "independent-checks"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1747,
+      "source_element": "\\paragraph{两处容易错的实现细节。}(i) 路径序里的“可达”必须是\\textbf{去回边}的：沿含回边的原始 CFG 判可达，同一循环体内任意两块互相可达，规则在循环里永远为假，于是整类计划被拒。(ii) “$s$ 在 $L$ 内”按 $L$ 的\\textbf{块集合}判：循环入口边上物化出来的 seed 若落在不属于 $L$ 的 trampoline 块，这条规则会静默失效，然后被 epoch 守卫拒绝，报错形态与 (i) 相同。",
+      "article_sections": [
+        "independent-checks"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1749,
+      "source_element": "\\paragraph{覆盖面。}verifier 只能抓住它跑到的 kernel。triton\\_shared 的 sweep 语料不含 torch\\_zeus 侧的 sgl kernel，而后者才有 2 核 barrier、嵌套吸收这类形态——本文多条规则都是先在那边暴露的。所以规划器改动的回归必须两边都跑：sweep 全量，加 torch\\_zeus 的单设备子集。",
+      "article_sections": [
+        "toy-and-coverage"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1751,
+      "source_element": "\\paragraph{两个规划器的对比工具。}\\code{ci/} 下有一组 A/B 脚本：\\code{inject\\_sync\\_planner\\_static\\_compare.py}（按 kernel 比 \\code{MAIL} 与独立命令条数）、\\code{inject\\_sync\\_planner\\_diff.py}（每个 lit 夹具在两个规划器下各跑一遍并列表）、\\code{inject\\_sync\\_planner\\_edge\\_diff.py}（逐 obligation 比放置差异），以及 \\code{zeus3sim\\_oneshot\\_cycles.sh} 配 \\code{inject\\_sync\\_planner\\_cycle\\_compare.py}（cycle-accurate 模拟器的逐 case 周期对比）。本文的形态结论与周期数据出自它们。",
+      "article_sections": [
+        "toy-and-coverage"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1753,
+      "source_element": "\\paragraph{toy 与检查器。}",
+      "article_sections": [
+        "toy-and-coverage"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1759,
+      "source_element": "\\subsection{结果}",
+      "article_sections": [
+        "historical-cases"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1810,
+      "source_element": "\\section{与现有实现和历史索引的关系}",
+      "article_sections": [
+        "implementation-map"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1812,
+      "source_element": "\\subsection{概念对应}",
+      "article_sections": [
+        "implementation-map"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1839,
+      "source_element": "\\subsection{实现状态}",
+      "article_sections": [
+        "current-status"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1872,
+      "source_element": "\\subsection{可擦除的对角点（$U=V$）}",
+      "article_sections": [
+        "diagonal-and-si"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1884,
+      "source_element": "\\subsection{历史索引按族}",
+      "article_sections": [
+        "history-families"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1907,
+      "source_element": "\\section{硬件推广}",
+      "article_sections": [
+        "multiple-channels"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1912,
+      "source_element": "\\subsection{每对单元多个通道}",
+      "article_sections": [
+        "multiple-channels"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1948,
+      "source_element": "\\caption{多通道：$Q\\ge w$ 时链划分让每个 token 都落在自己的点上。}",
+      "article_sections": [
+        "multiple-channels"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1951,
+      "source_element": "\\subsection{单元拥有的统一通道}",
+      "article_sections": [
+        "shared-counter"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 1958,
+      "source_element": "\\begin{lemma}[混合发送方下的覆盖]",
+      "article_sections": [
+        "shared-counter"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 2002,
+      "source_element": "\\caption{接收方拥有计数器时的两种合法用法。}",
+      "article_sections": [
+        "shared-counter"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 2015,
+      "source_element": "\\begin{algorithm}[H]",
+      "article_sections": [
+        "counter-allocation"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 2016,
+      "source_element": "\\caption{接收方 $V$ 的计数器分配}",
+      "article_sections": [
+        "counter-allocation"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 2027,
+      "source_element": "\\paragraph{其它变化。}",
+      "article_sections": [
+        "counter-allocation"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 2032,
+      "source_element": "\\section{未闭合问题与波形需求}",
+      "article_sections": [
+        "dma-windows"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 2036,
+      "source_element": "\\subsection{上游依赖分析的粒度：循环变体的 DMA 窗口}",
+      "article_sections": [
+        "dma-windows"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 2050,
+      "source_element": "\\subsection{\\#130/\\#148 的 RTL 核对}",
+      "article_sections": [
+        "rtl-gaps"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 2077,
+      "source_element": "\\paragraph{波形结果（2026-09-08）。}用同一份手改 \\code{.S} 带 \\code{--wave-dump} 重跑负控（\\code{fe195ffb7d26}，TIMEOUT）与正控（\\code{8208991280f6}，PASS），FSDB 只到 \\code{zeus\\_core\\_top\\_pwr} 端口层，按 \\code{o\\_inst2rf\\_*} 调试端口回放：",
+      "article_sections": [
+        "historical-wave"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 2082,
+      "source_element": "\\subsection{无丢失公理的证据状态与疑点}",
+      "article_sections": [
+        "lossless-assumption"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 2117,
+      "source_element": "\\paragraph{多源 recv 带来的余量要求（已按此收紧）。}",
+      "article_sections": [
+        "capacity-budget",
+        "lossless-assumption"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 2128,
+      "source_element": "\\paragraph{要什么才能把条件去掉。}(a) 对四个丢失点给出容量论证（“在满足 $\\Omega\\le C$ 的调度下这些 FIFO 不会满”），",
+      "article_sections": [
+        "capacity-budget",
+        "lossless-assumption"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 2132,
+      "source_element": "\\subsection{实现时发现并已回写的模型缺口}",
+      "article_sections": [
+        "history-families",
+        "toy-and-coverage"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 2144,
+      "source_element": "\\subsection{波形需求}",
+      "article_sections": [
+        "wave-checklist"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 2146,
+      "source_element": "\\paragraph{要哪两个 job。}",
+      "article_sections": [
+        "wave-checklist"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 2155,
+      "source_element": "\\paragraph{probe 信号。}",
+      "article_sections": [
+        "wave-checklist"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 2170,
+      "source_element": "\\paragraph{判据。}\\code{ct\\_mail\\_inst\\_vld=1} 期间 \\code{dispatch\\_rdy=0}，看 \\code{fifo13} 头项属于哪个 lane、该 lane 的 done FIFO 是否为空、\\code{wr\\_pp\\_cnt} 和 \\code{wr\\_load\\_pg\\_cnt} 是否停住；",
+      "article_sections": [
+        "wave-checklist"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 2174,
+      "source_element": "\\paragraph{未证明的假设。}",
+      "article_sections": [
+        "wave-checklist"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 2185,
+      "source_element": "\\section{本文 kernel 上的实例}",
+      "article_sections": [
+        "tile-staircase-complete",
+        "end-to-end-recap"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 2232,
+      "source_element": "\\caption{本文 kernel VP$\\to$PE 的四个点、阶梯与现状 frontier。}",
+      "article_sections": [
+        "tile-staircase-complete",
+        "end-to-end-recap"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    },
+    {
+      "source_line": 2235,
+      "source_element": "\\section{多通道分配的例子}",
+      "article_sections": [
+        "multiple-channels"
+      ],
+      "basis": "companion model source; matching PDF topic unless marked supplement"
+    }
+  ],
+  "figures": [
+    {
+      "id": "data-chain",
+      "title": "输入到输出：数据流与完成门禁"
+    },
+    {
+      "id": "tiles",
+      "title": "两块 tile 的生命周期：先写、再用、最后允许覆盖"
+    },
+    {
+      "id": "compiler-contract",
+      "title": "从资源事实到实际收发：每一层输出什么"
+    },
+    {
+      "id": "units",
+      "title": "一个核的单元与 mailbox"
+    },
+    {
+      "id": "events",
+      "title": "单条命令的事件链"
+    },
+    {
+      "id": "outbox",
+      "title": "乱序完成，有序发布"
+    },
+    {
+      "id": "lanes",
+      "title": "VP / DT：单入口、多 lane、单 outbox"
+    },
+    {
+      "id": "sites",
+      "title": "把完成义务变成通知站点"
+    },
+    {
+      "id": "wrong-pair",
+      "title": "没有 tag：名字写 B，不会让硬件跳过队头 A"
+    },
+    {
+      "id": "plane",
+      "title": "四个依赖：中间两项交叉"
+    },
+    {
+      "id": "coarsen",
+      "title": "从最细阶梯到最粗 frontier"
+    },
+    {
+      "id": "periodic",
+      "title": "周期展开：第一轮靠 seed，以后靠上一轮完成"
+    },
+    {
+      "id": "three-balances",
+      "title": "虚拟峰值 1，实际计数仍可能到 2"
+    },
+    {
+      "id": "deadlock",
+      "title": "容量等待必须放进全局关系中"
+    },
+    {
+      "id": "phi-rank",
+      "title": "Φ=3 时，下一次消费的是三份余额中的最老项"
+    },
+    {
+      "id": "regions",
+      "title": "从嵌套代码到区域树与折叠视图"
+    },
+    {
+      "id": "projection",
+      "title": "把跨区域依赖投影到共同父层"
+    },
+    {
+      "id": "arms",
+      "title": "互斥分支的真实结构与边界编号"
+    },
+    {
+      "id": "loop-sink",
+      "title": "相同数据义务，两种等待位置"
+    },
+    {
+      "id": "crossing",
+      "title": "错误组合：父 credit 把子循环配对推迟一格"
+    },
+    {
+      "id": "absorb-one",
+      "title": "单槽吸收：入口用 P，出口由最后一个 B 接续"
+    },
+    {
+      "id": "absorb-two",
+      "title": "k=2、e=1：进去占 w₀，出来留下 w₁"
+    },
+    {
+      "id": "wrap-route",
+      "title": "绕回穿越必须按动态先后检查"
+    },
+    {
+      "id": "settle",
+      "title": "最终 credit 槽位不能在候选阶段冻结"
+    },
+    {
+      "id": "verification",
+      "title": "从计划到结果的证据层"
+    },
+    {
+      "id": "three-opts",
+      "title": "三种优化改变的对象与代价"
+    },
+    {
+      "id": "reorder",
+      "title": "改变 consumer 顺序，改变必要等待"
+    },
+    {
+      "id": "channels",
+      "title": "完全逆序四点：一条链不能保留四个原始站点"
+    },
+    {
+      "id": "handoff",
+      "title": "共享 counter 必须建立真实的完成交接"
+    },
+    {
+      "id": "dma",
+      "title": "仿射窗口：必须比较两个起点与所有相关距离"
+    },
+    {
+      "id": "wave-result",
+      "title": "同一条命令的历史 A/B：证据只到可观察边界"
+    },
+    {
+      "id": "end-to-end",
+      "title": "同一次 A/B 复用的完整推导"
+    }
+  ],
+  "interactive_labs": [
+    {
+      "section": "staircase-interactive",
+      "model": "fixed-order staircase",
+      "states": 4
+    },
+    {
+      "section": "seed-pairing",
+      "model": "global FIFO rank with n/k/iteration controls and zero-trip"
+    },
+    {
+      "section": "multi-slot-absorption",
+      "model": "k=1/2, e=1, zero-trip, extra-seed counterexample"
+    }
+  ],
+  "checks": [
+    "scripts/check_sync_model.js",
+    "scripts/check_mailbox_architecture.js"
+  ]
+}

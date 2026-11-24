@@ -40,6 +40,7 @@ jobs:
           node --check web/decode-explorer.js
           node --check web/attention-lab.js
           node --check web/sync-explorer.js
+          node --check web/mailbox-architecture.js
           node --check web/lowering-explorer.js
           node --check web/cyclesim-model.js
           node --check web/cyclesim-diagrams.js
@@ -62,6 +63,7 @@ jobs:
           node scripts/check_decode_model.js
           node scripts/check_attention_lab.js
           node scripts/check_sync_model.js
+          node scripts/check_mailbox_architecture.js
           python3 scripts/check_chip_dependency_examples.py
           node scripts/check_cyclesim_model.js
           node scripts/check_deepseek_model.js
